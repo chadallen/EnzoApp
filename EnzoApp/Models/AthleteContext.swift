@@ -60,4 +60,78 @@ It's been a few days. Nothing lost yet — your fitness doesn't move that fast. 
 """
 
     static let previewChartContext = "Your peak was last August — your best in years. September dropped off sharply. You've been building back since October."
+
+    // MARK: - Claude context payload
+
+    // Builds the JSON string sent to Claude with each user message.
+    // Matches the structure in spec Section 5.
+    func contextPayload(snapshots: [FitnessSnapshot], segments: [SegmentScore]) -> String {
+        var goalDict: [String: Any] = [
+            "type": "segment_pr",
+            "segment_name": goal.segmentName,
+            "required_fitness_score": goal.requiredFitnessScore,
+            "current_fitness_score": currentFitnessScore,
+            "gap": goal.gap,
+            "has_date": goal.targetDate != nil
+        ]
+        if let weeks = goal.weeksRemaining {
+            goalDict["weeks_remaining"] = weeks
+        }
+
+        let fitnessHistory: [[String: Any]] = snapshots.map { s in
+            [
+                "month": s.month,
+                "hours": s.hours,
+                "fitness_score": s.score,
+                "fitness_label": AthleteContext.fitnessLabel(for: s.score),
+                "activity_count": s.rides
+            ]
+        }
+
+        let peakSnapshot = snapshots.max(by: { $0.score < $1.score })
+        var peakDict: [String: Any] = [:]
+        if let peak = peakSnapshot {
+            peakDict = [
+                "month": peak.month,
+                "score": peak.score,
+                "label": AthleteContext.fitnessLabel(for: peak.score)
+            ]
+        }
+
+        let topSegments: [[String: Any]] = segments.map { seg in
+            [
+                "name": seg.name,
+                "pr_seconds": seg.prSeconds,
+                "pr_date": seg.prDate,
+                "fitness_at_pr": seg.fitnessAtPR,
+                "current_fitness": seg.currentFitness,
+                "delta": seg.fitnessDelta,
+                "strike_score": seg.strikeScore,
+                "is_goal_segment": seg.isGoalSegment
+            ]
+        }
+
+        var payload: [String: Any] = [
+            "athlete": [
+                "name": name,
+                "years_active": yearsActive,
+                "total_activities": totalActivities,
+                "current_fitness_score": currentFitnessScore,
+                "current_fitness_label": currentFitnessLabel
+            ] as [String: Any],
+            "goal": goalDict,
+            "fitness_history": fitnessHistory,
+            "top_segments": topSegments,
+            "days_since_last_ride": daysSinceLastRide
+        ]
+        if !peakDict.isEmpty {
+            payload["peak_fitness"] = peakDict
+        }
+
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: .prettyPrinted),
+            let json = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return json
+    }
 }

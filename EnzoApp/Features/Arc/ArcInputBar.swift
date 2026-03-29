@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ArcInputBar: View {
     @Binding var text: String
+    var isSending: Bool = false
     let onSend: (String) -> Void
 
     var body: some View {
@@ -14,24 +15,33 @@ struct ArcInputBar: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
                 .background(Color.enzoCard, in: Capsule())
+                .disabled(isSending)
 
-            if !text.isEmpty {
+            if !text.isEmpty || isSending {
                 Button {
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else { return }
+                    guard !trimmed.isEmpty, !isSending else { return }
                     onSend(trimmed)
                     text = ""
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(Color.enzoAccent)
+                    if isSending {
+                        ProgressView()
+                            .tint(Color.enzoAccent)
+                            .frame(width: 30, height: 30)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Color.enzoAccent)
+                    }
                 }
+                .disabled(isSending)
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
         .padding(.horizontal)
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.15), value: text.isEmpty)
+        .animation(.easeInOut(duration: 0.15), value: isSending)
     }
 }
 
