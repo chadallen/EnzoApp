@@ -190,7 +190,7 @@ next Claude Code session. Include:
 - The first command or file to open
 - Write it as something that can be pasted directly into a 
 new Claude Code session without modification.
-` Save this the prompt to Handoff.MD
+- Save this the prompt to Handoff.MD
 - Commit and push
 
 ---
@@ -230,3 +230,15 @@ The project uses an explicit `Info.plist` at the repo root (`SRCROOT/Info.plist`
 
 **GitHub repo**
 https://github.com/chadallen/EnzoApp — private. Push all work here. xcconfig files are gitignored.
+
+**Unit test target**
+`EnzoAppTests` target was added manually by editing `project.pbxproj` (UUIDs prefixed `ENZO2000...`). It uses `PBXFileSystemSynchronizedRootGroup` pointing at `/EnzoAppTests/` — any `.swift` file placed in that directory is automatically included in the test target. No manual file registration needed.
+
+**Cross-actor calls from @MainActor to actor services**
+`ClaudeService` is a Swift `actor`. Any `AppState` method that calls into it must be marked `async` so the call can be `await`ed. `sendMessage` and `goalReactionStream` both follow this pattern. All future AppState methods that call actor-isolated services need the same treatment.
+
+**GoalSettingView location**
+Lives in `Features/Arc/` for Steps 4–10. In Step 11 (Onboarding), it needs to be reachable from the onboarding flow — move it to a shared location then if needed. Don't pre-optimize.
+
+**requiredFitnessLabel in setGoal — known placeholder**
+`AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly. For Hawk Hill (0.98 → "Epic"), the header shows "Epic fitness needed" rather than the spec's "Strong". The correct derivation belongs in `SegmentScorer` (Step 9) and will be fixed then.
