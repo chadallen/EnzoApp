@@ -2,6 +2,9 @@
 EnzoApp/Config/Debug.xcconfig
 EnzoApp/Config/Release.xcconfig
 
+# Working notes — committed once, local edits not tracked
+chat_log.md
+
 # Xcode
 *.xcuserstate
 xcuserdata/
