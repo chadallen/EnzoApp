@@ -14,7 +14,7 @@ The full product spec is at `PRD.md`. Hardcoded preview data for Steps 1–5 is 
 - **Swift Charts** for all data visualization.
 - **`@Observable` + `async/await`** throughout. No Combine, no older state patterns.
 - **Supabase** for backend (derived metrics only — never raw Strava data).
-- **Anthropic Claude API** (`claude-sonnet-4-20250514`) for AI features.
+- **Anthropic Claude API** (`claude-sonnet-4-6`) for AI features.
 - **Strava OAuth 2.0** for authentication and data access.
 - **No third-party dependencies** unless the spec explicitly names one.
 
@@ -76,8 +76,7 @@ Never bundle unrelated changes. Always commit before moving to the next step.
 Files that exist today. Services, Utils helpers, and Onboarding are added in later steps.
 
 ```
-EnzoApp/  
-└── PRD.md                  ← full product spec — source of truth                            ← repo root / VS Code workspace
+EnzoApp/                              ← repo root / VS Code workspace
 ├── EnzoApp.xcodeproj/                ← Xcode project (PBXFileSystemSynchronizedRootGroup —
 │                                         new files in EnzoApp/ are auto-included, no manual add)
 ├── EnzoApp/                          ← Xcode source root
@@ -87,7 +86,8 @@ EnzoApp/
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
 │   │   │   ├── ArcView.swift         ← composes all sections; sticky header + scrollable content
-│   │   │   ├── GoalHeaderView.swift  ← goal name, fitness progress bar, "Change goal" button
+│   │   │   ├── GoalHeaderView.swift  ← goal name, fitness label, trend, "Change goal" button
+│   │   │   ├── GoalSettingView.swift ← Step 4 ✓ — sheet: search, Enzo reaction, date, confirm
 │   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card
 │   │   │   ├── LookaheadSuggestionView.swift
 │   │   │   ├── FitnessChartView.swift ← Swift Charts; LineMark+AreaMark, two RuleMarks, tap→sheet
@@ -105,8 +105,9 @@ EnzoApp/
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
 │   │   ├── FitnessSnapshot.swift     ← Identifiable by month string; .previewSnapshots (18 months)
 │   │   ├── SegmentScore.swift        ← Identifiable+Hashable by name; .previewSegments (5 segments)
+│   │   │                                 filter(_:by:) for goal search
 │   │   └── ArcMessage.swift          ← role: .enzo / .user
-│   ├── Services/                     ← ClaudeService built in Step 3; others added later
+│   ├── Services/
 │   │   ├── ClaudeService.swift       ← Step 3 ✓ — Swift actor; stream(_:context:) → AsyncStream<String>
 │   │   ├── StravaService.swift       ← Step 6
 │   │   ├── SupabaseService.swift     ← Step 5
@@ -123,15 +124,21 @@ EnzoApp/
 │   └── Config/
 │       ├── Debug.xcconfig            ← gitignored — never commit
 │       └── Release.xcconfig          ← gitignored — never commit
+├── EnzoAppTests/                     ← unit test target (PBXFileSystemSynchronizedRootGroup)
+│   └── GoalSettingTests.swift        ← Step 4 ✓ — filter + prompt tests (10 passing)
 ├── .gitignore
 ├── CLAUDE.md
+├── PRD.MD                            ← full product spec — source of truth
+├── handoff.MD                        ← session handoff prompt for next Claude Code session
+├── Info.plist                        ← explicit plist with $(VARIABLE) substitution
 ├── skills/
-│   ├── swiftui-design.md             ← read before building any view
-│   ├── enzo-voice.md                 ← read before writing any UI string or Enzo copy
-│   ├── swift-patterns.md             ← read before architecture decisions or new files
+│   ├── swift-design.MD               ← read before building any view
+│   ├── enzo-voice.MD                 ← read before writing any UI string or Enzo copy
+│   ├── swift-patterns.MD             ← read before architecture decisions or new files
 │   └── testing.md                    ← read before writing any logic or service code
-└── dev-data/
-    
+└── Config/
+    ├── Debug.xcconfig                ← gitignored — never commit
+    └── Release.xcconfig              ← gitignored — never commit
 ```
 
 ---
@@ -162,16 +169,16 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 
 | When you're... | Read... |
 |---|---|
-| Building any view, component, or screen | `skills/swiftui-design.md` |
-| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.md` |
-| Making architecture decisions or creating new files | `skills/swift-patterns.md` |
+| Building any view, component, or screen | `skills/swift-design.MD` |
+| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.MD` |
+| Making architecture decisions or creating new files | `skills/swift-patterns.MD` |
 | Writing any logic, service, or data transformation code | `skills/testing.md` |
 
 ---
 
 ## How to Work on This Project
 
-**Starting a new session:** Read this file, check the build status above to know where we are, then read the relevant section of `dev-data/enzo-spec.md` for the step you're working on.
+**Starting a new session:** Read this file, check the build status above to know where we are, then read the relevant section of `PRD.MD` for the step you're working on.
 
 **If a requirement is unclear:** The spec is the source of truth. If the spec doesn't cover it, ask before building — don't infer.
 
