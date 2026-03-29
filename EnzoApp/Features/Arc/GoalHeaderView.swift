@@ -5,77 +5,44 @@ struct GoalHeaderView: View {
 
     private var goal: GoalContext { context.goal }
 
-    private var progressFraction: Double {
-        min(context.currentFitnessScore / goal.requiredFitnessScore, 1.0)
+    private var trendArrow: String {
+        switch context.trendDirection {
+        case "up": return "↑"
+        case "down": return "↓"
+        default: return "→"
+        }
     }
 
-    private var requiredLabel: String {
-        AthleteContext.fitnessLabel(for: goal.requiredFitnessScore)
+    private var fitnessLabelColor: Color {
+        switch context.currentFitnessLabel {
+        case "Epic", "Strong": return .enzoGoal
+        case "Building": return .enzoAccent
+        default: return .enzoAmber
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Title row
-            HStack(alignment: .firstTextBaseline) {
-                Text(goal.segmentName + " PR")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(Color.enzoPrimary)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 6) {
+            // Line 1: Segment name
+            Text(String(goal.segmentName.prefix(24)) + " PR")
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(Color.enzoPrimary)
+                .lineLimit(1)
 
-                Spacer()
+            // Line 2: Current fitness label + trend arrow
+            Text(context.currentFitnessLabel + " " + trendArrow)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(fitnessLabelColor)
 
-                if let weeks = goal.weeksRemaining {
-                    Text("\(weeks) weeks to go")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(Color.enzoAccent)
-                }
-            }
+            // Line 3: Required fitness label
+            Text(goal.requiredFitnessLabel + " fitness needed")
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
 
-            // Progress bar
-            VStack(alignment: .leading, spacing: 6) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.enzoSecondary.opacity(0.2))
-                            .frame(height: 8)
-
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.enzoAccent.opacity(0.6))
-                            .frame(width: geo.size.width * progressFraction, height: 8)
-
-                        Circle()
-                            .fill(Color.enzoAccent)
-                            .frame(width: 14, height: 14)
-                            .offset(x: max(0, geo.size.width * progressFraction - 7))
-                    }
-                }
-                .frame(height: 14)
-
-                HStack {
-                    Text(context.currentFitnessLabel)
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                    Spacer()
-                    Text(requiredLabel + " needed")
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                }
-
-                HStack(spacing: 4) {
-                    Text(String(format: "%.0f", context.currentFitnessScore))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.enzoAccent)
-                    Text("→ \(String(format: "%.0f", goal.requiredFitnessScore))")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(Color.enzoSecondary)
-
-                    Spacer()
-
-                    Button("Change goal") { }
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                }
-            }
+            Button("Change goal") { }
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+                .padding(.top, 4)
         }
         .padding()
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
@@ -86,4 +53,5 @@ struct GoalHeaderView: View {
     GoalHeaderView(context: .preview)
         .padding()
         .background(Color.enzoBg)
+        .preferredColorScheme(.dark)
 }

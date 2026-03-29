@@ -3,13 +3,16 @@ import Charts
 
 struct FitnessChartView: View {
     let snapshots: [FitnessSnapshot]
-    let goalScore: Double
-    let peakScore: Double
+    let goalValue: Double   // required fitness value for goal target line (0.0–1.0)
     let contextText: String
 
     @State private var selectedSnapshot: FitnessSnapshot? = nil
     @State private var showingDetail = false
     @State private var appeared = false
+
+    private var peakValue: Double {
+        snapshots.max(by: { $0.value < $1.value })?.value ?? 1.0
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -49,7 +52,7 @@ struct FitnessChartView: View {
             ForEach(snapshots) { snap in
                 AreaMark(
                     x: .value("Month", snap.monthDate),
-                    y: .value("Score", snap.score)
+                    y: .value("Fitness", snap.value)
                 )
                 .foregroundStyle(
                     LinearGradient(
@@ -65,7 +68,7 @@ struct FitnessChartView: View {
             ForEach(snapshots) { snap in
                 LineMark(
                     x: .value("Month", snap.monthDate),
-                    y: .value("Score", snap.score)
+                    y: .value("Fitness", snap.value)
                 )
                 .foregroundStyle(Color.enzoAccent)
                 .lineStyle(StrokeStyle(lineWidth: 2))
@@ -76,14 +79,14 @@ struct FitnessChartView: View {
             if let current = snapshots.last {
                 PointMark(
                     x: .value("Month", current.monthDate),
-                    y: .value("Score", current.score)
+                    y: .value("Fitness", current.value)
                 )
                 .foregroundStyle(Color.enzoAccent)
                 .symbolSize(60)
             }
 
             // Peak reference line
-            RuleMark(y: .value("Peak", peakScore))
+            RuleMark(y: .value("Peak", peakValue))
                 .foregroundStyle(Color.enzoSecondary.opacity(0.4))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .annotation(position: .top, alignment: .trailing) {
@@ -94,7 +97,7 @@ struct FitnessChartView: View {
                 }
 
             // Goal target reference line
-            RuleMark(y: .value("Goal target", goalScore))
+            RuleMark(y: .value("Goal target", goalValue))
                 .foregroundStyle(Color.enzoGoal.opacity(0.5))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .annotation(position: .top, alignment: .leading) {
@@ -111,7 +114,7 @@ struct FitnessChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1))
             }
         }
-        .chartYScale(domain: 0...115)
+        .chartYScale(domain: 0...1.1)
         .chartXAxis {
             AxisMarks(values: .stride(by: .month, count: 3)) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).year(.twoDigits))
@@ -147,10 +150,10 @@ struct FitnessChartView: View {
 #Preview {
     FitnessChartView(
         snapshots: FitnessSnapshot.previewSnapshots,
-        goalScore: 72,
-        peakScore: 100,
+        goalValue: 0.70,
         contextText: AthleteContext.previewChartContext
     )
     .padding()
     .background(Color.enzoBg)
+    .preferredColorScheme(.dark)
 }

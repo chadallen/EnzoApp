@@ -5,28 +5,29 @@ struct SegmentDetailView: View {
 
     private var pillColor: Color {
         switch segment.strikeScore {
-        case 0.7...: return .enzoGoal
-        case 0.4..<0.7: return .enzoAmber
+        case 0.70...: return .enzoGoal
+        case 0.45..<0.70: return .enzoAmber
         default: return .enzoSecondary
         }
     }
 
     private var deltaLine: String {
-        let delta = Int(segment.fitnessDelta)
-        if delta > 0 {
-            return "You're \(delta) points fitter now than when you set this PR — a good window to go after it."
-        } else if delta == 0 {
-            return "You're at the same fitness level as when you set this PR."
+        let labelAtPR = AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR)
+        let labelNow = AthleteContext.fitnessLabel(for: segment.currentFitnessValue)
+        if segment.fitnessDelta > 0.05 {
+            return "You're at \(labelNow) — fitter than when you set this PR at \(labelAtPR). A good window to go after it."
+        } else if segment.fitnessDelta >= -0.05 {
+            return "You're at \(labelNow) — roughly the same fitness as when you set this PR."
         } else {
-            return "You're \(abs(delta)) points below your PR fitness. Close the gap and come back to this one."
+            return "You were at \(labelAtPR) when you set this PR. You're at \(labelNow) now. Close the gap and come back to this one."
         }
     }
 
     private var strikeLine: String {
         switch segment.strikeScore {
-        case 0.7...:
+        case 0.70...:
             return "You're in better shape now than when you set this PR. A good window to go after it."
-        case 0.4..<0.7:
+        case 0.45..<0.70:
             return "Getting close — a few more weeks of consistent riding and the timing will be right."
         default:
             return "Not quite there yet. Worth targeting once you've built more fitness."
@@ -86,8 +87,7 @@ struct SegmentDetailView: View {
 
                         HStack(spacing: 0) {
                             fitnessBlock(
-                                value: "\(Int(segment.fitnessAtPR))",
-                                label: AthleteContext.fitnessLabel(for: segment.fitnessAtPR),
+                                label: AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR),
                                 sublabel: "When PR set"
                             )
 
@@ -95,10 +95,9 @@ struct SegmentDetailView: View {
                                 .foregroundStyle(Color.enzoSecondary.opacity(0.5))
 
                             fitnessBlock(
-                                value: "\(Int(segment.currentFitness))",
-                                label: AthleteContext.fitnessLabel(for: segment.currentFitness),
+                                label: AthleteContext.fitnessLabel(for: segment.currentFitnessValue),
                                 sublabel: "Today",
-                                valueColor: segment.fitnessDelta >= 0 ? Color.enzoGoal : Color.enzoPrimary
+                                labelColor: segment.fitnessDelta >= 0 ? Color.enzoGoal : Color.enzoPrimary
                             )
                         }
 
@@ -139,18 +138,14 @@ struct SegmentDetailView: View {
     }
 
     private func fitnessBlock(
-        value: String,
         label: String,
         sublabel: String,
-        valueColor: Color = Color.enzoPrimary
+        labelColor: Color = Color.enzoPrimary
     ) -> some View {
         VStack(spacing: 3) {
-            Text(value)
-                .font(.system(.title2, design: .monospaced, weight: .bold))
-                .foregroundStyle(valueColor)
             Text(label)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.enzoSecondary)
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .foregroundStyle(labelColor)
             Text(sublabel)
                 .font(.system(.caption2, design: .rounded))
                 .foregroundStyle(Color.enzoSecondary.opacity(0.7))
@@ -164,4 +159,5 @@ struct SegmentDetailView: View {
         SegmentDetailView(segment: SegmentScore.previewSegments[0])
     }
     .environment(AppState())
+    .preferredColorScheme(.dark)
 }

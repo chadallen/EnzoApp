@@ -32,5 +32,8 @@ struct MainTabView: View {
                 }
         }
         .tint(Color.enzoAccent)
+        .preferredColorScheme(.dark)
+        .toolbarBackground(Color.enzoCard, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
     }
 }
