@@ -3,8 +3,10 @@ import SwiftUI
 struct ArcView: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
+    @State private var scrollProxy: ScrollViewProxy? = nil
 
     private var context: AthleteContext { appState.athleteContext }
+    private var showThread: Bool { !appState.arcMessages.isEmpty || appState.isStreaming }
 
     var body: some View {
         ZStack {
@@ -51,29 +53,38 @@ struct ArcView: View {
     }
 
     private var scrollContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ArcBriefingView(text: AthleteContext.previewBriefing)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ArcBriefingView(text: AthleteContext.previewBriefing)
 
-                LookaheadSuggestionView(text: AthleteContext.previewLookahead)
+                    LookaheadSuggestionView(text: AthleteContext.previewLookahead)
 
-                FitnessChartView(
-                    snapshots: appState.fitnessSnapshots,
-                    goalScore: context.goal.requiredFitnessScore,
-                    peakScore: context.peakFitnessScore,
-                    contextText: AthleteContext.previewChartContext
-                )
+                    FitnessChartView(
+                        snapshots: appState.fitnessSnapshots,
+                        goalScore: context.goal.requiredFitnessScore,
+                        peakScore: context.peakFitnessScore,
+                        contextText: AthleteContext.previewChartContext
+                    )
 
-                PROpportunitiesCard(segments: appState.segments)
+                    PROpportunitiesCard(segments: appState.segments)
 
-                if !appState.arcMessages.isEmpty {
-                    messageThread
+                    if showThread {
+                        messageThread
+                    }
+
+                    Color.clear.frame(height: 100).id("bottom")
                 }
-
-                Color.clear.frame(height: 100)
+                .padding(.horizontal)
+                .padding(.top, 16)
             }
-            .padding(.horizontal)
-            .padding(.top, 16)
+            .onAppear { scrollProxy = proxy }
+            .onChange(of: appState.arcMessages.count) {
+                withAnimation { proxy.scrollTo("bottom") }
+            }
+            .onChange(of: appState.streamingText) {
+                proxy.scrollTo("bottom")
+            }
         }
     }
 
@@ -81,6 +92,15 @@ struct ArcView: View {
         VStack(spacing: 12) {
             ForEach(appState.arcMessages) { message in
                 ArcMessageView(message: message)
+            }
+            if appState.isStreaming {
+                ArcMessageView(
+                    message: ArcMessage(
+                        role: .enzo,
+                        content: appState.streamingText.isEmpty ? "..." : appState.streamingText
+                    )
+                )
+                .id("streaming")
             }
         }
     }
@@ -90,10 +110,10 @@ struct ArcView: View {
             PromptChipsView(chips: PromptChipsView.defaultChips) { chip in
                 inputText = chip
             }
-            ArcInputBar(text: $inputText) { text in
-                // Step 3: wire to ClaudeService
-                let userMsg = ArcMessage(role: .user, content: text)
-                appState.arcMessages.append(userMsg)
+            ArcInputBar(text: $inputText, isSending: appState.isStreaming) { text in
+                Task {
+                    await appState.sendMessage(text)
+                }
             }
         }
         .background(

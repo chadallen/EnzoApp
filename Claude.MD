@@ -39,6 +39,13 @@ The full product spec is at `dev-data/enzo-spec.md`. Hardcoded preview data for 
 - Fitness score is HR-only. Power meter data is ignored in MVP even if present in activities.
 - All segment search runs client-side against the local `segment_scores` Supabase table — never against the global Strava segment database.
 
+### Testing
+- **Write unit tests alongside every logic file.** When you create `FitnessCalculator.swift`, create `FitnessCalculatorTests.swift` in the same step. Never defer tests.
+- Test logic, not UI. Pure functions only: fitness computation, segment scoring, context payload assembly, prompt construction.
+- Use **Swift Testing** (not XCTest). See `skills/testing.md` for patterns and acceptance criteria per step.
+- Every view must have a `#Preview` using hardcoded data from Section 18. Use `.preferredColorScheme(.dark)` on every preview.
+- Before marking any step complete, run tests and confirm they pass.
+
 ### UI & Tone
 - Dark mode first. Background `#0A0A0F`, card surfaces `#141420`.
 - Brand accent `#4FC3F7` (blue). Goal accent `#81C784` (green). Amber `#FFB74D` sparingly.
@@ -79,7 +86,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   │   ├── FitnessChartView.swift ← Swift Charts; LineMark+AreaMark, two RuleMarks, tap→sheet
 │   │   │   ├── MonthDetailSheet.swift ← .presentationDetents bottom sheet on chart tap
 │   │   │   ├── PROpportunitiesCard.swift ← goal segment first, then top 2 by strike score
-│   │   │   ├── ArcInputBar.swift     ← pill input + animated send button (non-functional until Step 3)
+│   │   │   ├── ArcInputBar.swift     ← pill input + animated send button
 │   │   │   ├── PromptChipsView.swift ← horizontal scroll chips; defaultChips static property
 │   │   │   └── ArcMessageView.swift  ← Enzo/user message bubbles (Enzo has left accent border)
 │   │   ├── Segments/
@@ -92,16 +99,16 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── FitnessSnapshot.swift     ← Identifiable by month string; .previewSnapshots (18 months)
 │   │   ├── SegmentScore.swift        ← Identifiable+Hashable by name; .previewSegments (5 segments)
 │   │   └── ArcMessage.swift          ← role: .enzo / .user
-│   ├── Services/                     ← not built yet
-│   │   ├── ClaudeService.swift       ← Step 3
+│   ├── Services/                     ← ClaudeService built in Step 3; others added later
+│   │   ├── ClaudeService.swift       ← Step 3 ✓ — Swift actor; stream(_:context:) → AsyncStream<String>
 │   │   ├── StravaService.swift       ← Step 6
 │   │   ├── SupabaseService.swift     ← Step 5
 │   │   └── SyncService.swift         ← Step 7
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
-│   │   ├── KeychainHelper.swift      ← not built yet (Step 6)
-│   │   ├── FitnessCalculator.swift   ← not built yet (Step 7)
-│   │   ├── SegmentScorer.swift       ← not built yet (Step 9)
+│   │   ├── KeychainHelper.swift      ← Step 6
+│   │   ├── FitnessCalculator.swift   ← Step 7
+│   │   ├── SegmentScorer.swift       ← Step 9
 │   │   └── Extensions/
 │   │       ├── Color+Hex.swift       ← Color(hex: "RRGGBB") initializer
 │   │       └── Color+Enzo.swift      ← semantic constants: .enzoBg .enzoCard .enzoAccent
@@ -112,9 +119,10 @@ EnzoApp/                              ← repo root / VS Code workspace
 ├── .gitignore
 ├── CLAUDE.md
 ├── skills/
-│   ├── swift-design.MD               ← read before building any view
-│   ├── enzo-voice.MD                 ← read before writing any UI string or Enzo copy
-│   └── swift-patterns.MD             ← read before architecture decisions or new files
+│   ├── swiftui-design.md             ← read before building any view
+│   ├── enzo-voice.md                 ← read before writing any UI string or Enzo copy
+│   ├── swift-patterns.md             ← read before architecture decisions or new files
+│   └── testing.md                    ← read before writing any logic or service code
 └── dev-data/
     └── enzo-spec.md                  ← full product spec — source of truth
 ```
@@ -127,7 +135,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 
 - [x] Step 1: Project setup, secrets infrastructure, 2-tab shell
 - [x] Step 2: Arc UI (static, hardcoded data)
-- [ ] Step 3: Claude API wired (hardcoded context)
+- [x] Step 3: Claude API wired (hardcoded context)
 - [ ] Step 4: Goal setting UI
 - [ ] Step 5: Supabase schema + models
 - [ ] Step 6: Strava OAuth
@@ -146,9 +154,10 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 
 | When you're... | Read... |
 |---|---|
-| Building any view, component, or screen | `skills/swift-design.MD` |
-| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.MD` |
-| Making architecture decisions or creating new files | `skills/swift-patterns.MD` |
+| Building any view, component, or screen | `skills/swiftui-design.md` |
+| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.md` |
+| Making architecture decisions or creating new files | `skills/swift-patterns.md` |
+| Writing any logic, service, or data transformation code | `skills/testing.md` |
 
 ---
 
@@ -188,6 +197,9 @@ All hardcoded preview data (Section 18 of spec) lives in the model files as stat
 
 **FitnessChartView tap detection**
 Uses `chartOverlay` + `proxy.plotFrame` + `GeometryReader` to convert tap location to a `Date` x-axis value, then finds the nearest `FitnessSnapshot`. Sheet is triggered via `@State var showingDetail: Bool` + `sheet(isPresented:)`.
+
+**ClaudeService streaming**
+`ClaudeService` is a Swift `actor`. `AppState.sendMessage(_:)` calls it with `await`, iterates the returned `AsyncStream<String>`, and updates `streamingText` token by token. `ArcView` renders an in-progress Enzo bubble from `streamingText` while `isStreaming` is true; on completion the final text is appended to `arcMessages` as a permanent `ArcMessage`. The athlete context JSON (from `AthleteContext.contextPayload`) is prepended to every user message.
 
 **GitHub repo**
 https://github.com/chadallen/EnzoApp — private. Push all work here. xcconfig files are gitignored.
