@@ -152,7 +152,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 3: Claude API wired (hardcoded context)
 - [x] Model refactor: FitnessSnapshot/SegmentScore/AthleteContext/GoalContext updated to label+value model; all preview data matches Section 18
 - [x] Step 4: Goal setting UI
-- [ ] Step 5: Supabase schema + models
+- [x] Step 5: Supabase schema + models
 - [ ] Step 6: Strava OAuth
 - [ ] Step 7: Historical sync Phase 1 (activities + fitness computation)
 - [ ] Step 8: Context payload + Arc content generation (live Enzo)
