@@ -57,21 +57,20 @@ private struct SegmentOpportunityRow: View {
 
     private var strikePillColor: Color {
         switch segment.strikeScore {
-        case 0.7...: return .enzoGoal
-        case 0.4..<0.7: return .enzoAmber
+        case 0.70...: return .enzoGoal
+        case 0.45..<0.70: return .enzoAmber
         default: return .enzoSecondary
         }
     }
 
     private var description: String {
         if segment.isGoalSegment {
-            let gap = Int(abs(segment.fitnessDelta))
-            return "Your goal — \(gap) fitness points to close"
+            return "Your goal — \(segment.strikeLabel.lowercased())"
         }
         switch segment.strikeScore {
         case 0.7...:
             return "Fitter now than when you set this PR"
-        case 0.4..<0.7:
+        case 0.45..<0.7:
             return "Getting close — timing is right soon"
         default:
             return "Build more fitness before targeting this"

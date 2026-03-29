@@ -69,8 +69,8 @@ struct SegmentStrikeRow: View {
 
     private var pillColor: Color {
         switch segment.strikeScore {
-        case 0.7...: return .enzoGoal
-        case 0.4..<0.7: return .enzoAmber
+        case 0.70...: return .enzoGoal
+        case 0.45..<0.70: return .enzoAmber
         default: return .enzoSecondary
         }
     }
@@ -94,14 +94,10 @@ struct SegmentStrikeRow: View {
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(Color.enzoSecondary)
 
-                    let delta = segment.fitnessDelta
-                    HStack(spacing: 2) {
-                        Image(systemName: delta >= 0 ? "arrow.up" : "arrow.down")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text(String(format: "%.0f", abs(delta)))
-                            .font(.system(.caption2, design: .monospaced))
-                    }
-                    .foregroundStyle(delta >= 0 ? Color.enzoGoal : Color.enzoSecondary)
+                    let arrow = segment.trendDirection == "up" ? "↑" : segment.trendDirection == "down" ? "↓" : "→"
+                    Text(arrow)
+                        .font(.system(.caption2, weight: .semibold))
+                        .foregroundStyle(segment.trendDirection == "up" ? Color.enzoGoal : Color.enzoSecondary)
                 }
             }
 

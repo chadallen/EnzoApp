@@ -62,8 +62,7 @@ struct ArcView: View {
 
                     FitnessChartView(
                         snapshots: appState.fitnessSnapshots,
-                        goalScore: context.goal.requiredFitnessScore,
-                        peakScore: context.peakFitnessScore,
+                        goalValue: context.goal.requiredFitnessValue,
                         contextText: AthleteContext.previewChartContext
                     )
 
@@ -108,7 +107,9 @@ struct ArcView: View {
     private var inputArea: some View {
         VStack(spacing: 8) {
             PromptChipsView(chips: PromptChipsView.defaultChips) { chip in
-                inputText = chip
+                Task {
+                    await appState.sendMessage(chip)
+                }
             }
             ArcInputBar(text: $inputText, isSending: appState.isStreaming) { text in
                 Task {

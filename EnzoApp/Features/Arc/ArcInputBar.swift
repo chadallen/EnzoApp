@@ -5,6 +5,8 @@ struct ArcInputBar: View {
     var isSending: Bool = false
     let onSend: (String) -> Void
 
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         HStack(spacing: 10) {
             TextField("Ask Enzo anything...", text: $text, axis: .vertical)
@@ -12,9 +14,12 @@ struct ArcInputBar: View {
                 .foregroundStyle(Color.enzoPrimary)
                 .tint(Color.enzoAccent)
                 .lineLimit(1...4)
+                .focused($isFocused)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
                 .background(Color.enzoCard, in: Capsule())
+                .contentShape(Capsule())
+                .onTapGesture { isFocused = true }
                 .disabled(isSending)
 
             if !text.isEmpty || isSending {
@@ -39,7 +44,8 @@ struct ArcInputBar: View {
             }
         }
         .padding(.horizontal)
-        .padding(.bottom, 6)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
         .animation(.easeInOut(duration: 0.15), value: text.isEmpty)
         .animation(.easeInOut(duration: 0.15), value: isSending)
     }

@@ -1,9 +1,10 @@
 # Enzo — App Specification v2
-**Version:** 2.0  
-**Author:** Chad Allen  
-**Date:** March 2026  
-**Purpose:** Claude Code development handoff  
-**Changes from v1:** Arc-based single-screen experience, goal-first onboarding, inline conversational AI, HR-only fitness model (power data ignored for consistency), Enzo as explicit user-facing persona (Claude is implementation detail), flexible non-prescriptive tone throughout.
+
+**Version:** 2.1
+**Author:** Chad Allen
+**Date:** March 2026
+**Purpose:** Claude Code development handoff
+**Changes from v2.0:** Fitness model replaced — ride efficiency (HR-based) replaces load-based model. Numeric 0–100 fitness score replaced with narrative labels (Epic, Strong, Building, Baseline, Recovering). Strike labels updated (No brainer, Worth a shot, Not quite ready). GoalHeaderView redesigned — progress bar replaced with three-line label + trend arrow. All preview data updated to match new model structures.
 
 ---
 
@@ -30,22 +31,23 @@ These inform every product, UI, and copy decision:
 3. **Flexible by design.** No streaks. No missed-workout alerts. No red states. The plan bends around life.
 4. **Honest about limits.** Enzo is a training companion, not a certified coach. The app says so when relevant.
 5. **Relative fitness, not absolute.** You vs. your own history. No comparison to other athletes.
-6. **HR-only.** The fitness model uses heart rate exclusively. Power meter data is ignored in MVP. This ensures a consistent, comparable fitness score across the full activity history.
+6. **Directionally true, not precisely predictive.** The fitness model doesn't need to be perfectly accurate — it needs to be motivating and honest about direction. Enzo narrates trend and readiness, not decimals.
 
 ---
 
 ## 3. Developer Context
 
-- **Developer:** Solo, learning iOS development
-- **Editor:** VS Code with Sweetpad extension
-- **IDE:** Xcode (build, simulator, signing)
-- **Primary language:** Swift / SwiftUI
-- **Target platform:** iOS 17+, iPhone only (iPad later)
-- **Backend:** Supabase (Postgres + Edge Functions)
-- **AI:** Anthropic Claude API (`claude-sonnet-4-20250514`)
-- **Data source:** Strava API (OAuth 2.0) + local Strava data export for development
+* **Developer:** Solo, learning iOS development
+* **Editor:** VS Code with Sweetpad extension
+* **IDE:** Xcode (build, simulator, signing)
+* **Primary language:** Swift / SwiftUI
+* **Target platform:** iOS 17+, iPhone only (iPad later)
+* **Backend:** Supabase (Postgres + Edge Functions)
+* **AI:** Anthropic Claude API (`claude-sonnet-4-20250514`)
+* **Data source:** Strava API (OAuth 2.0)
+* **Assumed user:** Established cyclists with meaningful Strava history. The fitness model requires sufficient ride data to produce reliable signals — riders with fewer than ~100 rides or less than a year of history will see reduced accuracy. Enzo is not designed for beginners.
 
-> **Development note:** Build all screens against static/hardcoded data first. Wire up live APIs after UI is validated. The `/dev-data/` folder contains a sample Strava export to use during development.
+> **Development note:** Build all screens against static/hardcoded data first. Wire up live APIs after UI is validated. See Section 18 for hardcoded preview data.
 
 ---
 
@@ -54,7 +56,7 @@ These inform every product, UI, and copy decision:
 ### MVP Stack
 
 | Layer | Technology | Notes |
-|---|---|---|
+| --- | --- | --- |
 | UI | SwiftUI | iOS 17+ features |
 | Charts | Swift Charts | Native, no third-party dependency |
 | State management | `@Observable` macro + `@State` / `@Binding` | Modern Swift concurrency |
@@ -67,10 +69,10 @@ These inform every product, UI, and copy decision:
 ### Beyond MVP
 
 | Layer | Technology | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Offline support | SwiftData | Migrate when needed |
 | Push notifications | APNs via Supabase Edge Functions | Weekly plan drop, ride reaction |
-| Widget | WidgetKit | Today widget: goal countdown + Claude one-liner |
+| Widget | WidgetKit | Today widget: goal countdown + Enzo one-liner |
 | Watch | watchOS companion | Post-v1 |
 | Auth expansion | Sign in with Apple | Required for App Store alongside Strava auth |
 
@@ -79,32 +81,62 @@ These inform every product, UI, and copy decision:
 ## 5. Data Architecture
 
 ### Core Principle
+
 **Never store raw Strava data.** Pull activity history from the Strava API, compute derived metrics in-memory, persist only computed output to Supabase. Raw activity data is discarded after computation.
 
-### Fitness Model (HR-Only)
+### Fitness Model (Ride Efficiency, HR-Based)
 
-The fitness score is a normalized 0–100 relative score. It measures the user against their own history — not against other athletes or absolute benchmarks.
+The fitness model measures cardiac efficiency per ride — how much adjusted distance did the athlete cover per unit of cardiac effort. More ground per heartbeat = more efficient = fitter. No resting HR assumption required. Every qualifying ride contributes a data point.
 
-Power meter data is intentionally ignored in MVP. Mixed power data (some rides with power, some without) produces inconsistent scores that make the fitness timeline misleading. HR data exists across all rides and provides a clean, comparable signal across the full history. Power can be added as an enhancement in a future version.
-
+**Per-ride efficiency:**
 ```
-per_activity_load = duration_hours × hr_intensity_factor
-hr_intensity_factor = avg_hr / resting_hr (capped at 2.0)
-
-monthly_load = sum of per_activity_load for all rides that month
-fitness_score = normalize(8_week_rolling_load, personal_min, personal_max) × 100
+adjusted_distance = distance_km + (elevation_gain_m × 0.01)
+if sport_type is GravelRide: adjusted_distance × 1.15
+efficiency = adjusted_distance / (duration_hours × avg_hr)
 ```
 
-**Key behavior:** The fitness score is always a personal relative score — you vs. your own history. It is never compared to other athletes or absolute benchmarks. If an activity has no HR data, use duration only (lower confidence, not surfaced to user explicitly).
+**Filtering:**
+- Rides under 30 minutes are excluded entirely — too short to produce reliable signal
+- Trainer rides (VirtualRide) are treated identically to outdoor rides — Strava distance and elevation estimates are sufficient
+- Rides with no HR data are excluded from efficiency calculation
 
-**Fitness score language:**
-- 80–100: "Peak shape"
-- 60–79: "Strong base"
-- 40–59: "Building"
-- 20–39: "Coming back"
-- 0–19: "Early days"
+**Fitness value (continuous, internal only):**
+```
+fitness_value = (current_avg_efficiency - personal_min) / (personal_max - personal_min)
+// rolling 2-month window of qualifying rides
+// normalized against personal all-time min/max
+// range: 0.0 – 1.0, never exposed to user
+```
 
-These labels appear in the UI. The raw number is secondary.
+**Trend direction:**
+Computed as rate of change in fitness_value over the most recent 4 weeks vs the prior 4 weeks within the 2-month window.
+- ↑ trending up: change > +0.05
+- → flat: change between -0.05 and +0.05
+- ↓ trending down: change < -0.05
+
+Threshold is tunable after real data validation.
+
+**User-facing fitness state** (derived from fitness_value, shown to user):
+
+| fitness_value | Label |
+|---|---|
+| > 0.85 | Epic |
+| 0.65 – 0.85 | Strong |
+| 0.45 – 0.65 | Building |
+| 0.25 – 0.45 | Baseline |
+| < 0.25 | Recovering |
+
+These labels appear in the UI. The continuous value is an internal implementation detail invisible to the user.
+
+**User-facing strike readiness** (derived from strike_score, shown per segment):
+
+| strike_score | Label |
+|---|---|
+| > 0.70 | No brainer |
+| 0.45 – 0.70 | Worth a shot |
+| < 0.45 | Not quite ready |
+
+All thresholds — fitness, trend, and strike — are starting values to be tuned after the model runs against real Strava data in Step 8.
 
 ### Supabase Schema
 
@@ -125,9 +157,10 @@ create table fitness_snapshots (
   month date not null,
   hours_ridden numeric,
   activity_count integer,
-  avg_hr integer,
-  fitness_score numeric,       -- 0-100, relative to personal history
-  fitness_label text,          -- "Strong base" etc.
+  avg_efficiency numeric,      -- avg adjusted_distance / (duration_hours × avg_hr) for the month
+  fitness_value numeric,       -- 0.0–1.0 continuous internal value
+  fitness_label text,          -- "Strong", "Building" etc. — user-facing
+  trend_direction text,        -- 'up', 'flat', 'down'
   created_at timestamptz default now(),
   unique(user_id, month)
 );
@@ -136,7 +169,7 @@ create table fitness_snapshots (
 create table personal_bests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
-  effort_type text not null,   -- 'longest_ride_km', 'best_hr_efficiency', 'most_hours_in_month'
+  effort_type text not null,
   value numeric not null,
   achieved_at date,
   updated_at timestamptz default now()
@@ -148,49 +181,50 @@ create table segment_scores (
   user_id uuid references users(id) on delete cascade,
   strava_segment_id bigint not null,
   segment_name text,
-  start_latlng float[],        -- from segment.start_latlng, for MapKit display
-  end_latlng float[],          -- from segment.end_latlng
-  effort_count integer,        -- from athlete_pr_effort.effort_count
-  pr_seconds integer,          -- from athlete_pr_effort.pr_elapsed_time
-  pr_achieved_at date,         -- from athlete_pr_effort.pr_date
-  fitness_score_at_pr numeric,
-  current_fitness_score numeric,
-  delta numeric,               -- positive = fitter now than when PR was set
-  strike_score numeric,        -- 0-1, higher = better time to target
+  start_latlng float[],
+  end_latlng float[],
+  effort_count integer,
+  pr_seconds integer,
+  pr_achieved_at date,
+  fitness_value_at_pr numeric,   -- continuous 0-1 value at time PR was set
+  current_fitness_value numeric, -- continuous 0-1 value now
+  trend_direction text,          -- 'up', 'flat', 'down' at time of last computation
+  last_effort_seconds integer,   -- most recent effort time, used as projection anchor
+  last_effort_date date,
+  strike_score numeric,          -- 0-1
+  strike_label text,             -- 'No brainer', 'Worth a shot', 'Not quite ready'
   updated_at timestamptz default now(),
   unique(user_id, strava_segment_id)
 );
 
 -- Goals (one active at a time)
--- MVP supports segment_pr only. Schema is intentionally extensible:
--- add goal_type values ('event', 'distance', 'fitness_level') in future 
--- without migration. target_date and target_value are nullable to support
--- open-ended segment goals with no deadline.
+-- MVP supports segment_pr only. Schema is intentionally extensible.
 create table goals (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
-  raw_description text not null,    -- user's own words e.g. "Hawk Hill PR"
-  claude_interpretation text,       -- Enzo's structured read of the goal
-  goal_type text not null default 'segment_pr', -- MVP: always segment_pr
-  target_segment_id bigint,         -- required for segment_pr goals
-  target_segment_name text,         -- denormalized for display without join
-  target_date date,                 -- optional: user can set a "by when" or leave open
+  raw_description text not null,
+  claude_interpretation text,
+  goal_type text not null default 'segment_pr',
+  target_segment_id bigint,
+  target_segment_name text,
+  target_date date,
   target_value numeric,             -- optional: target time in seconds (aspirational)
-  required_fitness_score numeric,   -- estimated fitness score needed to PR this segment
+  required_fitness_label text,      -- fitness label needed to PR this segment e.g. "Strong"
+  required_fitness_value numeric,   -- internal continuous value equivalent
   is_active boolean default true,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
--- Weekly plans (Claude-generated, soft suggestions)
+-- Lookahead suggestions (Enzo-generated, soft suggestions)
 create table lookahead_suggestions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
-  suggestion_text text not null,       -- Enzo's forward-looking suggestion
-  trigger_type text not null,          -- 'new_ride', 'gap_short', 'gap_medium', 'gap_long', 'goal_change'
+  suggestion_text text not null,
+  trigger_type text not null,       -- 'new_ride', 'gap_short', 'gap_medium', 'gap_long', 'goal_change'
   days_since_last_ride integer,
   generated_at timestamptz default now(),
-  expires_at timestamptz               -- 3 days from generation, then regenerate on next open
+  expires_at timestamptz            -- 3 days from generation, then regenerate on next open
 );
 
 -- Arc conversation thread (per-user, rolling)
@@ -206,48 +240,44 @@ create table arc_messages (
 
 ### Claude Context Payload
 
-Constructed fresh at query time from Supabase. Never persisted in this form.
+Constructed fresh at query time from Supabase. Never persisted in this form. All fitness references use labels, not numbers.
 
 ```json
 {
   "athlete": {
     "name": "Chad",
-    "years_active": 4,
-    "current_fitness_score": 71,
-    "current_fitness_label": "Strong base"
+    "years_active": 11,
+    "current_fitness_label": "Building",
+    "trend_direction": "up"
   },
   "goal": {
     "type": "segment_pr",
     "segment_name": "Hawk Hill",
     "current_pr_seconds": 342,
-    "target_date": "2026-05-15",   
-    "weeks_remaining": 7,            
-    "required_fitness_score": 82,
-    "current_fitness_score": 71,
-    "gap": 11,
-    "has_date": true
-    // has_date: false when no target date set — Enzo drops countdown language
+    "target_date": null,
+    "weeks_remaining": null,
+    "required_fitness_label": "Strong",
+    "current_fitness_label": "Building",
+    "has_date": false
   },
   "fitness_history": [
     {
       "month": "2025-09",
       "hours": 22,
-      "fitness_score": 88,
-      "fitness_label": "Peak shape",
+      "fitness_label": "Strong",
+      "trend_direction": "up",
       "activity_count": 18
     }
   ],
   "peak_fitness": {
-    "month": "2025-09",
-    "score": 88,
-    "label": "Peak shape"
+    "month": "2025-08",
+    "label": "Epic"
   },
   "recent_weeks": [
     {
       "week": "2026-03-17",
       "hours": 6.5,
-      "activity_count": 4,
-      "note": "Solid week"
+      "activity_count": 4
     }
   ],
   "top_segments": [
@@ -255,10 +285,11 @@ Constructed fresh at query time from Supabase. Never persisted in this form.
       "name": "Hawk Hill",
       "pr_seconds": 342,
       "pr_date": "2025-08-12",
-      "fitness_at_pr": 85,
-      "current_fitness": 71,
-      "delta": -14,
-      "strike_score": 0.71,
+      "fitness_at_pr": "Epic",
+      "current_fitness": "Building",
+      "trend_direction": "up",
+      "strike_score": 0.28,
+      "strike_label": "Not quite ready",
       "is_goal_segment": true
     }
   ],
@@ -272,6 +303,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form.
 ## 6. Strava Integration
 
 ### OAuth Flow
+
 1. User taps "Connect Strava" on onboarding screen
 2. App opens Strava OAuth URL via `ASWebAuthenticationSession`
 3. Strava redirects to `enzo://oauth`
@@ -279,8 +311,9 @@ Constructed fresh at query time from Supabase. Never persisted in this form.
 5. Tokens stored in iOS Keychain only
 
 ### Required Scopes
-- `activity:read_all` — full activity history including private activities, and `average_heartrate` on activities
-- `read` — athlete profile (display name, profile photo)
+
+* `activity:read_all` — full activity history including private activities, and `average_heartrate` on activities
+* `read` — athlete profile (display name, profile photo)
 
 > **Note:** `profile:read_all` is NOT required. It would be needed for `GET /athlete/zones` but that endpoint is not used in MVP.
 
@@ -289,27 +322,30 @@ Constructed fresh at query time from Supabase. Never persisted in this form.
 **Initial sync (first login):**
 
 **Phase 1 — Activity list + HR (fast, ~5 API calls for 800 activities):**
+
 1. Fetch all activities paginated at 200/page via `GET /athlete/activities`
 2. Extract per activity: `id`, `start_date`, `moving_time`, `elapsed_time`, `distance`, `sport_type`, `has_heartrate`, `average_heartrate`, `trainer` flag
 3. `average_heartrate` is returned directly in `SummaryActivity` — no individual activity calls needed for fitness computation
 4. Filter to cycling sport types only: `Ride`, `VirtualRide`, `MountainBikeRide`, `GravelRide`, `EMountainBikeRide`
-5. Compute monthly snapshots + personal bests in-memory
-6. Write derived metrics to Supabase
-7. Discard raw activity data
+5. Exclude rides under 30 minutes and rides with no HR data from efficiency computation
+6. Compute monthly snapshots + personal bests in-memory
+7. Write derived metrics to Supabase
+8. Discard raw activity data
 
 **Phase 2 — Segment effort extraction (background, 1 call per activity):**
-8. For each cycling activity, fetch `GET /activities/{id}?include_all_efforts=true`
-9. Extract `segment_efforts` array — each effort includes: `segment.id`, `segment.name`, `segment.start_latlng`, `elapsed_time`, `start_date`, and crucially `segment.athlete_pr_effort` containing `pr_elapsed_time`, `pr_date`, `effort_count`
-10. Build segment score records from this data
-11. Write to `segment_scores` table in Supabase
-12. Discard raw activity data
+
+9. For each cycling activity, fetch `GET /activities/{id}?include_all_efforts=true`
+10. Extract `segment_efforts` array — each effort includes: `segment.id`, `segment.name`, `segment.start_latlng`, `elapsed_time`, `start_date`, and `segment.athlete_pr_effort` containing `pr_elapsed_time`, `pr_date`, `effort_count`
+11. Build segment score records from this data
+12. Write to `segment_scores` table in Supabase
+13. Discard raw activity data
 
 **Rate limit management:**
-- Phase 1 completes in seconds — fitness timeline is usable immediately
-- Phase 2 is the expensive operation: 1 call per activity. For 800 activities = ~4 batches of 200. At 200 req/15 min this takes ~15 minutes total.
-- Run Phase 2 as a background task. App is fully usable while it runs.
-- Store sync progress in Supabase so it survives app restarts
-- For activities with no HR data (`has_heartrate = false`), use duration-only load calculation (lower confidence, not surfaced to user)
+
+* Phase 1 completes in seconds — fitness timeline is usable immediately
+* Phase 2 is the expensive operation: 1 call per activity. For 800 activities = ~4 batches of 200. At 200 req/15 min this takes ~15 minutes total.
+* Run Phase 2 as a background task. App is fully usable while it runs.
+* Store sync progress in Supabase so it survives app restarts
 
 **Rate limit handling:** 200 req/15 min, 2,000/day. Show sync progress. Never block UI. For large histories, batch and queue.
 
@@ -322,6 +358,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form.
 ## 7. Claude API Integration
 
 ### Configuration
+
 ```swift
 let claudeAPIURL = "https://api.anthropic.com/v1/messages"
 let claudeModel = "claude-sonnet-4-20250514"
@@ -334,9 +371,9 @@ let claudeMaxTokens = 1024
 > This prompt establishes Enzo as the persona. The user never sees "Claude" anywhere in the app.
 
 ```
-You are Enzo — a cycling training companion with deep knowledge of this athlete's 
-history and an easy, direct way of talking about it. You're not a certified coach 
-and you don't pretend to be. You're the knowledgeable friend who's done a lot of 
+You are Enzo — a cycling training companion with deep knowledge of this athlete's
+history and an easy, direct way of talking about it. You're not a certified coach
+and you don't pretend to be. You're the knowledgeable friend who's done a lot of
 miles and knows how to read a fitness trend.
 
 Your name is Enzo. Use it occasionally but not constantly — like a person would.
@@ -354,10 +391,11 @@ Your job:
 - Never make them feel bad for gaps, missed rides, or changed goals.
 
 Rules:
-- Always use their actual numbers. Never give advice that could apply to anyone.
-- Fitness is HR-based. Don't reference power, FTP, or watts unless the athlete brings it up.
+- Always use their actual numbers and labels. Never give advice that could apply to anyone.
+- Fitness is described using these labels only: Epic, Strong, Building, Baseline, Recovering.
+- Segment readiness uses: No brainer, Worth a shot, Not quite ready.
 - Frame everything relative to their personal history and their goal.
-- Use fitness labels (Peak shape, Strong base, Building, Coming back) naturally in conversation.
+- Don't reference power, FTP, or watts unless the athlete brings it up.
 - A suggestion is not a plan. Make that clear when offering workouts.
 
 Format:
@@ -370,16 +408,17 @@ Format:
 ### Claude Use Cases
 
 | Trigger | What Claude does | Where it appears |
-|---|---|---|
+| --- | --- | --- |
 | App open (daily) | Generates Arc briefing: goal status + fitness read + one forward-looking line | Top of Arc |
 | New activity synced | One-line reaction to the ride | Arc, below briefing |
 | App open or new ride syncs | Generates rolling 5–7 day lookahead based on days since last ride | Arc, what to do next section |
 | User types question | Responds in Arc thread | Arc, inline |
-| Goal set / changed | Identifies segment, estimates required fitness score to PR it, reacts to whether user is close or far | Goal-setting flow |
+| Goal set / changed | Identifies segment, estimates required fitness label to PR it, reacts to whether user is close or far | Goal-setting flow |
 | Segment tapped | One-line "why now?" for this segment | Segment detail |
 | "Help me find a goal" | Analyzes segment data + history, proposes 2-3 goal options | Onboarding |
 
 ### Streaming
+
 All Claude responses stream. Use `AsyncStream` in `ClaudeService.swift` to pipe tokens as they arrive into the UI. Never show a loading state longer than the first token — get something on screen fast.
 
 ---
@@ -389,73 +428,64 @@ All Claude responses stream. Use `AsyncStream` in `ClaudeService.swift` to pipe 
 ### Journey 1: First Launch
 
 **Step 1 — Connect**
-- Clean hero screen. App name, tagline: *"Meet Enzo. Your cycling companion."*
-- Single CTA: "Connect Strava"
-- Strava OAuth via `ASWebAuthenticationSession`
+
+* Clean hero screen. App name, tagline: *"Meet Enzo. Your cycling companion."*
+* Single CTA: "Connect Strava"
+* Strava OAuth via `ASWebAuthenticationSession`
 
 **Step 2 — Sync (required — user must wait)**
 
 The sync screen blocks progression to goal-setting. Segment search requires the segment history to be fully loaded — there is no useful experience without it. Use this time well.
 
 **Animation: Route Drawing**
-- A minimal, abstract cycling route traces itself across a dark background using SwiftUI's `trimmedPath` animation — the line draws from start to finish continuously, looping with a slight fade-out and redraw
-- The route is a simplified but realistic-looking cycling path shape — not a perfect circle or generic squiggle. Think a Strava-style GPS trace: rolling curves, a switchback or two, an obvious climb section
-- Rendered in the brand accent color (`#4FC3F7`) on the dark background (`#0A0A0F`)
-- Subtle gradient trail behind the drawing point — the oldest portion of the line fades slightly, giving the impression of motion through a landscape
-- No map tiles, no real geography — purely abstract line art. Keeps it fast and avoids any mapping API dependency at this stage
+
+* A minimal, abstract cycling route traces itself across a dark background using SwiftUI's `trimmedPath` animation — the line draws from start to finish continuously, looping with a slight fade-out and redraw
+* The route is a simplified but realistic-looking cycling path shape — not a perfect circle or generic squiggle. Think a Strava-style GPS trace: rolling curves, a switchback or two, an obvious climb section
+* Rendered in the brand accent color (`#4FC3F7`) on the dark background (`#0A0A0F`)
+* Subtle gradient trail behind the drawing point — the oldest portion of the line fades slightly, giving the impression of motion through a landscape
+* No map tiles, no real geography — purely abstract line art
 
 **Copy: Phases**
+
 Copy updates as sync moves through its real phases. Each line crossfades to the next:
+
 1. *"Reading your rides..."* — activity fetch in progress
-2. *"Finding your best efforts..."* — segment history processing  
+2. *"Finding your best efforts..."* — segment history processing
 3. *"Sizing up your fitness..."* — metrics computation
 4. *"Scoping your opportunities..."* — strike scores calculating
 5. *"Enzo is almost ready..."* — final writes to Supabase
 
-Activity count appears in small secondary text below the copy, incrementing as activities are processed: *"847 rides and counting"*
+Activity count appears in small secondary text below: *"847 rides and counting"*
 
-**On completion:**
-- Route drawing animation completes one final full loop
-- Crossfades to goal-setting screen
-- No "tap to continue" — transition is automatic when sync finishes
+**On completion:** Crossfades to goal-setting screen automatically.
 
-**If sync takes > 60 seconds:**
-- Add a single line of secondary copy below the counter: *"Big history — this is worth it."*
-- Never show a progress percentage or estimated time — these create anxiety when they stall
-
-> **Implementation note:** Use SwiftUI `trim(from:to:)` on a `Path` with an `@State` variable animated via `withAnimation(.linear(duration:).repeatForever())`. The route shape is a hardcoded `Path` defined as a series of curves — not MapKit, not any external data. Design the path shape in Figma or directly in SwiftUI coordinates before coding.
+**If sync takes > 60 seconds:** Add *"Big history — this is worth it."* below the counter. Never show a progress percentage or estimated time.
 
 **Step 3 — Goal Setting (the key moment)**
 
 Screen title: *"Which segment are you chasing?"*
 
 **Path A — User knows their segment:**
-- Search field: user types a segment name
-- Results pull from their own Strava segment history (segments they've actually ridden)
-- User taps a segment → Enzo reacts immediately, streaming:
-  > *"Hawk Hill. Good choice. You set that PR at peak fitness last August — you're about 80% of the way back. You don't need a date for this, but if you have one in mind it helps me calibrate."*
-- Optional date input appears below (clearly optional, easily skipped)
-- User taps "Set this goal" → advances to Arc
+* Search field: user types segment name
+* Results pull from their own Strava segment history
+* User taps → Enzo reacts immediately, streaming:
+  > *"Hawk Hill. Good choice. You set that PR at Epic fitness last August — you're Building right now and trending up. You don't need a date for this, but if you have one in mind it helps me calibrate."*
+* Optional date input appears below
+* User taps "Set this goal" → advances to Arc
 
 **Path B — User wants a suggestion:**
-- Taps "Help me pick one"
-- Enzo analyzes segment history + fitness delta
-- Proposes 2-3 segments as tappable cards, ranked by strike score + meaningfulness:
-  > *"Hawk Hill — your most-ridden segment. You're close to beating it."*  
-  > *"Camino Alto Cutoff — you're actually fitter now than when you set this one."*  
+* Taps "Help me pick one"
+* Enzo proposes 2-3 segments as tappable cards ranked by strike score:
+  > *"Hawk Hill — your most-ridden segment. You're not quite ready, but getting there."*
+  > *"Camino Alto Cutoff — worth a shot right now."*
   > *"Paradise Loop climb — a stretch goal. Worth building toward."*
-- User taps one → same confirmation flow as Path A
-
-**Goal change note (shown once, subtly below the goal header on first Arc view):**
-*"This is your focus for now. Change it any time — no commitment required."*
-
-> **Extensibility note:** When event goals are added, this screen gets a second option at the top: "A segment PR" / "An event or race". The segment PR path is unchanged. The event path is a new flow. Nothing about the current segment flow needs to change to accommodate this.
+* User taps one → same confirmation flow as Path A
 
 ---
 
 ### Journey 2: The Arc (Main Experience)
 
-The Arc is a single vertically scrolling view. Claude narrates it. It updates when new rides sync.
+The Arc is a single vertically scrolling view. Enzo narrates it. It updates when new rides sync.
 
 **Sections, top to bottom:**
 
@@ -463,27 +493,23 @@ The Arc is a single vertically scrolling view. Claude narrates it. It updates wh
 
 **① Goal Header (always visible, sticky)**
 
-The goal is always a segment PR. Date is optional — if set, show a countdown. If not, show fitness gap only. Both are fully supported states.
+Three lines. No numbers.
 
 ```
-[Segment name]                 [X weeks to go — IF date set]
-Hawk Hill PR                   7 weeks
-
-  — or, if no date —
-
-[Segment name]
 Hawk Hill PR
-
-[Progress bar: current fitness → required fitness]
-Strong base ————————●————————— Peak shape needed
-                   71              82
-
-                        [Change goal]
+Building ↑
+Strong fitness needed
 ```
 
-Tapping "Change goal" opens the goal-setting flow inline. No guilt. No warning. Just a sheet.
+- Line 1: Segment name (bold)
+- Line 2: Current fitness label + trend arrow (↑ / → / ↓), colored by state
+- Line 3: Required fitness label in secondary text
 
-> **Extensibility note:** When event-based goals are added in a future version, the Goal Header is the primary component that changes. The progress bar logic (current fitness → required fitness) works identically for event goals — only the label and optional date source change. Design this component to accept a goal type prop, not hardcode segment-specific copy.
+Trend arrow is data-driven from rate of change in continuous fitness value. Not decorative.
+
+"Change goal" text button below, always visible. Tapping opens goal-setting sheet inline. No friction, no warning.
+
+> **Extensibility note:** When event-based goals are added in a future version, the Goal Header is the primary component that changes. The three-line structure works identically for event goals — only the label sources change.
 
 ---
 
@@ -492,10 +518,8 @@ Tapping "Change goal" opens the goal-setting flow inline. No guilt. No warning. 
 Enzo's synthesis of where things stand. 2-3 sentences. Specific to their data.
 
 Example:
-> *"You're in a good window. Seven weeks is plenty of time to get from where you are to where you need to be for Hawk Hill — your history shows you can move fitness scores 15+ points in that timeframe when you're consistent. This week is a good week to push a little."*
 
-If they haven't ridden in a while:
-> *"It's been 10 days since your last ride. That's fine — you haven't lost much. Pick it back up this week and you'll be right back on track."*
+> *"You're Building right now and trending up — good direction. Hawk Hill needs you at Strong, so there's ground to cover, but your history shows you can move fitness fast when you're consistent. This week is a good week to push a little."*
 
 No red states. No "you're falling behind" without an immediate path forward.
 
@@ -503,37 +527,17 @@ No red states. No "you're falling behind" without an immediate path forward.
 
 **③ Last Ride Reaction (appears after each new sync)**
 
-One line. Specific to the ride.
+One line. Specific to the ride. Fades into history after 48 hours.
 
 Example:
+
 > *"Tuesday's ride was your longest in 6 weeks — good timing."*
-
-Or:
-> *"Short one yesterday, but sometimes that's the ride you needed."*
-
-Fades into history after 48 hours.
 
 ---
 
 **④ What To Do Next (rolling, context-driven)**
 
-Enzo always has a forward-looking suggestion. It's a rolling 5–7 day lookahead, not a weekly plan. It regenerates when context changes meaningfully: after a new ride syncs, after a goal change, or when the existing suggestion is more than 3 days old.
-
-There is no Monday dependency. There is no weekly reset. Enzo just always knows what makes sense given what you've done recently and how much time is left toward your goal.
-
-**Trigger: new ride synced**
-> *"Good ride yesterday — that's exactly the kind of effort that moves the needle. For the next few days, something easier would serve you well. Then if you can get one more solid effort in before the weekend, you're in great shape."*
-
-**Trigger: opened app, no new rides since last open (< 5 days)**
-> *"You've had a couple of days off. That's fine — your fitness doesn't evaporate that fast. When you're ready to ride again, pick up where you left off. Nothing heroic needed."*
-
-**Trigger: opened app, no new rides since last open (5–7 days)**
-> *"It's been about five days. You've got 6 weeks until your goal — still plenty of time, but this week is worth showing up for. Even one solid ride gets things moving again."*
-
-**Trigger: long gap (7+ days)**
-> *"Let's reset. A week off happens. Your fitness has dipped a little but it comes back fast — your body remembers. Here's what the next few days should look like to get back on track."*
-
-No day-by-day prescription. No "rest day Tuesday." User can always ask Enzo follow-up questions inline.
+Enzo always has a forward-looking suggestion. Rolling 5–7 day lookahead, not a weekly plan. Regenerates after new ride, goal change, or when suggestion is more than 3 days old. No Monday dependency. No weekly reset.
 
 Small label beneath: *"A suggestion, not a plan. Adjust freely."*
 
@@ -544,105 +548,93 @@ Small label beneath: *"A suggestion, not a plan. Adjust freely."*
 A compact Swift Charts line chart. 12 months visible by default.
 
 Two reference lines:
-- **Your peak** — labeled, dashed horizontal line
-- **Goal target** — labeled, dashed horizontal line (the required fitness score)
+* **Your peak** — labeled, dashed horizontal line
+* **Goal target** — labeled dashed line showing required fitness label threshold
 
-Current position: animated pulse dot on the curve.
+Current position: animated pulse dot on the curve. Y-axis uses fitness labels, not numbers.
 
-Tap any month → bottom sheet with that month's summary: hours, rides, notable efforts. No drill-down beyond this in MVP.
-
-Below the chart, one Claude sentence contextualizing it:
-> *"Your peak was last September. You've been building back since January — this is normal."*
+Tap any month → bottom sheet with that month's summary: hours, rides, fitness label. Below the chart, one Enzo sentence contextualizing it.
 
 ---
 
 **⑥ PR Opportunities (Segment Radar)**
 
-Compact card, not a full section. Top 3 segments by strike score.
+Compact card. Top 3 segments by strike score.
 
 ```
-Strike while you're hot
+When to strike
 
 ① Hawk Hill           ★ Goal segment
-  PR: 5:42  ·  You're close — best window in 6 months
+  PR: 5:42  ·  Not quite ready — keep building
 
 ② Camino Alto Cutoff
-  PR: 3:18  ·  Slightly fitter than your PR day
+  PR: 3:18  ·  Worth a shot this weekend
 
-③ Paradise Loop climb
-  PR: 8:54  ·  Worth a shot this weekend
+③ Bolinas Ridge descent
+  PR: 7:25  ·  No brainer — you're fitter than your PR day
 ```
 
-"See all opportunities →" links to the full Segments tab (one of two tabs, see nav below).
+"See all opportunities →" links to Segments tab.
 
 ---
 
 **⑦ Inline Conversation**
 
-Below all sections, a persistent input bar:
-*"Ask Enzo anything..."*
+Persistent input bar: *"Ask Enzo anything..."*
 
-User types → Claude responds inline, streaming, in a chat-style thread below the input. The thread is part of the Arc, not a separate screen. It scrolls with everything else.
+User types → Enzo responds inline, streaming. Thread is part of the Arc, not a separate screen. Conversation resets daily, last 3 exchanges kept as context.
 
-Conversation is maintained within the session. A new day starts a fresh thread, but the last 3 exchanges are kept as context for Claude.
-
-Suggested prompt chips above the input (horizontally scrollable, updated weekly):
-- *"Am I on track for Hawk Hill?"*
-- *"What should I do this weekend?"*
-- *"When was I last this fit?"*
-- *"What if I only have 4 weeks left?"*
+Suggested prompt chips (horizontal scroll, updated weekly):
+* *"Am I on track for Hawk Hill?"*
+* *"What should I do this weekend?"*
+* *"When was I last this fit?"*
+* *"What if I only have 4 weeks left?"*
 
 ---
 
 ### Journey 3: Changing a Goal
 
-User taps "Change goal" in the Goal Header at any time.
-
-- Same goal-setting UI as onboarding
-- Enzo acknowledges the change warmly: *"Got it, switching to Camino Alto. Good call — you're actually already fitter than when you set that one."*
-- Arc rebuilds around the new goal
-- Old goal is archived in Supabase (not deleted)
-- No warning, no "are you sure," no friction
+User taps "Change goal" at any time. Same goal-setting UI as onboarding. Enzo acknowledges warmly. Arc rebuilds. Old goal archived, not deleted. No warning, no friction.
 
 ---
 
 ### Journey 4: Segment Detail
 
-User taps any segment from PR Opportunities or the full Segments tab.
+User taps any segment from PR Opportunities or Segments tab.
 
 Screen shows:
-- Segment name + location
-- Map thumbnail (MapKit polyline from segment coordinates)
-- Current PR + date
-- Fitness delta: their score now vs. their score when PR was set
-- Strike score with plain English: *"You're in better shape now than when you set this PR."* or *"You're not quite there yet — worth targeting in a few weeks."*
-- Claude one-liner (generated on tap, cached for session): *"Your legs should feel different on this one than last August — trust that."*
-- "Open in Strava" button
+* Segment name + location
+* Map thumbnail (MapKit polyline from segment coordinates)
+* Current PR + date
+* Fitness comparison: their label now vs. their label when PR was set
+* Strike readiness with plain English assessment
+* Enzo one-liner (generated on tap, cached for session)
+* "Open in Strava" button
 
 ---
 
 ## 9. Navigation Structure
 
-Simplified to two tabs. The Arc is the app.
+Two tabs. The Arc is the app.
 
 ```
 Tab Bar (2 tabs):
-├── Arc (Home) — The full experience described above
-└── Segments — Full PR opportunity list with sorting + filters
+├── Arc (Home) — The full experience
+└── Segments — Full PR opportunity list
 ```
 
 No Chat tab. No Goals tab. No History tab. Everything lives in the Arc.
 
-**Segments tab** (simple list):
-- Sort by: Strike Score (default) / Alphabetical / PR Date
-- Filter: Goal segment first
-- Each row: name, PR time, strike score badge (colored pill), fitness delta arrow
-- Tap → Segment Detail screen (push navigation)
+**Segments tab:**
+* Sort by: Strike Score (default) / Alphabetical / PR Date
+* Filter: Goal segment first
+* Each row: name, PR time, strike label pill (colored), trend arrow
+* Tap → Segment Detail (push navigation)
 
-**Settings** accessible via profile avatar in Arc header (top right):
-- Connected Strava account + Disconnect
-- Manual re-sync
-- App version
+**Settings** via profile avatar in Arc header:
+* Connected Strava account + Disconnect
+* Manual re-sync
+* App version
 
 ---
 
@@ -650,75 +642,82 @@ No Chat tab. No Goals tab. No History tab. Everything lives in the Arc.
 
 ### Design Direction
 
-**Aesthetic:** Confident, warm, editorial. Like a well-designed training journal — not a sports analytics dashboard. Dark-mode first. Data supports narrative, not the other way around.
+**Aesthetic:** Confident, warm, editorial. Dark-mode first. Data supports narrative.
 
 **Color palette:**
-- Background: `#0A0A0F`
-- Card surfaces: `#141420`
-- Brand accent: `#4FC3F7` (electric blue — used for the fitness curve, CTAs)
-- Goal accent: `#81C784` (muted green — goal progress, positive deltas)
-- Amber: `#FFB74D` — used sparingly for "worth noting" signals only
-- Text primary: `#F0F0F5`
-- Text secondary: `#8888AA`
+* Background: `#0A0A0F`
+* Card surfaces: `#141420`
+* Brand accent: `#4FC3F7` (electric blue — fitness curve, CTAs, Building label)
+* Goal accent: `#81C784` (muted green — Epic/Strong labels, positive trend)
+* Amber: `#FFB74D` — Baseline/Recovering labels, used sparingly
+* Text primary: `#F0F0F5`
+* Text secondary: `#8888AA`
 
 **Typography:**
-- Display / section headers: SF Pro Rounded Bold (warmer than default SF Pro)
-- Body / Claude text: SF Pro Text Regular
-- Data labels: SF Pro Mono (for numbers — times, scores, hours)
-- Never use custom fonts in MVP — SF system fonts only for performance and legibility
+* Display / section headers: SF Pro Rounded Bold
+* Body / Enzo text: SF Pro Text Regular
+* Data labels: SF Pro Mono (times, hours)
 
 **Tone in copy:**
-- Never "You failed to complete"
-- Never "Missed workout"
-- Never red states for inactivity
-- Use: "It's been a few days", "Pick it back up", "You're building"
-- Goal progress bar never goes red — it goes amber at most, with a constructive Claude line
+* Never "You failed to complete" / "Missed workout" / red states for inactivity
+* Use: "It's been a few days", "Pick it back up", "You're building"
+* No label ever goes red — amber at most, always with a constructive Enzo line
 
 ### Key UI Components
 
 **GoalHeaderView** (sticky at top of Arc)
-- Goal name (bold, truncated at 24 chars)
-- Weeks remaining (right-aligned, accent color)
-- Progress bar: two labeled endpoints, filled to current fitness position
-- "Change goal" text button (small, secondary style) — always visible, never hidden
+
+Three lines. No numbers. No progress bar.
+
+```
+Hawk Hill PR
+Building ↑
+Strong fitness needed
+```
+
+- Segment name: bold, truncated at 24 chars
+- Fitness label + trend arrow: colored by state (Epic/Strong → .enzoGoal, Building → .enzoAccent, Baseline/Recovering → .enzoAmber)
+- Trend arrow: ↑ up / → flat / ↓ down, data-driven from 4-week rate of change
+- Required label: secondary text color
+- "Change goal" text button: small, secondary style, always visible
 
 **ArcBriefingView**
-- Claude's daily synthesis text, streaming on first render
-- Subtle left border in accent color to visually distinguish Enzo's voice
-- Refresh chevron (top right) to manually regenerate
-- Last updated timestamp in secondary text below
+* Enzo's daily synthesis, streaming on first render
+* Subtle left border in accent color
+* Refresh chevron top right
+* Last updated timestamp in secondary text
 
 **LookaheadSuggestionView**
-- Claude's workout suggestion
-- Small italic label: *"A suggestion, not a plan"*
-- "Ask about this week →" chips below that pre-populate the input
+* Enzo's workout suggestion
+* Small italic label: *"A suggestion, not a plan"*
+* "Ask about this week →" chips below
 
 **FitnessChartView** (Swift Charts)
-- `LineMark` + `AreaMark` fill below curve
-- Two `RuleMark` horizontal lines: peak fitness, goal target fitness
-- Animated draw-in on first appearance (0.6s, left to right)
-- Tappable month selection — selected month highlighted, detail sheet slides up
-- Axis labels: abbreviated month names, no year unless >12 months shown
+* `LineMark` + `AreaMark` fill
+* Two `RuleMark` lines: peak fitness, goal target fitness
+* Y-axis labeled with fitness state names, not numbers
+* Animated draw-in on first appearance (0.6s)
+* Tappable month selection → detail sheet
 
 **SegmentStrikeRow**
-- Name (bold) + PR time (mono)
-- Strike score pill: green ("Strike now"), amber ("Getting close"), grey ("Not yet")
-- Fitness delta: small arrow + percentage in secondary text
+* Name (bold) + PR time (mono)
+* Strike label pill: green ("No brainer"), amber ("Worth a shot"), grey ("Not quite ready")
+* Trend arrow in secondary text
 
-**ArcInputBar** (persistent bottom of Arc)
-- Pill-shaped text input
-- Send button appears on text entry
-- Prompt chips scroll horizontally above input
-- Input bar floats above tab bar, not inside it
+**ArcInputBar**
+* Pill-shaped text input, persistent bottom of Arc
+* Send button appears on text entry
+* Prompt chips scroll horizontally above
+* Floats above tab bar
 
 ### Motion
-- Chart draws in on load: 0.6s ease-out
-- Claude text streams character by character (not word — character feels more alive)
-- Bottom sheet springs (standard iOS spring, don't override)
-- Prompt chips slide in on load with staggered delay
-- Strike score pill: subtle pulse animation on "Strike now" items only
-- Arc sections fade in sequentially on first load (stagger 0.1s each)
-- No celebration animations, no confetti — this isn't that kind of app
+* Chart draws in on load: 0.6s ease-out
+* Enzo text streams character by character
+* Bottom sheet springs (standard iOS spring)
+* Prompt chips slide in with staggered delay
+* Strike label pill: subtle pulse on "No brainer" items only
+* Arc sections fade in sequentially on first load (stagger 0.1s)
+* No celebration animations, no confetti
 
 ---
 
@@ -728,34 +727,34 @@ No Chat tab. No Goals tab. No History tab. Everything lives in the Arc.
 Enzo/
 ├── App/
 │   ├── EnzoApp.swift
-│   └── AppState.swift               # Global @Observable: user, goal, sync status
+│   └── AppState.swift
 ├── Features/
 │   ├── Onboarding/
-│   │   ├── OnboardingView.swift      # Connect + sync screens
-│   │   ├── GoalSettingView.swift     # Goal input + Claude interpretation
+│   │   ├── OnboardingView.swift
+│   │   ├── GoalSettingView.swift
 │   │   └── SyncProgressView.swift
 │   ├── Arc/
-│   │   ├── ArcView.swift             # Main scrollable Arc, composes all sections
-│   │   ├── GoalHeaderView.swift      # Sticky goal + progress bar
-│   │   ├── ArcBriefingView.swift     # Claude daily synthesis
+│   │   ├── ArcView.swift
+│   │   ├── GoalHeaderView.swift
+│   │   ├── ArcBriefingView.swift
 │   │   ├── LastRideReactionView.swift
 │   │   ├── LookaheadSuggestionView.swift
-│   │   ├── FitnessChartView.swift    # Swift Charts fitness curve
-│   │   ├── MonthDetailSheet.swift    # Bottom sheet on chart tap
-│   │   ├── PROpportunitiesCard.swift # Top 3 segments, compact
-│   │   ├── ArcInputBar.swift         # Inline conversation input
-│   │   ├── ArcMessageView.swift      # Claude/user message bubble
+│   │   ├── FitnessChartView.swift
+│   │   ├── MonthDetailSheet.swift
+│   │   ├── PROpportunitiesCard.swift
+│   │   ├── ArcInputBar.swift
+│   │   ├── ArcMessageView.swift
 │   │   └── PromptChipsView.swift
 │   └── Segments/
-│       ├── SegmentsView.swift        # Full segment list tab
+│       ├── SegmentsView.swift
 │       └── SegmentDetailView.swift
 ├── Services/
-│   ├── StravaService.swift           # OAuth, activity fetch, webhooks
-│   ├── ClaudeService.swift           # API calls, streaming, prompt assembly
-│   ├── SupabaseService.swift         # Read/write derived metrics
-│   └── SyncService.swift             # Strava → metrics pipeline orchestration
+│   ├── StravaService.swift
+│   ├── ClaudeService.swift
+│   ├── SupabaseService.swift
+│   └── SyncService.swift
 ├── Models/
-│   ├── AthleteContext.swift          # Claude context payload, toJSON()
+│   ├── AthleteContext.swift
 │   ├── FitnessSnapshot.swift
 │   ├── Goal.swift
 │   ├── SegmentScore.swift
@@ -763,128 +762,195 @@ Enzo/
 │   └── ArcMessage.swift
 ├── Utils/
 │   ├── KeychainHelper.swift
-│   ├── FitnessCalculator.swift       # HR-first fitness model, power enhancement
-│   ├── SegmentScorer.swift           # Strike score computation
+│   ├── FitnessCalculator.swift
+│   ├── SegmentScorer.swift
 │   └── Extensions/
 └── dev-data/
-    └── strava_export.json            # Developer's real Strava export for static dev
+    └── strava_export.json
 ```
 
 ---
 
 ## 12. Fitness Computation Detail
 
-### HR-Only Model
+### Ride Efficiency Model
 
 ```swift
-// Per activity
-func activityLoad(durationHours: Double, avgHR: Int, restingHR: Int) -> Double {
-    let intensity = min(Double(avgHR) / Double(restingHR), 2.0)
-    return durationHours * intensity
+// Minimum ride duration to qualify
+let minimumDurationMinutes: Double = 30
+
+// Per ride — returns nil if ride doesn't qualify
+func rideEfficiency(
+    durationHours: Double,
+    distanceKm: Double,
+    elevationGainM: Double,
+    avgHR: Int,
+    sportType: String
+) -> Double? {
+    guard durationHours * 60 >= minimumDurationMinutes else { return nil }
+    guard avgHR > 0 else { return nil }
+
+    var adjustedDistance = distanceKm + (elevationGainM * 0.01)
+
+    let isGravel = ["GravelRide"].contains(sportType)
+    if isGravel { adjustedDistance *= 1.15 }
+
+    return adjustedDistance / (durationHours * Double(avgHR))
 }
 
-// Per month
-func monthlyFitnessLoad(activities: [Activity]) -> Double {
-    activities.reduce(0) { $0 + activityLoad($1.durationHours, $1.avgHR, restingHR) }
+// Rolling 2-month fitness value (0.0–1.0, internal only)
+func fitnessValue(
+    recentEfficiencies: [Double],  // qualifying rides in last 2 months
+    allTimeMin: Double,
+    allTimeMax: Double
+) -> Double {
+    guard !recentEfficiencies.isEmpty else { return 0 }
+    guard allTimeMax > allTimeMin else { return 0.5 }
+    let avg = recentEfficiencies.reduce(0, +) / Double(recentEfficiencies.count)
+    return min(max((avg - allTimeMin) / (allTimeMax - allTimeMin), 0), 1)
 }
 
-// Score: normalize against personal history (rolling 24-month min/max)
-func fitnessScore(currentLoad: Double, historicalLoads: [Double]) -> Double {
-    let min = historicalLoads.min() ?? 0
-    let max = historicalLoads.max() ?? 1
-    return ((currentLoad - min) / (max - min)) * 100
+// Fitness label from continuous value (user-facing)
+func fitnessLabel(for value: Double) -> String {
+    switch value {
+    case 0.85...: return "Epic"
+    case 0.65..<0.85: return "Strong"
+    case 0.45..<0.65: return "Building"
+    case 0.25..<0.45: return "Baseline"
+    default: return "Recovering"
+    }
+}
+
+// Trend direction from 4-week rate of change
+func trendDirection(
+    recentFourWeeks: Double,   // avg efficiency, most recent 4 weeks
+    priorFourWeeks: Double     // avg efficiency, prior 4 weeks
+) -> String {
+    let change = recentFourWeeks - priorFourWeeks
+    switch change {
+    case let c where c > 0.05: return "up"
+    case let c where c < -0.05: return "down"
+    default: return "flat"
+    }
 }
 ```
-
-### Power Data
-Power meter data is not used in the MVP fitness model. If present in activity records, ignore it during computation. This keeps the fitness score consistent across the full history regardless of when the athlete started using a power meter.
 
 ### Segment Strike Score
 
 ```swift
-func strikeScore(currentFitness: Double, fitnessAtPR: Double, prDate: Date) -> Double {
-    let delta = currentFitness - fitnessAtPR
-    let recencyMultiplier = prDate < Date().addingTimeInterval(-180*86400) ? 1.0 : 0.7
-    let normalizedDelta = (delta + 20) / 40  // center around 0 delta, cap at ±20
-    return min(max(normalizedDelta * recencyMultiplier, 0), 1)
+// Strike score using fitness trend as multiplier on last segment effort
+func strikeScore(
+    lastEffortSeconds: Double,
+    prSeconds: Double,
+    fitnessValue: Double,
+    trendDirection: String
+) -> Double {
+    guard prSeconds > 0, lastEffortSeconds > 0 else { return 0 }
+
+    // Trend multiplier: up = slight boost, down = slight penalty, flat = neutral
+    let trendMultiplier: Double
+    switch trendDirection {
+    case "up": trendMultiplier = 1.05
+    case "down": trendMultiplier = 0.95
+    default: trendMultiplier = 1.0
+    }
+
+    // Project next effort time based on current fitness and trend
+    let projectedSeconds = lastEffortSeconds * (1 - ((fitnessValue - 0.5) * 0.1)) * (1 / trendMultiplier)
+
+    // Strike score: how close is the projection to beating PR
+    // 1.0 = projected to match or beat PR, 0.0 = far off
+    let ratio = prSeconds / projectedSeconds
+    return min(max((ratio - 0.85) / 0.15, 0), 1)
 }
 
-// Strike label
-func strikeLabel(score: Double) -> String {
+// Strike label from score (user-facing)
+func strikeLabel(for score: Double) -> String {
     switch score {
-    case 0.7...: return "Strike now"
-    case 0.4..<0.7: return "Getting close"
-    default: return "Not yet"
+    case 0.70...: return "No brainer"
+    case 0.45..<0.70: return "Worth a shot"
+    default: return "Not quite ready"
     }
 }
 ```
+
+### Tuning Notes
+
+All constants below are starting values. Run against real Strava data in Step 8 and adjust:
+- Elevation multiplier: `0.01` (100m climbing ≈ 1km flat)
+- Gravel surface bonus: `1.15`
+- Minimum ride duration: `30 minutes`
+- Trend threshold: `0.05` change in 4-week window
+- Trend multiplier range: `0.95 – 1.05`
+- Fitness projection sensitivity: `0.1` (10% fitness swing ≈ 1% time swing)
+- Strike score normalization: `0.85 – 1.0` ratio range
 
 ---
 
 ## 13. Error States & Edge Cases
 
 | Scenario | Handling |
-|---|---|
-| < 2 months of Strava data | Arc shows with note: "More rides = richer insights — check back as your history builds" |
-| No HR data on activities | Fitness model uses duration only, lower confidence, noted in Arc |
-| Claude API timeout | Show "Couldn't reach Enzo — tap to retry" in place of briefing. Never blank. |
-| Strava rate limit during sync | Pause, show "Syncing in the background", auto-resume. No user action needed. |
-| Strava auth expires | Silent token refresh first. If fails, prompt re-auth with warm copy: "Strava needs you to reconnect — takes 10 seconds." |
-| Goal has no target date | Valid. Claude treats it as open-ended and focuses on fitness direction, not countdown. |
+| --- | --- |
+| < 100 rides or < 1 year history | Arc shows with note: "More rides = richer insights — check back as your history builds" |
+| No HR data on activities | Ride excluded from efficiency calculation entirely |
+| Rides under 30 minutes | Excluded from efficiency calculation entirely |
+| Claude API timeout | Show "Couldn't reach Enzo — tap to retry". Never blank. |
+| Strava rate limit during sync | Pause, show "Syncing in the background", auto-resume |
+| Strava auth expires | Silent token refresh first. If fails, prompt re-auth: "Strava needs you to reconnect — takes 10 seconds." |
+| Goal has no target date | Valid. Enzo focuses on fitness direction, not countdown. |
 | Supabase write fails | Retry silently 3x, then toast: "Couldn't save your data — will retry." |
-| User disconnects Strava | Delete all Supabase data, reset to onboarding. Confirmed with one dialog: "This will clear all your synced data." |
+| User disconnects Strava | Delete all Supabase data, reset to onboarding. One confirmation dialog. |
+| No segment repeats for a segment | Strike score uses fitness value only, no last-effort projection. Flag as lower confidence. |
 
 ---
 
 ## 14. What's Out of Scope (MVP)
 
-- Social features of any kind
-- Other users' data
-- Running (cycling only for now)
-- Event / race goals (architecture supports it, intentionally deferred to v2)
-- Day-by-day rigid training schedules
-- Missed workout tracking or streaks
-- Notifications (post-MVP)
-- iPad
-- Apple Watch
-- Export or sharing
-- In-app purchases
+* Social features of any kind
+* Other users' data
+* Running (cycling only)
+* Event / race goals (architecture supports it, deferred to v2)
+* Day-by-day rigid training schedules
+* Missed workout tracking or streaks
+* Notifications (post-MVP)
+* iPad
+* Apple Watch
+* Export or sharing
+* In-app purchases
+* Power meter data (deliberately excluded for model consistency)
 
 ---
 
 ## 15. Open Technical Questions
 
-1. **Sweetpad setup:** Confirm Sweetpad extension is configured with correct Xcode project target. Build + run from VS Code to iOS Simulator should work before writing any feature code.
-2. **Supabase project:** Create at supabase.com. Run schema SQL from Section 5 in the SQL editor. Store `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `Config.xcconfig` excluded from git.
+1. **Sweetpad setup:** Confirm Sweetpad extension is configured with correct Xcode project target before writing any feature code.
+2. **Supabase project:** Create at supabase.com. Run schema SQL from Section 5. Store `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `Config.xcconfig`.
 3. **Claude API key:** Keychain only. Use `xcconfig` for dev builds. Never commit to git.
-4. **Strava app registration:** Register at strava.com/settings/api. Set redirect URI to `enzo://oauth`. Store `client_id` and `client_secret` in Keychain.
-5. **Strava data export:** Not used. The bulk export was analyzed and rejected as a dev fixture — segment data is empty, fit files are binary requiring a separate parsing library, and CSV activity type values don't match API field names. Development uses hardcoded data for UI steps (1–4), then goes directly to the live Strava API. See revised build order in Section 17.
-6. **Resting HR:** Strava does not expose resting HR via the API. Use 60bpm as a fixed fallback for all users in MVP. Post-MVP: add a resting HR input to Settings so the user can calibrate their own baseline.
+4. **Strava app registration:** Register at strava.com/settings/api. Set redirect URI to `enzo://oauth`.
+5. **Strava data export:** Not used. Bulk export was analyzed and rejected — segment data is empty, fit files are binary. Development uses hardcoded data for Steps 1–5, then goes directly to the live Strava API.
+6. **Model tuning pass:** After Step 8 wires real data, run the efficiency formula against full Strava history and validate that fitness labels match intuition. Adjust all constants in Section 12 Tuning Notes before Step 9.
 
 ---
 
-
 ## 16. Secrets & API Key Management
 
-All API keys and secrets are managed via xcconfig files. Never use global config, hardcoded strings, or environment variables for secrets in this project.
+All API keys and secrets are managed via xcconfig files. Never hardcode.
 
 ### File Structure
 
 ```
 Enzo/
 ├── Config/
-│   ├── Debug.xcconfig       # Developer secrets — never committed to git
+│   ├── Debug.xcconfig       # Developer secrets — never committed
 │   └── Release.xcconfig     # Can mirror Debug for now
 ```
 
-### .gitignore — Add Before First Commit
+### .gitignore
 
 ```
 Config/Debug.xcconfig
 Config/Release.xcconfig
 ```
-
-This must be done before the first commit. Not after.
 
 ### Debug.xcconfig Contents
 
@@ -896,13 +962,7 @@ STRAVA_CLIENT_ID = your-client-id
 STRAVA_CLIENT_SECRET = your-client-secret
 ```
 
-### Wire xcconfig to Xcode Project
-
-In Xcode: select the project in the navigator → Info tab → expand Configurations → set Debug and Release to point to their respective xcconfig files.
-
-### Expose Keys via Info.plist
-
-Add to `Info.plist`:
+### Info.plist
 
 ```xml
 <key>CLAUDE_API_KEY</key>
@@ -917,10 +977,9 @@ Add to `Info.plist`:
 <string>$(STRAVA_CLIENT_SECRET)</string>
 ```
 
-### Read in Swift via Config Helper
+### Config.swift
 
 ```swift
-// Utils/Config.swift
 enum Config {
     static var claudeAPIKey: String {
         Bundle.main.infoDictionary?["CLAUDE_API_KEY"] as? String ?? ""
@@ -940,45 +999,42 @@ enum Config {
 }
 ```
 
-Use `Config.claudeAPIKey` anywhere in the app. No hardcoding. No global config.
-
 ### Secret Storage by Type
 
-| Secret | Storage | Reason |
-|---|---|---|
-| Claude API key | xcconfig → Info.plist → Config.swift | Developer-owned, build-time constant |
-| Supabase URL + anon key | xcconfig → Info.plist → Config.swift | Developer-owned, build-time constant |
-| Strava client ID + secret | xcconfig → Info.plist → Config.swift | Developer-owned, build-time constant |
-| Strava user access token | iOS Keychain | User credential, must survive app restarts |
-| Strava user refresh token | iOS Keychain | User credential, must survive app restarts |
+| Secret | Storage |
+| --- | --- |
+| Claude API key | xcconfig → Info.plist → Config.swift |
+| Supabase URL + anon key | xcconfig → Info.plist → Config.swift |
+| Strava client ID + secret | xcconfig → Info.plist → Config.swift |
+| Strava user access token | iOS Keychain |
+| Strava user refresh token | iOS Keychain |
 
-The rule: your keys go in xcconfig. The user's tokens go in Keychain.
+---
 
 ## 17. Build Order
 
 Follow this sequence. Each step produces something visible or testable before moving on.
 
-1. **Project setup** — Xcode project named "Enzo", Sweetpad config, 2-tab shell (Arc + Segments), placeholder views. Immediately after project creation: create `Config/Debug.xcconfig`, add to `.gitignore`, wire to Xcode project configurations, add keys to `Info.plist`, create `Utils/Config.swift`. Confirm `Config.claudeAPIKey` resolves before writing any feature code. Confirm Sweetpad can build and run to iOS Simulator.
-2. **Arc UI (static)** — Build all Arc sections with hardcoded data. Goal header, briefing card, fitness chart, segment card, input bar. Make it look right. **The app launches directly into ArcView at this stage — no login screen, no OAuth flow, no onboarding. Do not scaffold any authentication screens yet. Right now we're building the interior.**
-3. **Claude wiring (hardcoded context)** — Wire ArcInputBar to real Claude API with a hardcoded `AthleteContext` JSON. Get streaming working. Tune system prompt.
-4. **Goal setting UI** — GoalSettingView with Claude interpretation flow. Wire to Claude API.
+1. ✅ **Project setup** — Xcode project, Sweetpad config, 2-tab shell, secrets infrastructure
+2. ✅ **Arc UI (static)** — All Arc sections with hardcoded data. App launches directly into ArcView. No auth, no onboarding.
+3. ✅ **Claude wiring (hardcoded context)** — ArcInputBar wired to Claude API. Streaming working. System prompt tuned.
+4. **Goal setting UI** — GoalSettingView with Claude interpretation flow.
 5. **Supabase schema + models** — Create tables, Swift models, SupabaseService read/write.
-6. **Strava OAuth** — Auth flow, token storage, athlete profile fetch. Moved up because the bulk export is not a viable dev fixture — segment data is empty and fit files are binary. Going direct to the real API is simpler than building a mock pipeline.
-7. **Historical sync (Phase 1)** — Paginated activity fetch via `GET /athlete/activities`. Extract HR, duration, distance per activity. Run FitnessCalculator.swift in-memory. Write fitness snapshots to Supabase.
-8. **Context payload** — Build `AthleteContext` from Supabase data. Feed into all Claude calls. Enzo is now talking about your real rides.
-9. **Arc content generation** — Wire briefing, last ride reaction, lookahead suggestion to Claude with real context.
-10. **Historical sync (Phase 2) + Segment scoring** — Background fetch of `GET /activities/{id}?include_all_efforts=true` for each activity. Extract segment efforts. Run SegmentScorer.swift. Write to `segment_scores` table. Wire full Segments tab and Arc PR card.
-11. **Strava webhooks** — Real-time new activity handling.
-12. **Onboarding flow** — Now that OAuth and sync work, build the front door: connect screen, sync animation, goal setting.
-13. **Polish pass** — Animations, empty states, error states, copy review, settings screen.
+6. **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
+7. **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
+8. **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
+9. **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
+10. **Strava webhooks** — Real-time new activity handling.
+11. **Onboarding flow** — Connect screen, sync animation, goal setting as front door.
+12. **Polish pass** — Animations, empty states, error states, copy review, settings.
+
+> **Before starting Step 4:** Complete the model refactor described in Claude.MD Build Notes. Models must reflect the new fitness architecture before any new views are built against them.
 
 ---
 
-## 18. Hardcoded Data for Static UI Development (Steps 2–5)
+## 18. Hardcoded Data for Static UI Development (Steps 1–5)
 
-Before Strava OAuth is wired in Step 6, all views are built against this hardcoded data. This data is derived from Chad's real Strava history so Enzo's responses feel meaningful even in the static phase.
-
-**Do not invent placeholder data. Use the values below exactly.**
+Before Strava OAuth is wired in Step 6, all views are built against this hardcoded data. Derived from Chad's real Strava history. Do not invent placeholder data — use these values exactly.
 
 ### Athlete Context (hardcode in `AthleteContext.swift`)
 
@@ -987,17 +1043,18 @@ static let preview = AthleteContext(
     name: "Chad",
     yearsActive: 11,
     totalActivities: 654,
-    currentFitnessScore: 20,
-    currentFitnessLabel: "Coming back",
-    peakFitnessScore: 100,
+    currentFitnessLabel: "Recovering",
+    currentFitnessValue: 0.18,      // internal only, never shown to user
+    trendDirection: "up",
+    peakFitnessLabel: "Epic",
     peakFitnessMonth: "August 2025",
     daysSinceLastRide: 3,
     goal: GoalContext(
         segmentName: "Hawk Hill",
-        requiredFitnessScore: 72,
+        requiredFitnessLabel: "Strong",
+        requiredFitnessValue: 0.70,
         targetDate: nil,
-        weeksRemaining: nil,
-        gap: 52
+        weeksRemaining: nil
     )
 )
 ```
@@ -1006,73 +1063,86 @@ static let preview = AthleteContext(
 
 ```swift
 static let previewSnapshots: [FitnessSnapshot] = [
-    FitnessSnapshot(month: "2024-10", score: 24, hours: 7.6, rides: 7),
-    FitnessSnapshot(month: "2024-11", score: 12, hours: 4.1, rides: 4),
-    FitnessSnapshot(month: "2024-12", score: 13, hours: 4.3, rides: 4),
-    FitnessSnapshot(month: "2025-01", score: 21, hours: 6.7, rides: 5),
-    FitnessSnapshot(month: "2025-02", score: 14, hours: 4.7, rides: 3),
-    FitnessSnapshot(month: "2025-03", score: 69, hours: 21.2, rides: 10),
-    FitnessSnapshot(month: "2025-04", score: 72, hours: 22.1, rides: 8),
-    FitnessSnapshot(month: "2025-05", score: 36, hours: 11.1, rides: 8),
-    FitnessSnapshot(month: "2025-06", score: 39, hours: 12.1, rides: 9),
-    FitnessSnapshot(month: "2025-07", score: 45, hours: 13.9, rides: 7),
-    FitnessSnapshot(month: "2025-08", score: 100, hours: 30.4, rides: 13), // peak
-    FitnessSnapshot(month: "2025-09", score: 4,  hours: 1.6,  rides: 2),  // sharp drop
-    FitnessSnapshot(month: "2025-10", score: 58, hours: 17.6, rides: 18),
-    FitnessSnapshot(month: "2025-11", score: 37, hours: 11.6, rides: 8),
-    FitnessSnapshot(month: "2025-12", score: 26, hours: 8.1,  rides: 8),
-    FitnessSnapshot(month: "2026-01", score: 26, hours: 8.2,  rides: 6),
-    FitnessSnapshot(month: "2026-02", score: 26, hours: 8.3,  rides: 5),
-    FitnessSnapshot(month: "2026-03", score: 20, hours: 6.4,  rides: 6),  // current
+    FitnessSnapshot(month: "2024-10", label: "Baseline",   value: 0.24, hours: 7.6,  rides: 7,  trend: "flat"),
+    FitnessSnapshot(month: "2024-11", label: "Recovering", value: 0.12, hours: 4.1,  rides: 4,  trend: "down"),
+    FitnessSnapshot(month: "2024-12", label: "Recovering", value: 0.13, hours: 4.3,  rides: 4,  trend: "flat"),
+    FitnessSnapshot(month: "2025-01", label: "Baseline",   value: 0.21, hours: 6.7,  rides: 5,  trend: "up"),
+    FitnessSnapshot(month: "2025-02", label: "Recovering", value: 0.14, hours: 4.7,  rides: 3,  trend: "down"),
+    FitnessSnapshot(month: "2025-03", label: "Building",   value: 0.69, hours: 21.2, rides: 10, trend: "up"),
+    FitnessSnapshot(month: "2025-04", label: "Strong",     value: 0.72, hours: 22.1, rides: 8,  trend: "up"),
+    FitnessSnapshot(month: "2025-05", label: "Baseline",   value: 0.36, hours: 11.1, rides: 8,  trend: "down"),
+    FitnessSnapshot(month: "2025-06", label: "Baseline",   value: 0.39, hours: 12.1, rides: 9,  trend: "flat"),
+    FitnessSnapshot(month: "2025-07", label: "Building",   value: 0.45, hours: 13.9, rides: 7,  trend: "up"),
+    FitnessSnapshot(month: "2025-08", label: "Epic",       value: 1.00, hours: 30.4, rides: 13, trend: "up"),   // peak
+    FitnessSnapshot(month: "2025-09", label: "Recovering", value: 0.04, hours: 1.6,  rides: 2,  trend: "down"), // sharp drop
+    FitnessSnapshot(month: "2025-10", label: "Building",   value: 0.58, hours: 17.6, rides: 18, trend: "up"),
+    FitnessSnapshot(month: "2025-11", label: "Baseline",   value: 0.37, hours: 11.6, rides: 8,  trend: "down"),
+    FitnessSnapshot(month: "2025-12", label: "Baseline",   value: 0.26, hours: 8.1,  rides: 8,  trend: "flat"),
+    FitnessSnapshot(month: "2026-01", label: "Baseline",   value: 0.26, hours: 8.2,  rides: 6,  trend: "flat"),
+    FitnessSnapshot(month: "2026-02", label: "Baseline",   value: 0.26, hours: 8.3,  rides: 5,  trend: "flat"),
+    FitnessSnapshot(month: "2026-03", label: "Recovering", value: 0.18, hours: 6.4,  rides: 6,  trend: "up"),   // current
 ]
 ```
 
 ### Segment PR Opportunities (hardcode in `PROpportunitiesCard` and `SegmentsView`)
 
-Real Bay Area segments with plausible PR data:
-
 ```swift
 static let previewSegments: [SegmentScore] = [
     SegmentScore(
         name: "Hawk Hill",
-        prSeconds: 342,    // 5:42
+        prSeconds: 342,
         prDate: "2025-08-10",
-        fitnessAtPR: 98,
-        currentFitness: 20,
+        fitnessValueAtPR: 0.98,
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        lastEffortSeconds: 401,
         strikeScore: 0.18,
+        strikeLabel: "Not quite ready",
         isGoalSegment: true
     ),
     SegmentScore(
         name: "Camino Alto Cutoff",
-        prSeconds: 198,    // 3:18
+        prSeconds: 198,
         prDate: "2024-04-02",
-        fitnessAtPR: 31,
-        currentFitness: 20,
-        strikeScore: 0.44
+        fitnessValueAtPR: 0.31,
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        lastEffortSeconds: 221,
+        strikeScore: 0.48,
+        strikeLabel: "Worth a shot"
     ),
     SegmentScore(
         name: "Paradise Loop Climb",
-        prSeconds: 534,    // 8:54
+        prSeconds: 534,
         prDate: "2025-04-15",
-        fitnessAtPR: 72,
-        currentFitness: 20,
-        strikeScore: 0.22
+        fitnessValueAtPR: 0.72,
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        lastEffortSeconds: 598,
+        strikeScore: 0.22,
+        strikeLabel: "Not quite ready"
     ),
     SegmentScore(
         name: "Pantoll to Rock Spring",
-        prSeconds: 1147,   // 19:07
+        prSeconds: 1147,
         prDate: "2024-10-05",
-        fitnessAtPR: 24,
-        currentFitness: 20,
-        strikeScore: 0.48
+        fitnessValueAtPR: 0.24,
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        lastEffortSeconds: 1198,
+        strikeScore: 0.46,
+        strikeLabel: "Worth a shot"
     ),
     SegmentScore(
         name: "Bolinas Ridge descent",
-        prSeconds: 445,    // 7:25
+        prSeconds: 445,
         prDate: "2023-09-20",
-        fitnessAtPR: 18,
-        currentFitness: 20,
-        strikeScore: 0.71  // strike now — fitter than PR day
+        fitnessValueAtPR: 0.18,
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        lastEffortSeconds: 461,
+        strikeScore: 0.52,
+        strikeLabel: "Worth a shot"
     ),
 ]
 ```
@@ -1081,7 +1151,10 @@ static let previewSegments: [SegmentScore] = [
 
 ```swift
 static let previewBriefing = """
-You peaked last August — 30 hours in a month, your best in years. September dropped off sharply, which happens. You've been in the 20s since the new year. Hawk Hill will need you closer to where you were in spring 2025, so there's real ground to cover. The good news is your history shows you can move fitness quickly when you're consistent.
+You peaked last August — 30 hours in a month, your best in years. September dropped \
+off sharply, which happens. You've been Recovering since the new year but you're \
+trending up now. Hawk Hill needs you at Strong, so there's real ground to cover — \
+but your history shows you can move fitness fast when you're consistent.
 """
 ```
 
@@ -1089,8 +1162,9 @@ You peaked last August — 30 hours in a month, your best in years. September dr
 
 ```swift
 static let previewLookahead = """
-It's been a few days. Nothing lost yet — your fitness doesn't move that fast. When you're ready, aim for two or three rides this week. Nothing heroic. Just get back on the bike.
+It's been a few days. Nothing lost yet — your fitness doesn't move that fast. \
+When you're ready, aim for two or three rides this week. Nothing heroic. Just get back on the bike.
 """
 ```
 
-> **Note:** These hardcoded values are replaced by real data the moment Strava OAuth is wired in Step 6. They exist only to make the UI feel real during development. The fitness chart will show Chad's actual training narrative — peak in August, sharp September drop, slow rebuild — which makes Enzo's responses feel meaningful even against static data.
+> **Note:** These hardcoded values are replaced by real data the moment Strava OAuth is wired in Step 6. The fitness chart will show Chad's actual training narrative — Epic in August, sharp September drop, slow rebuild — which makes Enzo's responses feel meaningful even against static data.

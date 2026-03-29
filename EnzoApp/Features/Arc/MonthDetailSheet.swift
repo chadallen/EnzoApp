@@ -17,25 +17,16 @@ struct MonthDetailSheet: View {
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundStyle(Color.enzoPrimary)
 
-                Text(AthleteContext.fitnessLabel(for: snapshot.score))
+                Text(snapshot.label)
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.enzoAccent)
             }
 
             HStack(spacing: 0) {
                 statBlock(
-                    value: String(format: "%.0f", snapshot.score),
-                    label: "Fitness score",
-                    valueColor: Color.enzoAccent
-                )
-
-                Divider()
-                    .frame(height: 40)
-                    .background(Color.enzoSecondary.opacity(0.2))
-
-                statBlock(
                     value: String(format: "%.1f h", snapshot.hours),
-                    label: "Hours"
+                    label: "Hours",
+                    valueColor: Color.enzoAccent
                 )
 
                 Divider()
@@ -45,6 +36,15 @@ struct MonthDetailSheet: View {
                 statBlock(
                     value: "\(snapshot.rides)",
                     label: "Rides"
+                )
+
+                Divider()
+                    .frame(height: 40)
+                    .background(Color.enzoSecondary.opacity(0.2))
+
+                statBlock(
+                    value: snapshot.label,
+                    label: "Fitness"
                 )
             }
 
@@ -60,8 +60,10 @@ struct MonthDetailSheet: View {
     private func statBlock(value: String, label: String, valueColor: Color = Color.enzoPrimary) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(.title2, design: .monospaced, weight: .bold))
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(valueColor)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
             Text(label)
                 .font(.system(.caption, design: .rounded))
                 .foregroundStyle(Color.enzoSecondary)
@@ -73,4 +75,5 @@ struct MonthDetailSheet: View {
 #Preview {
     MonthDetailSheet(snapshot: FitnessSnapshot.previewSnapshots[10])
         .background(Color.enzoBg)
+        .preferredColorScheme(.dark)
 }

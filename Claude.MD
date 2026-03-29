@@ -4,7 +4,7 @@
 
 Enzo is a personal iOS cycling companion that helps athletes know when to go for a segment PR. It connects to Strava, computes a relative fitness score from heart rate history, and uses an AI companion (also named Enzo) to narrate the athlete's training trajectory and surface the best moments to target PRs.
 
-The full product spec is at `dev-data/enzo-spec.md`. Hardcoded preview data for Steps 1–5 is in Section 18 of the spec — use those exact values, do not invent placeholder data. Read it when you need detail on any feature, data model, or user journey. This file is the short version — orientation and hard rules.
+The full product spec is at `PRD.md`. Hardcoded preview data for Steps 1–5 is in Section 18 of the spec — use those exact values, do not invent placeholder data. Read it when you need detail on any feature, data model, or user journey. This file is the short version — orientation and hard rules.
 
 ---
 
@@ -136,6 +136,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 1: Project setup, secrets infrastructure, 2-tab shell
 - [x] Step 2: Arc UI (static, hardcoded data)
 - [x] Step 3: Claude API wired (hardcoded context)
+- [x] Model refactor: FitnessSnapshot/SegmentScore/AthleteContext/GoalContext updated to label+value model; all preview data matches Section 18
 - [ ] Step 4: Goal setting UI
 - [ ] Step 5: Supabase schema + models
 - [ ] Step 6: Strava OAuth
@@ -176,6 +177,8 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 ## Build Notes
 
 Key decisions and gotchas discovered during development. Check this before making changes in these areas.
+**Fitness model (completed refactor)**
+The fitness model uses continuous `value: Double` (0.0–1.0, internal only) and user-facing `label: String` ("Epic", "Strong", "Building", "Baseline", "Recovering"). Numeric 0–100 scores are gone. `FitnessSnapshot` has `label`, `value`, `trend`. `SegmentScore` has `fitnessValueAtPR`, `currentFitnessValue`, `trendDirection`, `lastEffortSeconds`, `strikeLabel` (stored, not computed). `GoalContext` has `requiredFitnessLabel` and `requiredFitnessValue`. `AthleteContext.fitnessLabel(for:)` takes a 0.0–1.0 Double. Strike thresholds: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready".
 
 **Xcode project auto-sync**
 The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 feature). Any Swift file created in the `EnzoApp/` directory tree is automatically included in the build — no need to manually add files to the `.xcodeproj`. Just create the file in the right folder.
@@ -200,6 +203,9 @@ Uses `chartOverlay` + `proxy.plotFrame` + `GeometryReader` to convert tap locati
 
 **ClaudeService streaming**
 `ClaudeService` is a Swift `actor`. `AppState.sendMessage(_:)` calls it with `await`, iterates the returned `AsyncStream<String>`, and updates `streamingText` token by token. `ArcView` renders an in-progress Enzo bubble from `streamingText` while `isStreaming` is true; on completion the final text is appended to `arcMessages` as a permanent `ArcMessage`. The athlete context JSON (from `AthleteContext.contextPayload`) is prepended to every user message.
+
+**Info.plist and secret key loading**
+The project uses an explicit `Info.plist` at the repo root (`SRCROOT/Info.plist`) with `$(VARIABLE)` substitution, not Xcode's auto-generated one. `GENERATE_INFOPLIST_FILE = NO` and `INFOPLIST_FILE = Info.plist` in project build settings. `INFOPLIST_KEY_*` in xcconfig/pbxproj only works for Apple-recognized keys — custom keys silently disappear unless they're in an explicit Info.plist. The Info.plist itself is safe to commit (contains only variable references). xcconfig files with actual values remain gitignored.
 
 **GitHub repo**
 https://github.com/chadallen/EnzoApp — private. Push all work here. xcconfig files are gitignored.

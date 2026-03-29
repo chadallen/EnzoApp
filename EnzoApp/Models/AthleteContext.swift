@@ -2,32 +2,33 @@ import Foundation
 
 struct GoalContext {
     let segmentName: String
-    let requiredFitnessScore: Double
+    let requiredFitnessLabel: String   // "Strong", "Epic", etc.
+    let requiredFitnessValue: Double   // 0.0–1.0 internal
     let targetDate: Date?
     let weeksRemaining: Int?
-    let gap: Double  // requiredFitnessScore - currentFitnessScore
 }
 
 struct AthleteContext {
     let name: String
     let yearsActive: Int
     let totalActivities: Int
-    let currentFitnessScore: Double
     let currentFitnessLabel: String
-    let peakFitnessScore: Double
+    let currentFitnessValue: Double    // 0.0–1.0 internal, never shown to user
+    let trendDirection: String         // "up", "flat", "down"
+    let peakFitnessLabel: String
     let peakFitnessMonth: String
     let daysSinceLastRide: Int
     let goal: GoalContext
 
     // MARK: - Fitness label utility
 
-    static func fitnessLabel(for score: Double) -> String {
-        switch score {
-        case 80...: return "Peak shape"
-        case 60..<80: return "Strong base"
-        case 40..<60: return "Building"
-        case 20..<40: return "Coming back"
-        default: return "Early days"
+    static func fitnessLabel(for value: Double) -> String {
+        switch value {
+        case 0.85...: return "Epic"
+        case 0.65..<0.85: return "Strong"
+        case 0.45..<0.65: return "Building"
+        case 0.25..<0.45: return "Baseline"
+        default: return "Recovering"
         }
     }
 
@@ -37,26 +38,31 @@ struct AthleteContext {
         name: "Chad",
         yearsActive: 11,
         totalActivities: 654,
-        currentFitnessScore: 20,
-        currentFitnessLabel: "Coming back",
-        peakFitnessScore: 100,
+        currentFitnessLabel: "Recovering",
+        currentFitnessValue: 0.18,
+        trendDirection: "up",
+        peakFitnessLabel: "Epic",
         peakFitnessMonth: "August 2025",
         daysSinceLastRide: 3,
         goal: GoalContext(
             segmentName: "Hawk Hill",
-            requiredFitnessScore: 72,
+            requiredFitnessLabel: "Strong",
+            requiredFitnessValue: 0.70,
             targetDate: nil,
-            weeksRemaining: nil,
-            gap: 52
+            weeksRemaining: nil
         )
     )
 
     static let previewBriefing = """
-You peaked last August — 30 hours in a month, your best in years. September dropped off sharply, which happens. You've been in the 20s since the new year. Hawk Hill will need you closer to where you were in spring 2025, so there's real ground to cover. The good news is your history shows you can move fitness quickly when you're consistent.
+You peaked last August — 30 hours in a month, your best in years. September dropped \
+off sharply, which happens. You've been Recovering since the new year but you're \
+trending up now. Hawk Hill needs you at Strong, so there's real ground to cover — \
+but your history shows you can move fitness fast when you're consistent.
 """
 
     static let previewLookahead = """
-It's been a few days. Nothing lost yet — your fitness doesn't move that fast. When you're ready, aim for two or three rides this week. Nothing heroic. Just get back on the bike.
+It's been a few days. Nothing lost yet — your fitness doesn't move that fast. \
+When you're ready, aim for two or three rides this week. Nothing heroic. Just get back on the bike.
 """
 
     static let previewChartContext = "Your peak was last August — your best in years. September dropped off sharply. You've been building back since October."
@@ -69,9 +75,8 @@ It's been a few days. Nothing lost yet — your fitness doesn't move that fast. 
         var goalDict: [String: Any] = [
             "type": "segment_pr",
             "segment_name": goal.segmentName,
-            "required_fitness_score": goal.requiredFitnessScore,
-            "current_fitness_score": currentFitnessScore,
-            "gap": goal.gap,
+            "required_fitness_label": goal.requiredFitnessLabel,
+            "current_fitness_label": currentFitnessLabel,
             "has_date": goal.targetDate != nil
         ]
         if let weeks = goal.weeksRemaining {
@@ -82,19 +87,18 @@ It's been a few days. Nothing lost yet — your fitness doesn't move that fast. 
             [
                 "month": s.month,
                 "hours": s.hours,
-                "fitness_score": s.score,
-                "fitness_label": AthleteContext.fitnessLabel(for: s.score),
+                "fitness_label": s.label,
+                "trend_direction": s.trend,
                 "activity_count": s.rides
             ]
         }
 
-        let peakSnapshot = snapshots.max(by: { $0.score < $1.score })
+        let peakSnapshot = snapshots.max(by: { $0.value < $1.value })
         var peakDict: [String: Any] = [:]
         if let peak = peakSnapshot {
             peakDict = [
                 "month": peak.month,
-                "score": peak.score,
-                "label": AthleteContext.fitnessLabel(for: peak.score)
+                "label": peak.label
             ]
         }
 
@@ -103,10 +107,11 @@ It's been a few days. Nothing lost yet — your fitness doesn't move that fast. 
                 "name": seg.name,
                 "pr_seconds": seg.prSeconds,
                 "pr_date": seg.prDate,
-                "fitness_at_pr": seg.fitnessAtPR,
-                "current_fitness": seg.currentFitness,
-                "delta": seg.fitnessDelta,
+                "fitness_at_pr": AthleteContext.fitnessLabel(for: seg.fitnessValueAtPR),
+                "current_fitness": AthleteContext.fitnessLabel(for: seg.currentFitnessValue),
+                "trend_direction": seg.trendDirection,
                 "strike_score": seg.strikeScore,
+                "strike_label": seg.strikeLabel,
                 "is_goal_segment": seg.isGoalSegment
             ]
         }
@@ -115,9 +120,8 @@ It's been a few days. Nothing lost yet — your fitness doesn't move that fast. 
             "athlete": [
                 "name": name,
                 "years_active": yearsActive,
-                "total_activities": totalActivities,
-                "current_fitness_score": currentFitnessScore,
-                "current_fitness_label": currentFitnessLabel
+                "current_fitness_label": currentFitnessLabel,
+                "trend_direction": trendDirection
             ] as [String: Any],
             "goal": goalDict,
             "fitness_history": fitnessHistory,

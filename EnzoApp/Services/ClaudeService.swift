@@ -3,7 +3,7 @@ import Foundation
 actor ClaudeService {
 
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
-    private let model = "claude-sonnet-4-20250514"
+    private let model = "claude-sonnet-4-6"
     private let maxTokens = 1024
 
     private let systemPrompt = """
@@ -27,10 +27,11 @@ actor ClaudeService {
         - Never make them feel bad for gaps, missed rides, or changed goals.
 
         Rules:
-        - Always use their actual numbers. Never give advice that could apply to anyone.
-        - Fitness is HR-based. Don't reference power, FTP, or watts unless the athlete brings it up.
+        - Always use their actual numbers and labels. Never give advice that could apply to anyone.
+        - Fitness is described using these labels only: Epic, Strong, Building, Baseline, Recovering.
+        - Segment readiness uses: No brainer, Worth a shot, Not quite ready.
         - Frame everything relative to their personal history and their goal.
-        - Use fitness labels (Peak shape, Strong base, Building, Coming back) naturally in conversation.
+        - Don't reference power, FTP, or watts unless the athlete brings it up.
         - A suggestion is not a plan. Make that clear when offering workouts.
 
         Format:
@@ -42,8 +43,7 @@ actor ClaudeService {
         """
 
     // Returns an AsyncStream of text tokens as they arrive from the API.
-    // context is a JSON string built from AthleteContext.contextPayload.
-    // The user message is prefixed with the context so Claude knows the athlete's data.
+    // Yields a single error sentinel string on failure so the caller can surface it.
     func stream(userMessage: String, context: String) -> AsyncStream<String> {
         AsyncStream { continuation in
             Task {
@@ -52,6 +52,7 @@ actor ClaudeService {
 
                     var request = URLRequest(url: apiURL)
                     request.httpMethod = "POST"
+                    request.timeoutInterval = 30
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue(Config.claudeAPIKey, forHTTPHeaderField: "x-api-key")
                     request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
@@ -71,6 +72,7 @@ actor ClaudeService {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                        continuation.yield("Couldn't reach Enzo — tap to retry.")
                         continuation.finish()
                         return
                     }
@@ -94,6 +96,7 @@ actor ClaudeService {
 
                     continuation.finish()
                 } catch {
+                    continuation.yield("Couldn't reach Enzo — tap to retry.")
                     continuation.finish()
                 }
             }
