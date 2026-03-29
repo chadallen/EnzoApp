@@ -60,35 +60,63 @@ Follow Section 17 of the spec exactly. Do not skip steps. Key checkpoints:
 
 ## Project Structure
 
+Files that exist today. Services, Utils helpers, and Onboarding are added in later steps.
+
 ```
-EnzoApp/                        ← repo root (open VS Code here)
-├── EnzoApp.xcodeproj
-├── EnzoApp/                    ← Xcode source files
+EnzoApp/                              ← repo root / VS Code workspace
+├── EnzoApp.xcodeproj/                ← Xcode project (PBXFileSystemSynchronizedRootGroup —
+│                                         new files in EnzoApp/ are auto-included, no manual add)
+├── EnzoApp/                          ← Xcode source root
+│   ├── EnzoAppApp.swift              ← @main entry point + MainTabView (2-tab shell)
 │   ├── App/
-│   │   ├── EnzoAppApp.swift
-│   │   └── AppState.swift
+│   │   └── AppState.swift            ← @Observable @MainActor global state; inject via .environment
 │   ├── Features/
-│   │   ├── Onboarding/         # Step 11 only — built last
-│   │   ├── Arc/                # Main experience — built first
-│   │   └── Segments/           # Full segment list tab
-│   ├── Services/
-│   │   ├── StravaService.swift
-│   │   ├── ClaudeService.swift
-│   │   ├── SupabaseService.swift
-│   │   └── SyncService.swift
+│   │   ├── Arc/                      ← main experience
+│   │   │   ├── ArcView.swift         ← composes all sections; sticky header + scrollable content
+│   │   │   ├── GoalHeaderView.swift  ← goal name, fitness progress bar, "Change goal" button
+│   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card
+│   │   │   ├── LookaheadSuggestionView.swift
+│   │   │   ├── FitnessChartView.swift ← Swift Charts; LineMark+AreaMark, two RuleMarks, tap→sheet
+│   │   │   ├── MonthDetailSheet.swift ← .presentationDetents bottom sheet on chart tap
+│   │   │   ├── PROpportunitiesCard.swift ← goal segment first, then top 2 by strike score
+│   │   │   ├── ArcInputBar.swift     ← pill input + animated send button (non-functional until Step 3)
+│   │   │   ├── PromptChipsView.swift ← horizontal scroll chips; defaultChips static property
+│   │   │   └── ArcMessageView.swift  ← Enzo/user message bubbles (Enzo has left accent border)
+│   │   ├── Segments/
+│   │   │   ├── SegmentsView.swift    ← full list, goal segment first, sort menu
+│   │   │   └── SegmentDetailView.swift ← PR card, fitness comparison, strike assessment
+│   │   └── Onboarding/               ← Step 11 only — not built yet
 │   ├── Models/
+│   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
+│   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
+│   │   ├── FitnessSnapshot.swift     ← Identifiable by month string; .previewSnapshots (18 months)
+│   │   ├── SegmentScore.swift        ← Identifiable+Hashable by name; .previewSegments (5 segments)
+│   │   └── ArcMessage.swift          ← role: .enzo / .user
+│   ├── Services/                     ← not built yet
+│   │   ├── ClaudeService.swift       ← Step 3
+│   │   ├── StravaService.swift       ← Step 6
+│   │   ├── SupabaseService.swift     ← Step 5
+│   │   └── SyncService.swift         ← Step 7
 │   ├── Utils/
-│   │   ├── Config.swift        # xcconfig key accessors
-│   │   ├── KeychainHelper.swift
-│   │   ├── FitnessCalculator.swift
-│   │   └── SegmentScorer.swift
+│   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
+│   │   ├── KeychainHelper.swift      ← not built yet (Step 6)
+│   │   ├── FitnessCalculator.swift   ← not built yet (Step 7)
+│   │   ├── SegmentScorer.swift       ← not built yet (Step 9)
+│   │   └── Extensions/
+│   │       ├── Color+Hex.swift       ← Color(hex: "RRGGBB") initializer
+│   │       └── Color+Enzo.swift      ← semantic constants: .enzoBg .enzoCard .enzoAccent
+│   │                                     .enzoGoal .enzoAmber .enzoPrimary .enzoSecondary
 │   └── Config/
-│       ├── Debug.xcconfig      # gitignored — never commit
-│       └── Release.xcconfig    # gitignored — never commit
+│       ├── Debug.xcconfig            ← gitignored — never commit
+│       └── Release.xcconfig          ← gitignored — never commit
+├── .gitignore
 ├── CLAUDE.md
 ├── skills/
+│   ├── swift-design.MD               ← read before building any view
+│   ├── enzo-voice.MD                 ← read before writing any UI string or Enzo copy
+│   └── swift-patterns.MD             ← read before architecture decisions or new files
 └── dev-data/
-    └── enzo-spec.md            # Full product spec — read this for detail
+    └── enzo-spec.md                  ← full product spec — source of truth
 ```
 
 ---
@@ -118,9 +146,9 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 
 | When you're... | Read... |
 |---|---|
-| Building any view, component, or screen | `skills/swiftui-design.md` |
-| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.md` |
-| Making architecture decisions or creating new files | `skills/swift-patterns.md` |
+| Building any view, component, or screen | `skills/swift-design.MD` |
+| Writing any UI string, copy, or Enzo response | `skills/enzo-voice.MD` |
+| Making architecture decisions or creating new files | `skills/swift-patterns.MD` |
 
 ---
 
@@ -133,3 +161,33 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 **If something in the spec conflicts with what's already built:** Flag it. Don't silently pick one over the other.
 
 **When a step is complete:** Mark it done in the build status above and commit.
+
+---
+
+## Build Notes
+
+Key decisions and gotchas discovered during development. Check this before making changes in these areas.
+
+**Xcode project auto-sync**
+The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 feature). Any Swift file created in the `EnzoApp/` directory tree is automatically included in the build — no need to manually add files to the `.xcodeproj`. Just create the file in the right folder.
+
+**Color constants**
+Never use raw hex strings in view files. All colors are defined as `Color.enzoXxx` in `Utils/Extensions/Color+Enzo.swift`. The `Color(hex:)` initializer in `Color+Hex.swift` is an internal primitive — views should only ever call the named constants.
+
+**Preview data location**
+All hardcoded preview data (Section 18 of spec) lives in the model files as static properties:
+- `AthleteContext.preview` — athlete context struct
+- `AthleteContext.previewBriefing` — hardcoded Enzo briefing text
+- `AthleteContext.previewLookahead` — hardcoded lookahead suggestion
+- `AthleteContext.previewChartContext` — hardcoded chart context sentence
+- `FitnessSnapshot.previewSnapshots` — 18 months of fitness history
+- `SegmentScore.previewSegments` — 5 Bay Area segments
+
+**AppState injection**
+`AppState` is created in `EnzoAppApp` with `@State private var appState = AppState()` and injected via `.environment(appState)` on `MainTabView`. Views read it with `@Environment(AppState.self) private var appState`. Do not pass AppState as a regular parameter.
+
+**FitnessChartView tap detection**
+Uses `chartOverlay` + `proxy.plotFrame` + `GeometryReader` to convert tap location to a `Date` x-axis value, then finds the nearest `FitnessSnapshot`. Sheet is triggered via `@State var showingDetail: Bool` + `sheet(isPresented:)`.
+
+**GitHub repo**
+https://github.com/chadallen/EnzoApp — private. Push all work here. xcconfig files are gitignored.
