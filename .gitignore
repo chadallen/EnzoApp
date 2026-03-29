@@ -1,0 +1,8 @@
+# Secrets — never commit
+EnzoApp/Config/Debug.xcconfig
+EnzoApp/Config/Release.xcconfig
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+.DS_Store
