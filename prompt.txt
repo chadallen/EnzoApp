@@ -1,0 +1,60 @@
+# Enzo — Claude Code Handoff Prompt
+
+Copy everything below this line and paste it as your opening message in Claude Code.
+
+---
+
+I'm building an iOS app called Enzo — a cycling training companion that helps athletes target segment PRs using their Strava history. I have a detailed spec that covers the full product vision, tech stack, data architecture, user journeys, and UI requirements. It is pasted in full at the bottom of this message.
+
+**Before writing any code, read the entire spec including Section 18.** Then confirm you've read it by summarizing the build order and the first step you're about to take.
+
+---
+
+### About me and this project
+
+- I'm learning iOS development. I use VS Code with the Sweetpad extension to build and run via Xcode. Explain your decisions as you go — I want to understand what you're building, not just have it built.
+- The Xcode project already exists. It's called **EnzoApp** and lives at `/chadallen/EnzoApp/`. The project folder structure is: outer `EnzoApp/` folder containing `EnzoApp.xcodeproj` and inner `EnzoApp/` source folder. Open VS Code at the outer folder.
+- This is a SwiftUI app targeting iOS 17+. Use modern Swift patterns throughout: `@Observable`, `async/await`, Swift Charts. No UIKit. No third-party dependencies unless the spec explicitly calls for one.
+- The design matters. Section 10 of the spec has explicit UI requirements — color palette, typography, motion. Do not produce generic SwiftUI template aesthetics.
+
+---
+
+### Hard rules — follow these without exception
+
+1. **Follow the build order in Section 17 exactly.** Do not skip steps. Steps 1–4 use hardcoded data from Section 18 of the spec — use those exact values, do not invent your own placeholder data. Strava OAuth comes in at Step 6, not at the end.
+
+2. **Stop after each step and wait for my confirmation** before proceeding to the next. I need to verify each step is working on my machine before we move on.
+
+3. **Never use the word "Claude" in any user-facing code, strings, copy, or comments.** The AI companion's name is Enzo throughout the app. Claude is an implementation detail the user never sees.
+
+4. **Never hardcode API keys or secrets.** All secrets are managed via xcconfig files as described in Section 16 of the spec. The first thing you do in Step 1 is set up the secrets infrastructure — before any feature code touches an API.
+
+5. **Secrets setup checklist for Step 1** — complete all of these before moving on:
+   - Create `Config/Debug.xcconfig` inside the inner `EnzoApp/` source folder with placeholder values for all keys
+   - Add `Config/Debug.xcconfig` and `Config/Release.xcconfig` to `.gitignore`
+   - Wire xcconfig files to Xcode project configurations (Debug + Release)
+   - Add all keys to `Info.plist` using `$(KEY_NAME)` syntax
+   - Create `Utils/Config.swift` with static accessors for all keys
+   - Confirm `Config.claudeAPIKey` compiles and resolves without error
+
+6. **For any hardcoded preview data**, use the exact values in Section 18 of the spec. This data is derived from the developer's real Strava history — it tells a real story and should not be replaced with generic placeholders.
+
+---
+
+### Step 1 — what to build now
+
+The Xcode project exists and builds successfully. Do not recreate it. Starting from the existing project:
+
+- Set up secrets infrastructure (full checklist above)
+- Rename `ContentView.swift` to `ArcView.swift` with a placeholder that matches the dark background color `#0A0A0F`
+- Create `SegmentsView.swift` with the same placeholder background
+- Replace the default tab bar with a 2-tab shell: Arc tab (SF Symbol: `waveform.path.ecg`) and Segments tab (SF Symbol: `flag.checkered`)
+- Confirm Sweetpad can build and run to iOS Simulator successfully
+
+Do not proceed to Step 2 until I confirm Step 1 is working on my machine.
+
+---
+
+### Full spec
+
+[PASTE SPEC HERE]
