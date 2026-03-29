@@ -181,6 +181,18 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 
 **Committing:** Commit after each discrete change with a descriptive message. Do not wait until the end of a step or session to commit.
 
+**At the end of every session:** Write a prompt for the 
+next Claude Code session. Include:
+- What was completed this session (with commit refs if possible)
+- What step comes next and exactly where to start
+- Any bugs observed but not fixed
+- Any decisions made that aren't yet reflected in CLAUDE.md or PRD.MD
+- The first command or file to open
+- Write it as something that can be pasted directly into a 
+new Claude Code session without modification.
+` Save this the prompt to Handoff.MD
+- Commit and push
+
 ---
 
 ## Build Notes
