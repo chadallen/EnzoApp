@@ -63,6 +63,12 @@ Follow Section 17 of the spec exactly. Do not skip steps. Key checkpoints:
 - Steps 7–9: Real data sync, fitness computation, segment scoring.
 - Step 11: Onboarding flow — built last, after everything behind it works.
 
+### Commits
+Commit after every discrete unit of work — not at the end of a session.
+A commit should represent one thing: a new file, a bug fix, a refactored 
+component. If a commit message needs "and" it should probably be two commits.
+Never bundle unrelated changes. Always commit before moving to the next step.
+
 ---
 
 ## Project Structure
@@ -70,7 +76,8 @@ Follow Section 17 of the spec exactly. Do not skip steps. Key checkpoints:
 Files that exist today. Services, Utils helpers, and Onboarding are added in later steps.
 
 ```
-EnzoApp/                              ← repo root / VS Code workspace
+EnzoApp/  
+└── PRD.md                  ← full product spec — source of truth                            ← repo root / VS Code workspace
 ├── EnzoApp.xcodeproj/                ← Xcode project (PBXFileSystemSynchronizedRootGroup —
 │                                         new files in EnzoApp/ are auto-included, no manual add)
 ├── EnzoApp/                          ← Xcode source root
@@ -124,7 +131,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── swift-patterns.md             ← read before architecture decisions or new files
 │   └── testing.md                    ← read before writing any logic or service code
 └── dev-data/
-    └── enzo-spec.md                  ← full product spec — source of truth
+    
 ```
 
 ---
@@ -137,7 +144,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 2: Arc UI (static, hardcoded data)
 - [x] Step 3: Claude API wired (hardcoded context)
 - [x] Model refactor: FitnessSnapshot/SegmentScore/AthleteContext/GoalContext updated to label+value model; all preview data matches Section 18
-- [ ] Step 4: Goal setting UI
+- [x] Step 4: Goal setting UI
 - [ ] Step 5: Supabase schema + models
 - [ ] Step 6: Strava OAuth
 - [ ] Step 7: Historical sync Phase 1 (activities + fitness computation)
@@ -171,6 +178,8 @@ Reusable guidelines for specific types of work. Read the relevant skill before s
 **If something in the spec conflicts with what's already built:** Flag it. Don't silently pick one over the other.
 
 **When a step is complete:** Mark it done in the build status above and commit.
+
+**Committing:** Commit after each discrete change with a descriptive message. Do not wait until the end of a step or session to commit.
 
 ---
 
