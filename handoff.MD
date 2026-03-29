@@ -43,7 +43,7 @@ Step 5 involves:
 
 ---
 
-## Decisions made this session not yet in CLAUDE.md or PRD.MD
+## Decisions made this session (all now recorded in CLAUDE.md Build Notes)
 
 - **No test target existed** before this session. One was added manually by editing `project.pbxproj` using fake-but-consistent UUIDs with prefix `ENZO2000...`. The test target uses `PBXFileSystemSynchronizedRootGroup` pointing at `/EnzoAppTests/` — any `.swift` file placed there is auto-included in the test target.
 - **`AppState.goalReactionStream` is `async`** because `ClaudeService` is an `actor` and the call from `@MainActor` requires `await`. Future methods that call actor-isolated services will need the same treatment.
