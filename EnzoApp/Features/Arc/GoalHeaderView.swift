@@ -2,6 +2,8 @@ import SwiftUI
 
 struct GoalHeaderView: View {
     let context: AthleteContext
+    @Environment(AppState.self) private var appState
+    @State private var showingGoalSetting = false
 
     private var goal: GoalContext { context.goal }
 
@@ -39,13 +41,19 @@ struct GoalHeaderView: View {
                 .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(Color.enzoSecondary)
 
-            Button("Change goal") { }
-                .font(.system(.caption, design: .rounded))
-                .foregroundStyle(Color.enzoSecondary)
-                .padding(.top, 4)
+            Button("Change goal") {
+                showingGoalSetting = true
+            }
+            .font(.system(.caption, design: .rounded))
+            .foregroundStyle(Color.enzoSecondary)
+            .padding(.top, 4)
         }
         .padding()
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+        .sheet(isPresented: $showingGoalSetting) {
+            GoalSettingView()
+                .environment(appState)
+        }
     }
 }
 
@@ -53,5 +61,6 @@ struct GoalHeaderView: View {
     GoalHeaderView(context: .preview)
         .padding()
         .background(Color.enzoBg)
+        .environment(AppState())
         .preferredColorScheme(.dark)
 }
