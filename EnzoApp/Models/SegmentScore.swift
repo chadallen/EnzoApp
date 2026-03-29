@@ -24,6 +24,14 @@ struct SegmentScore: Identifiable, Hashable {
         currentFitnessValue - fitnessValueAtPR
     }
 
+    // MARK: - Search filtering
+
+    /// Case-insensitive substring filter on segment name. Empty query returns all.
+    static func filter(_ segments: [SegmentScore], by query: String) -> [SegmentScore] {
+        guard !query.isEmpty else { return segments }
+        return segments.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
     // MARK: - Hardcoded preview data (Section 18)
 
     static let previewSegments: [SegmentScore] = [
