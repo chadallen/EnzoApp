@@ -22,15 +22,19 @@ class AppState {
     // Sync state
     var isSyncing: Bool = false
 
-    private let claudeService = ClaudeService()
-    private let stravaService = StravaService()
-    private let supabaseService = SupabaseService()
-    private lazy var syncService = SyncService(
-        stravaService: stravaService,
-        supabaseService: supabaseService
-    )
+    private let claudeService: ClaudeService
+    private let stravaService: StravaService
+    private let supabaseService: SupabaseService
+    private let syncService: SyncService
 
     init() {
+        let strava   = StravaService()
+        let supabase = SupabaseService()
+        claudeService  = ClaudeService()
+        stravaService  = strava
+        supabaseService = supabase
+        syncService    = SyncService(stravaService: strava, supabaseService: supabase)
+
         // Restore auth state from Keychain on launch
         if let idString = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
            let id = Int64(idString) {
