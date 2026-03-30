@@ -94,13 +94,16 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── EnzoAppApp.swift              ← @main entry point + MainTabView (2-tab shell)
 │   ├── App/
 │   │   └── AppState.swift            ← @Observable @MainActor global state; inject via .environment
+│   │                                     Step 8: loadContext(), generateBriefing(), generateLookahead(),
+│   │                                     briefingText, lookaheadText, isGeneratingBriefing/Lookahead
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
-│   │   │   ├── ArcView.swift         ← composes all sections; sticky header + scrollable content
+│   │   │   ├── ArcView.swift         ← composes all sections; .task triggers loadContext+generate on launch
+│   │   │   │                             person.circle button = debug sync trigger (replace in Step 11)
 │   │   │   ├── GoalHeaderView.swift  ← goal name, fitness label, trend, "Change goal" button
 │   │   │   ├── GoalSettingView.swift ← Step 4 ✓ — sheet: search, Enzo reaction, date, confirm
-│   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card
-│   │   │   ├── LookaheadSuggestionView.swift
+│   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card; isLoading spinner
+│   │   │   ├── LookaheadSuggestionView.swift ← isLoading + empty state placeholder
 │   │   │   ├── FitnessChartView.swift ← Swift Charts; LineMark+AreaMark, two RuleMarks, tap→sheet
 │   │   │   ├── MonthDetailSheet.swift ← .presentationDetents bottom sheet on chart tap
 │   │   │   ├── PROpportunitiesCard.swift ← goal segment first, then top 2 by strike score
@@ -114,6 +117,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── Models/
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
+│   │   │                                 Step 8: build(name:snapshots:goalRow:lastActivityDate:) factory
 │   │   ├── FitnessSnapshot.swift     ← Identifiable by month string; .previewSnapshots (18 months)
 │   │   ├── FitnessSnapshot+Supabase.swift ← Step 5 ✓ — FitnessSnapshotRow Codable DTO; toSnapshot()
 │   │   ├── SegmentScore.swift        ← Identifiable+Hashable by name; .previewSegments (5 segments)
@@ -126,17 +130,18 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── StravaService.swift       ← Step 6 ✓ — Swift actor; OAuth URL builder, ASWebAuthenticationSession,
 │   │   │                                 token exchange + storage, refreshTokenIfNeeded(), fetchAthlete()
 │   │   ├── SupabaseService.swift     ← Step 5 ✓ — Swift actor; fetch/upsert for fitness_snapshots,
-│   │   │                                 segment_scores, goals, createUser(stravaAthleteId:displayName:),
-│   │   │                                 fetchUserId(stravaAthleteId:)
+│   │   │                                 segment_scores, goals, createUser, fetchUserId
+│   │   │                                 Step 8: fetchUserProfile(userId:), updateLastActivityDate(userId:date:)
 │   │   └── SyncService.swift         ← Step 7 ✓ — Swift actor; syncPhase1(userId:), isQualifying(_:),
 │   │                                     computeSnapshots(from:userId:) [static, pure, testable]
+│   │                                     Step 8: writes last_activity_date to users after sync
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
 │   │   ├── KeychainHelper.swift      ← Step 6 ✓ — save/load/delete kSecClassGenericPassword; Strava key constants
 │   │   │                                 + supabaseUserId constant (Step 7)
 │   │   ├── FitnessCalculator.swift   ← Step 7 ✓ — pure static enum; efficiency, fitnessValue,
-│   │   │                                 trendDirection, fitnessLabel, cyclingTypes
-│   │   ├── SegmentScorer.swift       ← Step 9
+│   │   │                                 trendDirection (trendThreshold=0.008), fitnessLabel, cyclingTypes
+│   │   ├── SegmentScorer.swift       ← Step 9 — not yet built
 │   │   └── Extensions/
 │   │       ├── Color+Hex.swift       ← Color(hex: "RRGGBB") initializer
 │   │       └── Color+Enzo.swift      ← semantic constants: .enzoBg .enzoCard .enzoAccent
@@ -151,7 +156,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── KeychainHelperTests.swift     ← Step 6 ✓ — save/load/delete/overwrite round-trip (7 passing)
 │   ├── StravaServiceTests.swift      ← Step 6 ✓ — URL construction + token/athlete JSON decoding (8 passing)
 │   ├── FitnessCalculatorTests.swift  ← Step 7 ✓ — efficiency, fitnessValue, trend, label (18 passing)
-│   └── SyncServiceTests.swift        ← Step 7 ✓ — qualifying filter, computeSnapshots pipeline (23 passing)
+│   ├── SyncServiceTests.swift        ← Step 7 ✓ — qualifying filter, computeSnapshots pipeline (23 passing)
+│   └── AthleteContextTests.swift     ← Step 8 ✓ — build factory, contextPayload, fitnessLabel (13 passing)
 ├── .gitignore
 ├── CLAUDE.md
 ├── PRD.MD                            ← full product spec — source of truth
@@ -297,7 +303,7 @@ In Xcode xcconfig files, `//` is treated as a comment even mid-value. `SUPABASE_
 SUPABASE_HOST = hizswbzxwfxddocryvci.supabase.co
 SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 ```
-Apply this pattern to ANY URL stored in xcconfig. `$()` expands to empty string at build time, so the final value is `https://hizswbzxwfxddocryvci.supabase.co`. This is already applied in `Debug.xcconfig` — apply the same to `Release.xcconfig` before Step 8.
+Apply this pattern to ANY URL stored in xcconfig. `$()` expands to empty string at build time, so the final value is `https://hizswbzxwfxddocryvci.supabase.co`. Already applied in `Debug.xcconfig` and `Release.xcconfig`.
 
 **Step 7: lazy var incompatible with @Observable**
 `lazy var` in a `@MainActor @Observable` class causes a compiler error because `@Observable` generates init accessors that can't reference lazy properties. Pattern: initialize services that depend on other services inside `init()` by creating local `let` bindings first, then assigning to stored `let` properties. `SyncService` follows this pattern in `AppState.init()`.
@@ -312,7 +318,7 @@ Step 6 discarded the UUID returned by `supabaseService.createUser()`. Fixed in S
 When running via Sweetpad (not Xcode), `print()` goes to stdout and does NOT appear in the iOS unified log stream. Use `NSLog()` for any logging that needs to be visible via `log stream --predicate 'process == "EnzoApp"'`. All sync logging in `AppState.syncPhase1()` uses `NSLog` for this reason.
 
 **Step 7 smoke test results**
-First sync wrote 97 rows to `fitness_snapshots`. All rows have `trend_direction = "flat"` — the ±0.05 threshold in `FitnessCalculator.trendDirection` may need tuning against real ride data. Step 8 task: look at the actual efficiency values across months before wiring the live UI, and adjust the threshold if labels don't match intuition.
+First sync wrote 97 rows to `fitness_snapshots`. All rows had `trend_direction = "flat"` due to the ±0.05 threshold being too large for the actual efficiency range (~0.10–0.28). Fixed in Step 8: threshold lowered to ±0.008. Re-run sync to rewrite rows with corrected trends.
 
 **Step 8: Supabase migration required before re-syncing**
 Before running syncPhase1 again (to get corrected trend directions), run this migration in Supabase:

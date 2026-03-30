@@ -51,7 +51,7 @@ struct ArcView: View {
             // To wire the Connect button back for testing, see handoff.MD Step 6 section —
             // use WindowContextProvider + AppState.authenticate(contextProvider:).
             Button {
-                // Step 11: settings sheet
+                Task { await appState.syncPhase1() }
             } label: {
                 Image(systemName: "person.circle")
                     .font(.system(size: 22))
