@@ -22,7 +22,7 @@ struct GoalSettingView: View {
     }
 
     private var filteredSegments: [SegmentScore] {
-        SegmentScore.filter(SegmentScore.previewSegments, by: searchText)
+        SegmentScore.filter(appState.segments, by: searchText)
     }
 
     var body: some View {

@@ -174,9 +174,10 @@ class AppState {
         }
 
         let requiredValue = segment.fitnessValueAtPR
+        let requiredLabel = SegmentScorer.requiredFitnessLabel(fitnessValueAtPR: requiredValue)
         let newGoal = GoalContext(
             segmentName: segment.name,
-            requiredFitnessLabel: SegmentScorer.requiredFitnessLabel(fitnessValueAtPR: requiredValue),
+            requiredFitnessLabel: requiredLabel,
             requiredFitnessValue: requiredValue,
             targetDate: targetDate,
             weeksRemaining: weeksRemaining
@@ -199,6 +200,23 @@ class AppState {
             var updated = seg
             updated.isGoalSegment = seg.name == segment.name
             return updated
+        }
+
+        // Persist to Supabase in the background — in-memory state is already set above.
+        guard let userId = supabaseUserId else { return }
+        Task {
+            do {
+                try await supabaseService.saveGoal(
+                    userId: userId,
+                    segmentName: segment.name,
+                    targetDate: targetDate,
+                    requiredFitnessLabel: requiredLabel,
+                    requiredFitnessValue: requiredValue
+                )
+                NSLog("[Goal] Saved goal '\(segment.name)' to Supabase")
+            } catch {
+                NSLog("[Goal] Failed to save goal: \(error)")
+            }
         }
     }
 
