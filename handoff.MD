@@ -2,98 +2,102 @@
 
 ## What was completed this session
 
-Step 6: Strava OAuth — fully implemented and smoke-tested end-to-end. Chad's account appears in the Supabase `users` table.
+Step 7: Historical Sync Phase 1 — fully implemented, tested, and committed.
 
-**Commits this session (7fb5e03 → bc3d845):**
-- `7fb5e03` — Register `enzo://` URL scheme in `Info.plist` for OAuth redirect
-- `4e90227` — Update PRD: Strava redirect URI is `enzo://oauth`, callback domain is `oauth`
-- `33b7180` — Add `KeychainHelper`: save/load/delete for `kSecClassGenericPassword` + Strava key constants
-- `4c8d445` — Add `KeychainHelperTests`: 7 tests
-- `efc3982` — Add `StravaService`: OAuth URL builder, `ASWebAuthenticationSession`, token exchange, refresh, athlete fetch
-- `d880db6` — Add `StravaServiceTests`: 8 tests
-- `046f990` — Add `SupabaseService.createUser`: upsert `users` row, return UUID
-- `da93cc1` — Wire `AppState`: `isAuthenticated`, `stravaAthleteId`, `authenticate()`
-- `65420e7` — Fix test files: add `Foundation` import
-- `2f2773e` — Mark Step 6 complete in CLAUDE.md; write Step 7 handoff
-- `d7b44e2` — Document xcconfig `//` comment stripping fix in build notes
-- `bc3d845` — Remove temp Connect button from ArcView
+**Commits this session (d936be2 → 9684e17):**
+- `d936be2` — Add FitnessCalculator: efficiency, fitnessValue, trendDirection, fitnessLabel
+- `a76e580` — Add SyncService: paginated Strava fetch, fitness snapshot computation
+- `8800319` — Add isSyncing, supabaseUserId, syncPhase1() to AppState; persist userId in Keychain
+- `9684e17` — Fix AppState: initialize SyncService in init() — lazy var incompatible with @Observable
 
-**Build status:** 34 tests passing. Build succeeds. App still launches directly into ArcView with hardcoded data.
-
-**Smoke test results:**
-- OAuth flow works end-to-end on device/simulator
-- Strava callback domain updated to `oauth` in Strava API settings
-- `users` row created in Supabase with correct `strava_athlete_id` and `display_name`
-- Discovered and fixed an xcconfig `//` comment-stripping bug that was corrupting `SUPABASE_URL` — see Build Notes in CLAUDE.md
+**Build status:** 75 tests passing (up from 34). Build succeeds. App still launches into ArcView with hardcoded data.
 
 ---
 
-## What comes next: Step 7 — Historical Sync Phase 1
+## What was built
+
+### `FitnessCalculator.swift` (Utils/)
+Pure static enum. No network, no state.
+- `efficiency(distanceKm:elevationGainM:sportType:durationHours:avgHR:)` — returns nil if < 30 min or avgHR == 0; gravel gets ×1.15; elevation adds 0.01 km per metre
+- `fitnessValue(recentEfficiencies:allTimeMin:allTimeMax:)` — normalizes 0.0–1.0
+- `trendDirection(recentFourWeeks:priorFourWeeks:)` — "up"/"flat"/"down" at ±0.05 threshold
+- `fitnessLabel(for:)` — Epic/Strong/Building/Baseline/Recovering
+- `cyclingTypes: Set<String>` — the 5 qualifying sport types
+
+### `SyncService.swift` (Services/)
+Swift actor. Key design: `isQualifying(_:)` and `computeSnapshots(from:userId:)` are static — testable without network.
+- `syncPhase1(userId:)` — refresh token → paginate all activities → filter → compute → upsert to Supabase
+- Pagination: 200/page, stops when batch < 200
+- 2-month rolling window for fitness value; this month's rides only for hours/count stats
+- Trend: last 4 weeks vs prior 4 weeks from month end; defaults to "flat" if either window is empty
+- `avgEfficiency` is set on the FitnessSnapshotRow (was nil in Step 5 path)
+
+### `AppState` updates
+- `supabaseUserId: UUID?` — populated from `createUser()` return, persisted to Keychain as "supabase_user_id"
+- `isSyncing: Bool` — set true during sync, false on completion
+- `syncPhase1() async` — calls `SyncService.syncPhase1(userId:)`; errors are silently caught (Step 8 surfaces sync state in UI)
+- `authenticate()` now stores the Supabase UUID (was discarding it in Step 6)
+- Service init pattern updated: create `StravaService` and `SupabaseService` as local lets first, then pass to `SyncService` — required because `lazy var` is incompatible with `@Observable`
+
+---
+
+## What comes next: Step 8 — Context Payload + Live Enzo
 
 ### Before writing any code, read these in order
 
-1. **`CLAUDE.md`** — full orientation; pay close attention to Build Notes (Strava data flow, xcconfig fix, Swift 6 warnings)
-2. **`PRD.MD` Section 6** — Sync Strategy, Phase 1 ("Activity list + HR")
-3. **`PRD.MD` Section 5** — Fitness computation model (efficiency formula, filtering rules)
-4. **`PRD.MD` Section 12** — Fitness Computation Detail (full algorithm — read this carefully before touching FitnessCalculator)
-5. **`skills/swift-patterns.MD`** — data flow section (`Strava → Supabase`)
-6. **`skills/testing.md`** — `FitnessCalculator` and `SyncService` test requirements
+1. **`CLAUDE.md`** — pay close attention to Step 7 build notes (supabaseUserId, lazy var issue)
+2. **`PRD.MD` Section 5** — Claude Context Payload JSON shape
+3. **`PRD.MD` Section 7** — Claude API integration details
+4. **`PRD.MD` Section 8** — Arc content generation (briefing, lookahead)
+5. **`skills/swift-patterns.MD`** — data flow section
+6. **`skills/testing.md`** — AthleteContext test requirements
 
-### What Step 7 involves
+### What Step 8 involves
 
-**`FitnessCalculator.swift`** — new file in `Utils/`. Pure static functions, no actor, no network:
-- `efficiency(distanceKm:elevationGainM:sportType:durationHours:avgHR:)` — per-ride efficiency: `adjusted_distance / (duration_hours × avg_hr)`. Gravel rides get ×1.15. Elevation: `+0.01 per metre`.
-- `fitnessValue(currentAvgEfficiency:historicalMin:historicalMax:)` — normalise to 0.0–1.0
-- `trendDirection(recentSnapshots:)` — compare last 4 weeks vs prior 4 weeks; returns `"up"`, `"flat"`, or `"down"`
-- `fitnessLabel(for:)` — same thresholds as `AthleteContext.fitnessLabel(for:)`
+**`AthleteContext+Live.swift` (or extend `AthleteContext.swift`):**
+- `AthleteContext.fromSupabase(userId:supabaseService:)` async factory — reads `fitness_snapshots` and `goals` from Supabase, assembles a live `AthleteContext`
+- `contextPayload(snapshots:segments:)` already exists — verify it produces the correct JSON shape from PRD Section 5
 
-**`FitnessCalculatorTests.swift`** — write alongside. Must cover all cases in `skills/testing.md`: load scales with HR, score in 0–1 range, nil HR fallback, peak month identification, label bands.
+**`AppState` updates:**
+- `loadLiveContext()` async — fetches live snapshots + goal from Supabase, builds live `AthleteContext`, replaces the hardcoded `.preview` default
+- Call `loadLiveContext()` after `syncPhase1()` completes
+- `fitnessSnapshots` populated from Supabase (currently hardcoded preview data)
 
-**`SyncService.swift`** — new file in `Services/`. Swift actor:
-- `syncPhase1(userId:)` — paginate `GET /athlete/activities` at 200/page; stop when page returns < 200 items
-- Filter to cycling sport types: `Ride`, `VirtualRide`, `MountainBikeRide`, `GravelRide`, `EMountainBikeRide`
-- Exclude rides < 30 min (`moving_time < 1800`) or no HR (`has_heartrate == false`)
-- Call `FitnessCalculator` in-memory on filtered rides
-- Write `FitnessSnapshotRow`s to Supabase via `SupabaseService`
-- Discard all raw activity data — nothing Strava-shaped goes to Supabase
-- Call `stravaService.refreshTokenIfNeeded()` before every Strava API call
-- Fields to extract per activity: `id`, `start_date`, `moving_time`, `distance`, `sport_type`, `has_heartrate`, `average_heartrate`, `total_elevation_gain`, `trainer`
+**`ArcBriefingView` / `LookaheadSuggestionView`:**
+- Brief and lookahead are currently hardcoded strings from `AthleteContext.previewBriefing`
+- Step 8 wires these to real Claude calls: generate briefing from live context, cache in `AppState`
+- Arc opens with live Enzo copy that references real fitness data
 
-**`AppState`** — add `isSyncing: Bool` and `syncPhase1()` async method calling through `SyncService`. App does not change launch flow.
+**Tune model constants:**
+After first sync with real data, run the efficiency formula against Chad's actual activities and verify fitness labels match intuition. Adjust thresholds in `FitnessCalculator` if needed before wiring live UI.
 
-**Testing acceptance criterion (from `skills/testing.md`):** After `syncPhase1()` runs, fitness snapshots in Supabase match expected values derived from known Chad activities.
+**Testing acceptance criterion (from `skills/testing.md`):**
+Enzo references real fitness data in the Arc response — not the hardcoded "Building → up" preview.
 
-### Key things to NOT do in Step 7
-- Don't start Phase 2 (segment efforts) — that's Step 9
-- Don't change the app's launch flow — still ArcView with hardcoded data
-- Don't display live data in the UI yet — that's Step 8
-- Don't create a `SummaryActivity` Swift model that mirrors Strava's full response — decode only the fields listed above
+### Key things to NOT do in Step 8
+- Don't start segment scoring (Step 9) — segments tab still shows preview data
+- Don't change the app launch flow — still ArcView
+- Don't write raw fitness data to Supabase — still derived metrics only
 
-### Strava API details
-- Endpoint: `GET https://www.strava.com/api/v3/athlete/activities?per_page=200&page=N`
-- Auth: `Authorization: Bearer <access_token>` (from Keychain via `KeychainHelper`)
-- Pagination: fetch until response array count < 200
-- `average_heartrate` is included in `SummaryActivity` — no per-activity calls needed for Phase 1
+### First thing to do in Step 8
+Trigger a manual sync: call `AppState.syncPhase1()` and verify rows appear in Supabase `fitness_snapshots` table. Then look at the data — does the label distribution make sense given Chad's actual riding history? If not, tune the thresholds before building the live UI.
 
 ---
 
-## Bugs carried forward (do not fix in Step 7)
+## Bugs carried forward (do not fix in Step 8)
 
 - `GoalSettingView` preview for "segment selected" state uses placeholder Enzo copy — fix in Step 11
-- `AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly, so Hawk Hill shows "Epic fitness needed" instead of "Strong" — fix in Step 9 when `SegmentScorer` is built
-- Swift 6 concurrency warnings in `StravaService` and `SupabaseService` (from `Bundle.main` / `@MainActor` `Config` properties) — warnings only, build succeeds; fix in a dedicated cleanup pass
+- `AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly, so Hawk Hill shows "Epic fitness needed" instead of "Strong" — fix in Step 9
+- Swift 6 concurrency warnings in `StravaService`, `SupabaseService`, `SyncService` (from `@MainActor` Config / KeychainHelper access) — warnings only, build succeeds; fix in a dedicated cleanup pass
 
 ---
 
-## Decisions and discoveries from this session (all recorded in CLAUDE.md Build Notes)
+## Decisions and discoveries from this session (recorded in CLAUDE.md Build Notes)
 
-- Strava redirect URI is `enzo://oauth`; `enzo` registered as `CFBundleURLTypes` in `Info.plist`; Strava API settings callback domain is `oauth`
-- `STRAVA_CLIENT_ID = 217529` in `Debug.xcconfig` (gitignored)
-- **xcconfig `//` comment-stripping** — `SUPABASE_URL = https://...` was being stored as `https:/` (xcconfig treats `//` as comment even mid-value). Fixed in `Debug.xcconfig` using `https:/$()/$(SUPABASE_HOST)`. Apply the same fix to `Release.xcconfig` before Step 8.
-- `KeychainHelper` is an enum with static methods; Security framework only — no UI dependencies
-- `AppState.init()` restores `isAuthenticated`/`stravaAthleteId` from Keychain on launch
-- `StravaService.authenticate(presentingFrom:)` takes `ASWebAuthenticationPresentationContextProviding` — calling view provides a `UIWindow`. In Step 11 the Onboarding screen will own this; a `WindowContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding` helper is the right pattern (see the removed temp button in git history at `bc3d845~1` for the exact implementation).
-- Supabase RLS still disabled — deferred to Step 11
+- `lazy var` is incompatible with `@Observable` — init accessor macro conflicts. Fixed by creating local lets in `init()` and assigning to stored `let` properties.
+- `supabaseUserId` was being silently discarded in Step 6 `authenticate()` — fixed: now stored in AppState and Keychain
+- `SyncService.computeSnapshots()` is static and pure — key architectural choice that makes it unit-testable without mocking a network layer
+- 2-month rolling window for fitness value; single-month stats for `hoursRidden`/`activityCount` — important distinction for Step 8 when populating the Arc chart
 
 ---
 
@@ -103,4 +107,4 @@ Step 6: Strava OAuth — fully implemented and smoke-tested end-to-end. Chad's a
 CLAUDE.md
 ```
 
-Then `PRD.MD` Section 12 (Fitness Computation Detail). That section has the full efficiency formula and normalisation algorithm — understand it completely before touching `FitnessCalculator.swift`.
+Then open Supabase dashboard and verify the `fitness_snapshots` table is empty (it will be populated when you trigger a sync from the device/simulator).
