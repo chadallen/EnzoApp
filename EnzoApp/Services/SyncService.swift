@@ -72,6 +72,11 @@ actor SyncService {
         for snapshot in snapshots {
             _ = try await supabaseService.upsertFitnessSnapshot(snapshot)
         }
+
+        // Track most recent qualifying ride date for days_since_last_ride computation.
+        if let mostRecentDate = rides.map({ $0.date }).max() {
+            try? await supabaseService.updateLastActivityDate(userId: userId, date: mostRecentDate)
+        }
     }
 
     // MARK: - Static helpers (testable without network)

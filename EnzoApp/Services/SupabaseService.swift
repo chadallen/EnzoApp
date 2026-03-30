@@ -86,6 +86,56 @@ actor SupabaseService {
         return rows.first?.id
     }
 
+    /// Returns the athlete's display name and last activity date for context assembly.
+    func fetchUserProfile(userId: UUID) async throws -> UserProfile {
+        let urlString = "\(baseURL)/users?id=eq.\(userId.uuidString.lowercased())&limit=1"
+        let rows: [UserProfileRow] = try await get(urlString: urlString)
+        guard let row = rows.first else { throw SupabaseError.emptyResponse }
+        return UserProfile(
+            displayName: row.displayName ?? "Athlete",
+            lastActivityDate: row.lastActivityDate.flatMap { Self.dateFormatter.date(from: $0) }
+        )
+    }
+
+    /// Updates last_activity_date on the users row after a sync.
+    func updateLastActivityDate(userId: UUID, date: Date) async throws {
+        struct Patch: Encodable {
+            let lastActivityDate: String
+            enum CodingKeys: String, CodingKey { case lastActivityDate = "last_activity_date" }
+        }
+        let urlString = "\(baseURL)/users?id=eq.\(userId.uuidString.lowercased())"
+        var request = try makeRequest(urlString: urlString)
+        request.httpMethod = "PATCH"
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(Patch(lastActivityDate: Self.dateFormatter.string(from: date)))
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw SupabaseError.httpError(code, nil)
+        }
+    }
+
+    struct UserProfile {
+        let displayName: String
+        let lastActivityDate: Date?
+    }
+
+    private struct UserProfileRow: Decodable {
+        let displayName: String?
+        let lastActivityDate: String?
+        enum CodingKeys: String, CodingKey {
+            case displayName = "display_name"
+            case lastActivityDate = "last_activity_date"
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
     // MARK: - Goals
 
     func fetchActiveGoal(userId: UUID) async throws -> GoalRow? {
