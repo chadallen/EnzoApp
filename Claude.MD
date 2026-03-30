@@ -182,7 +182,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 6: Strava OAuth
 - [x] Step 7: Historical sync Phase 1 (activities + fitness computation)
 
-- [ ] Step 8: Context payload + Arc content generation (live Enzo)
+- [x] Step 8: Context payload + Arc content generation (live Enzo)
 - [ ] Step 9: Historical sync Phase 2 + segment scoring
 - [ ] Step 10: Strava webhooks
 - [ ] Step 11: Onboarding flow
@@ -313,6 +313,25 @@ When running via Sweetpad (not Xcode), `print()` goes to stdout and does NOT app
 
 **Step 7 smoke test results**
 First sync wrote 97 rows to `fitness_snapshots`. All rows have `trend_direction = "flat"` — the ±0.05 threshold in `FitnessCalculator.trendDirection` may need tuning against real ride data. Step 8 task: look at the actual efficiency values across months before wiring the live UI, and adjust the threshold if labels don't match intuition.
+
+**Step 8: Supabase migration required before re-syncing**
+Before running syncPhase1 again (to get corrected trend directions), run this migration in Supabase:
+```sql
+alter table users add column last_activity_date date;
+```
+After running it, trigger a sync from the app. `SyncService.syncPhase1()` will now write the most recent qualifying ride date to `users.last_activity_date`, enabling accurate `days_since_last_ride` in the context payload.
+
+**Step 8: Trend threshold lowered to 0.008**
+`FitnessCalculator.trendThreshold` changed from 0.05 to 0.008. Calibrated against real Supabase data (efficiency range ~0.10–0.28). The 97 existing rows in `fitness_snapshots` were computed with the old threshold — re-running sync will rewrite them with corrected trend directions (upsert overwrites).
+
+**Step 8: loadContext() + generateBriefing/Lookahead pattern**
+`AppState.loadContext()` fetches snapshots, user profile, and active goal concurrently from Supabase, then calls `AthleteContext.build()`. `generateBriefing()` and `generateLookahead()` stream Claude responses into `briefingText`/`lookaheadText`. All three are triggered by `.task` in `ArcView` on every launch. Falls back to `AthleteContext.previewBriefing/previewLookahead` until authenticated. Caching (daily refresh, UserDefaults) is Step 12 polish.
+
+**Step 8: fitness data is mostly Baseline/Recovering**
+Real Supabase data shows 97 months almost entirely in "Recovering" or "Baseline" with one "Building" month. This is the actual fitness state vs. the illustrative hardcoded preview. Enzo will narrate the real state. The fitness model normalization (all-time min/max) may need tuning in Step 9 once segment data gives more context.
+
+**Step 8: recent_weeks is empty in contextPayload**
+`contextPayload()` includes `recent_weeks: []` as a placeholder. Per-activity weekly breakdown is deferred to Step 10 (webhooks), when individual ride data will be available.
 
 **Swift 6 concurrency warnings**
 Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
