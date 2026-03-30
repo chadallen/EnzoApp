@@ -123,13 +123,14 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   └── ArcMessage.swift          ← role: .enzo / .user
 │   ├── Services/
 │   │   ├── ClaudeService.swift       ← Step 3 ✓ — Swift actor; stream(_:context:) → AsyncStream<String>
-│   │   ├── StravaService.swift       ← Step 6
+│   │   ├── StravaService.swift       ← Step 6 ✓ — Swift actor; OAuth URL builder, ASWebAuthenticationSession,
+│   │   │                                 token exchange + storage, refreshTokenIfNeeded(), fetchAthlete()
 │   │   ├── SupabaseService.swift     ← Step 5 ✓ — Swift actor; fetch/upsert for fitness_snapshots,
-│   │   │                                 segment_scores, goals via URLSession REST (no SDK)
+│   │   │                                 segment_scores, goals, createUser(stravaAthleteId:displayName:)
 │   │   └── SyncService.swift         ← Step 7
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
-│   │   ├── KeychainHelper.swift      ← Step 6
+│   │   ├── KeychainHelper.swift      ← Step 6 ✓ — save/load/delete kSecClassGenericPassword; Strava key constants
 │   │   ├── FitnessCalculator.swift   ← Step 7
 │   │   ├── SegmentScorer.swift       ← Step 9
 │   │   └── Extensions/
@@ -141,8 +142,10 @@ EnzoApp/                              ← repo root / VS Code workspace
 │       └── Release.xcconfig          ← gitignored — never commit
 ├── EnzoAppTests/                     ← unit test target (PBXFileSystemSynchronizedRootGroup)
 │   ├── GoalSettingTests.swift        ← Step 4 ✓ — filter + prompt tests (10 passing)
-│   └── SupabaseServiceTests.swift    ← Step 5 ✓ — Codable DTO unit tests (9 passing) +
-│                                         integration test (gated on SUPABASE_INTEGRATION_TESTS=1)
+│   ├── SupabaseServiceTests.swift    ← Step 5 ✓ — Codable DTO unit tests (9 passing) +
+│   │                                     integration test (gated on SUPABASE_INTEGRATION_TESTS=1)
+│   ├── KeychainHelperTests.swift     ← Step 6 ✓ — save/load/delete/overwrite round-trip (7 passing)
+│   └── StravaServiceTests.swift      ← Step 6 ✓ — URL construction + token/athlete JSON decoding (8 passing)
 ├── .gitignore
 ├── CLAUDE.md
 ├── PRD.MD                            ← full product spec — source of truth
@@ -273,7 +276,7 @@ Lives in `Features/Arc/` for Steps 4–10. In Step 11 (Onboarding), it needs to 
 `FitnessSnapshotRow`, `SegmentScoreRow`, `GoalRow` live in `Models/+Supabase.swift` files alongside their domain model counterparts. These are wire-format DTOs, not domain models — they map to DB column names (snake_case) via `CodingKeys`. `FitnessSnapshot.month` ("YYYY-MM") is stored as "YYYY-MM-01" (PostgreSQL `date` type); `toSnapshot()` trims the suffix back. `SegmentScoreRow.stravaSegmentId` is non-optional (required by DB) — SyncService provides it from Strava in Step 9.
 
 **Supabase RLS**
-All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies will be scoped to authenticated users in Step 6 when Strava OAuth is wired.
+All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added in Step 6 — defer to Step 11 (Onboarding) when the full user identity model is in place.
 
 **Integration test env var**
 The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
