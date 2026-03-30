@@ -306,7 +306,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form. All
 
 1. User taps "Connect Strava" on onboarding screen
 2. App opens Strava OAuth URL via `ASWebAuthenticationSession`
-3. Strava redirects to `enzo://oauth`
+3. Strava redirects to `enzo://oauth` (registered in Strava API settings as callback domain `oauth`)
 4. App exchanges code for tokens
 5. Tokens stored in iOS Keychain only
 
