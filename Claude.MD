@@ -170,7 +170,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Model refactor: FitnessSnapshot/SegmentScore/AthleteContext/GoalContext updated to label+value model; all preview data matches Section 18
 - [x] Step 4: Goal setting UI
 - [x] Step 5: Supabase schema + models
-- [ ] Step 6: Strava OAuth
+- [x] Step 6: Strava OAuth
 - [ ] Step 7: Historical sync Phase 1 (activities + fitness computation)
 - [ ] Step 8: Context payload + Arc content generation (live Enzo)
 - [ ] Step 9: Historical sync Phase 2 + segment scoring
@@ -278,5 +278,16 @@ All 7 tables were created with RLS disabled (dev-only). The anon key can read/wr
 **Integration test env var**
 The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
 
-**Strava client ID missing**
-`STRAVA_CLIENT_ID` is empty in `Config/Debug.xcconfig`. Chad needs to add it before Step 6 can proceed. The client secret is already set. Find the client ID in the Strava API settings for the app.
+**Strava OAuth (Step 6)**
+`STRAVA_CLIENT_ID = 217529` — added to `Config/Debug.xcconfig` (gitignored). Redirect URI is `enzo://oauth`; registered in `Info.plist` as `CFBundleURLTypes` with scheme `enzo`. In Strava API settings, the "Authorization Callback Domain" must be set to `oauth` (not `localhost`) — Strava strips the scheme. `StravaService` is a Swift `actor` using `ASWebAuthenticationSession` with `callbackURLScheme: "enzo"`. Tokens stored in Keychain via `KeychainHelper`. Auth state (`isAuthenticated`, `stravaAthleteId`) lives on `AppState` and is restored from Keychain on launch. The app still launches into ArcView — no auth gating until Step 11.
+
+**xcconfig `//` comment stripping**
+In Xcode xcconfig files, `//` is treated as a comment even mid-value. `SUPABASE_URL = https://...` stores as `https:/` (second `/` and everything after is stripped). Fix: use an empty variable substitution to break up the `//`:
+```
+SUPABASE_HOST = hizswbzxwfxddocryvci.supabase.co
+SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
+```
+Apply this pattern to ANY URL stored in xcconfig. `$()` expands to empty string at build time, so the final value is `https://hizswbzxwfxddocryvci.supabase.co`. This is already applied in `Debug.xcconfig` — apply the same to `Release.xcconfig` before Step 8.
+
+**Swift 6 concurrency warnings**
+Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
