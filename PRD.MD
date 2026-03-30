@@ -956,7 +956,9 @@ Config/Release.xcconfig
 
 ```
 CLAUDE_API_KEY = sk-ant-yourkey
-SUPABASE_URL = https://yourproject.supabase.co
+// xcconfig treats // as a comment even mid-value — use $() to escape URL schemes
+SUPABASE_HOST = yourproject.supabase.co
+SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 SUPABASE_ANON_KEY = your-anon-key
 STRAVA_CLIENT_ID = your-client-id
 STRAVA_CLIENT_SECRET = your-client-secret
