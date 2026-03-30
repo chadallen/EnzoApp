@@ -109,12 +109,12 @@ fitness_value = (current_avg_efficiency - personal_min) / (personal_max - person
 ```
 
 **Trend direction:**
-Computed as rate of change in fitness_value over the most recent 4 weeks vs the prior 4 weeks within the 2-month window.
-- ↑ trending up: change > +0.05
-- → flat: change between -0.05 and +0.05
-- ↓ trending down: change < -0.05
+Computed as rate of change in avg efficiency over the most recent 4 weeks vs the prior 4 weeks within the 2-month window.
+- ↑ trending up: change > +0.008
+- → flat: change between -0.008 and +0.008
+- ↓ trending down: change < -0.008
 
-Threshold is tunable after real data validation.
+Threshold calibrated against real data in Step 8 (efficiency range ~0.10–0.28; ±0.008 ≈ 4–8% relative change). Stored as `FitnessCalculator.trendThreshold`.
 
 **User-facing fitness state** (derived from fitness_value, shown to user):
 
@@ -136,7 +136,7 @@ These labels appear in the UI. The continuous value is an internal implementatio
 | 0.45 – 0.70 | Worth a shot |
 | < 0.45 | Not quite ready |
 
-All thresholds — fitness, trend, and strike — are starting values to be tuned after the model runs against real Strava data in Step 8.
+Fitness and strike thresholds are starting values. Trend threshold was tuned to ±0.008 in Step 8 against real data. Strike thresholds will be tuned in Step 9.
 
 ### Supabase Schema
 
@@ -147,7 +147,8 @@ create table users (
   strava_athlete_id bigint unique not null,
   display_name text,
   created_at timestamptz default now(),
-  last_synced_at timestamptz
+  last_synced_at timestamptz,
+  last_activity_date date          -- most recent qualifying cycling ride with HR (added Step 8)
 );
 
 -- Monthly fitness snapshots (derived only)
