@@ -60,13 +60,17 @@ enum FitnessCalculator {
 
     // MARK: - Trend direction
 
+    /// Minimum absolute efficiency change to register as a trend.
+    /// Calibrated against real data (efficiency range ~0.10–0.28): ±0.008 ≈ 4–8% relative change.
+    static let trendThreshold: Double = 0.008
+
     /// Compares average efficiency in the most recent 4 weeks vs the prior 4 weeks.
     ///
-    /// - Returns: `"up"` if change > 0.05, `"down"` if change < -0.05, `"flat"` otherwise.
+    /// - Returns: `"up"` if change > trendThreshold, `"down"` if change < -trendThreshold, `"flat"` otherwise.
     static func trendDirection(recentFourWeeks: Double, priorFourWeeks: Double) -> String {
         let change = recentFourWeeks - priorFourWeeks
-        if change > 0.05 { return "up" }
-        if change < -0.05 { return "down" }
+        if change > trendThreshold { return "up" }
+        if change < -trendThreshold { return "down" }
         return "flat"
     }
 
