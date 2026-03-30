@@ -9,6 +9,7 @@
 | 0246d66 | `SegmentScorer.swift` + `SegmentScorerTests.swift` (13 passing tests) |
 | 52b2716 | `SyncService.syncPhase2()` — Strava detail fetch, segment extraction, strike scoring, Supabase upsert. `AppState.loadSegments()`, `syncPhase2()`, `isSyncingPhase2`. Phase 1 now chains into Phase 2 automatically. Fixed `requiredFitnessLabel` in `setGoal`. |
 | 79ca3bc | Fix upsert 409 (`on_conflict` columns in URL). Increase Phase 2 delay to 1.5s. |
+| 1edff16 | Mark Step 9 complete; build notes, handoff |
 
 ## Smoke test — required before marking Step 9 fully verified
 
