@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ArcBriefingView: View {
     let text: String
+    var isLoading: Bool = false
     var onRefresh: (() -> Void)? = nil
 
     var body: some View {
@@ -19,20 +20,33 @@ struct ArcBriefingView: View {
                         .textCase(.uppercase)
                         .tracking(1)
                     Spacer()
-                    Button {
-                        onRefresh?()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption)
-                            .foregroundStyle(Color.enzoSecondary)
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(Color.enzoSecondary)
+                    } else {
+                        Button {
+                            onRefresh?()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption)
+                                .foregroundStyle(Color.enzoSecondary)
+                        }
                     }
                 }
 
-                Text(text)
-                    .font(.system(.body))
-                    .foregroundStyle(Color.enzoPrimary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
+                if text.isEmpty {
+                    Text("Checking in on your training...")
+                        .font(.system(.body))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .italic()
+                } else {
+                    Text(text)
+                        .font(.system(.body))
+                        .foregroundStyle(Color.enzoPrimary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.vertical, 14)
             .padding(.trailing, 14)

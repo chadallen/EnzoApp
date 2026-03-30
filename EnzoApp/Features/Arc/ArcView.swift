@@ -29,6 +29,14 @@ struct ArcView: View {
         .safeAreaInset(edge: .bottom) {
             inputArea
         }
+        .task {
+            // On each launch: load real data, then generate Arc content.
+            // No-ops if not authenticated (supabaseUserId is nil).
+            await appState.loadContext()
+            async let briefing: Void = appState.generateBriefing()
+            async let lookahead: Void = appState.generateLookahead()
+            _ = await (briefing, lookahead)
+        }
     }
 
     // MARK: - Sub-views
@@ -59,14 +67,24 @@ struct ArcView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ArcBriefingView(text: AthleteContext.previewBriefing)
+                    ArcBriefingView(
+                        text: appState.briefingText,
+                        isLoading: appState.isGeneratingBriefing
+                    ) {
+                        Task { await appState.generateBriefing() }
+                    }
 
-                    LookaheadSuggestionView(text: AthleteContext.previewLookahead)
+                    LookaheadSuggestionView(
+                        text: appState.lookaheadText,
+                        isLoading: appState.isGeneratingLookahead
+                    )
 
                     FitnessChartView(
                         snapshots: appState.fitnessSnapshots,
                         goalValue: context.goal.requiredFitnessValue,
-                        contextText: AthleteContext.previewChartContext
+                        contextText: appState.briefingText.isEmpty
+                            ? AthleteContext.previewChartContext
+                            : String(appState.briefingText.prefix(120))
                     )
 
                     PROpportunitiesCard(segments: appState.segments)
