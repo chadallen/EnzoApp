@@ -136,7 +136,7 @@ These labels appear in the UI. The continuous value is an internal implementatio
 | 0.45 – 0.70 | Worth a shot |
 | < 0.45 | Not quite ready |
 
-Fitness and strike thresholds are starting values. Trend threshold was tuned to ±0.008 in Step 8 against real data. Strike thresholds will be tuned in Step 9.
+Fitness and strike thresholds are starting values. Trend threshold was tuned to ±0.008 in Step 8 against real data. Strike thresholds confirmed in Step 9: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready". Further tuning deferred to Step 12 polish once real segment data is available.
 
 ### Supabase Schema
 
@@ -345,8 +345,9 @@ Constructed fresh at query time from Supabase. Never persisted in this form. All
 
 * Phase 1 completes in seconds — fitness timeline is usable immediately
 * Phase 2 is the expensive operation: 1 call per activity. For 800 activities = ~4 batches of 200. At 200 req/15 min this takes ~15 minutes total.
+* **Current implementation (Step 9 POC):** capped at 100 most recent cycling activities with 1.5s delay between calls (~2.5 min). Full history batching deferred to Step 12.
 * Run Phase 2 as a background task. App is fully usable while it runs.
-* Store sync progress in Supabase so it survives app restarts
+* Store sync progress in Supabase so it survives app restarts — deferred to Step 12 polish.
 
 **Rate limit handling:** 200 req/15 min, 2,000/day. Show sync progress. Never block UI. For large histories, batch and queue.
 
