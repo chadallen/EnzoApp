@@ -6,6 +6,7 @@ enum SyncError: Error {
     case notAuthenticated
     case fetchFailed(String?)
     case decodingFailed
+    case rateLimited
 }
 
 // MARK: - SyncService
@@ -171,6 +172,234 @@ actor SyncService {
             var row = FitnessSnapshotRow(snapshot: snapshot, userId: userId)
             row.avgEfficiency = avgEfficiency
             return row
+        }
+    }
+
+    // MARK: - Phase 2 sync
+
+    /// Maximum number of activities to fetch in Phase 2.
+    /// TODO: Placeholder for proof of concept — production requires proper rate-limit
+    /// batching across the full activity history (200 req/15 min, 2000 req/day).
+    static let phase2ActivityLimit = 100
+
+    // Strava full activity response — ephemeral, never persisted.
+    struct StravaDetailActivity: Decodable {
+        let id: Int64
+        let segmentEfforts: [StravaSegmentEffort]?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case segmentEfforts = "segment_efforts"
+        }
+    }
+
+    struct StravaSegmentEffort: Decodable {
+        let elapsedTime: Int
+        let startDate: String
+        let segment: StravaSegmentSummary
+
+        enum CodingKeys: String, CodingKey {
+            case elapsedTime = "elapsed_time"
+            case startDate   = "start_date"
+            case segment
+        }
+    }
+
+    struct StravaSegmentSummary: Decodable {
+        let id: Int64
+        let name: String
+        let startLatlng: [Double]?
+        let endLatlng: [Double]?
+        let effortCount: Int?
+        let athletePrEffort: StravaAthletePREffort?
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case startLatlng    = "start_latlng"
+            case endLatlng      = "end_latlng"
+            case effortCount    = "effort_count"
+            case athletePrEffort = "athlete_pr_effort"
+        }
+    }
+
+    struct StravaAthletePREffort: Decodable {
+        let prElapsedTime: Int
+        let startDateLocal: String
+
+        enum CodingKeys: String, CodingKey {
+            case prElapsedTime  = "pr_elapsed_time"
+            case startDateLocal = "start_date_local"
+        }
+    }
+
+    /// Fetches the 100 most recent cycling activities in detail, extracts segment efforts,
+    /// computes strike scores, and upserts to the segment_scores table.
+    /// Raw Strava data is never persisted.
+    func syncPhase2(userId: UUID) async throws {
+        try await stravaService.refreshTokenIfNeeded()
+        guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
+            throw SyncError.notAuthenticated
+        }
+
+        // Fetch fitness snapshots once — used as a lookup for fitness_value_at_pr.
+        let snapshotRows = try await supabaseService.fetchFitnessSnapshots(userId: userId)
+        // month is stored as "YYYY-MM-01"; normalize to "YYYY-MM" for lookup.
+        let snapshotByMonth: [String: Double] = Dictionary(
+            snapshotRows.map { row -> (String, Double) in
+                let key = String(row.month.prefix(7))
+                return (key, row.fitnessValue)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        // Fetch the most recent N cycling activity IDs.
+        let recentActivities = try await fetchRecentCyclingActivities(
+            accessToken: accessToken,
+            limit: Self.phase2ActivityLimit
+        )
+
+        // Track one row per segment. Strava returns activities newest-first,
+        // so the first time we see a segment gives us its most recent effort data.
+        var segmentMap: [Int64: SegmentScoreRow] = [:]
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        dateFormatter.timeZone = TimeZone(identifier: "UTC")
+
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoBasic = ISO8601DateFormatter()
+
+        for activity in recentActivities {
+            // Rate limit: 0.1s between detail fetches.
+            try? await Task.sleep(nanoseconds: 100_000_000)
+
+            let detail: StravaDetailActivity
+            do {
+                detail = try await fetchActivityDetail(
+                    activityId: activity.id,
+                    accessToken: accessToken
+                )
+            } catch SyncError.rateLimited {
+                NSLog("[Sync P2] Rate limited — stopping Phase 2 early at activity \(activity.id)")
+                break
+            }
+
+            guard let efforts = detail.segmentEfforts else { continue }
+
+            for effort in efforts {
+                let seg = effort.segment
+                guard let prEffort = seg.athletePrEffort else { continue }
+
+                let segId = seg.id
+
+                // Derive "YYYY-MM" from PR date for snapshot lookup.
+                // PR date from Strava is ISO8601; trim to "YYYY-MM".
+                let prDateISO = prEffort.startDateLocal
+                let prMonthKey = String(prDateISO.prefix(7))
+                let prDateFormatted: String
+                if prDateISO.count >= 10 {
+                    prDateFormatted = String(prDateISO.prefix(10))
+                } else {
+                    prDateFormatted = prDateISO
+                }
+
+                let fitnessAtPR = snapshotByMonth[prMonthKey] ?? 0.0
+
+                // Current fitness = most recent snapshot value (snapshots are ordered asc by month).
+                let currentFitness = snapshotRows.last?.fitnessValue ?? 0.0
+
+                // Trend = most recent snapshot trend.
+                let currentTrend = snapshotRows.last?.trendDirection ?? "flat"
+
+                let score = SegmentScorer.strikeScore(
+                    fitnessValueAtPR: fitnessAtPR,
+                    currentFitnessValue: currentFitness,
+                    trendDirection: currentTrend,
+                    prDate: prDateFormatted
+                )
+
+                // Determine this effort's date (normalized to "YYYY-MM-DD").
+                let effortDateStr: String
+                if let parsed = isoFull.date(from: effort.startDate) ?? isoBasic.date(from: effort.startDate) {
+                    effortDateStr = dateFormatter.string(from: parsed)
+                } else {
+                    effortDateStr = String(effort.startDate.prefix(10))
+                }
+
+                // Only write a row the first time we see this segment.
+                // Strava returns activities newest-first, so the first effort seen
+                // is the most recent one — use it for last_effort_* fields.
+                // PR data (athlete_pr_effort) is the same regardless of which activity surfaces it.
+                if segmentMap[segId] == nil {
+                    let row = SegmentScoreRow(
+                        id: nil,
+                        userId: userId,
+                        stravaSegmentId: segId,
+                        segmentName: seg.name,
+                        prSeconds: prEffort.prElapsedTime,
+                        prAchievedAt: prDateFormatted,
+                        fitnessValueAtPr: fitnessAtPR,
+                        currentFitnessValue: currentFitness,
+                        trendDirection: currentTrend,
+                        lastEffortSeconds: effort.elapsedTime,
+                        lastEffortDate: effortDateStr,
+                        strikeScore: score,
+                        strikeLabel: SegmentScorer.strikeLabel(for: score)
+                    )
+                    segmentMap[segId] = row
+                }
+            }
+        }
+
+        NSLog("[Sync P2] Upserting \(segmentMap.count) segment rows")
+        for row in segmentMap.values {
+            _ = try await supabaseService.upsertSegmentScore(row)
+        }
+        NSLog("[Sync P2] Phase 2 complete")
+    }
+
+    // MARK: - Private: Phase 2 fetch helpers
+
+    private func fetchRecentCyclingActivities(accessToken: String, limit: Int) async throws -> [StravaActivity] {
+        var result: [StravaActivity] = []
+        var page = 1
+
+        while result.count < limit {
+            let batch = try await fetchPage(accessToken: accessToken, page: page)
+            if batch.isEmpty { break }
+            let cycling = batch.filter { FitnessCalculator.cyclingTypes.contains($0.sportType) }
+            result.append(contentsOf: cycling)
+            if batch.count < 200 { break }
+            page += 1
+        }
+
+        return Array(result.prefix(limit))
+    }
+
+    private func fetchActivityDetail(activityId: Int64, accessToken: String) async throws -> StravaDetailActivity {
+        let urlString = "https://www.strava.com/api/v3/activities/\(activityId)?include_all_efforts=true"
+        guard let url = URL(string: urlString) else { throw SyncError.fetchFailed(nil) }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed(nil) }
+
+        if http.statusCode == 429 { throw SyncError.rateLimited }
+
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8)
+            throw SyncError.fetchFailed("HTTP \(http.statusCode): \(body ?? "")")
+        }
+
+        do {
+            return try JSONDecoder().decode(StravaDetailActivity.self, from: data)
+        } catch {
+            throw SyncError.decodingFailed
         }
     }
 
