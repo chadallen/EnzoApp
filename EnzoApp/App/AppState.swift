@@ -17,10 +17,18 @@ class AppState {
     // Auth state — populated after successful OAuth flow
     var isAuthenticated: Bool = false
     var stravaAthleteId: Int64? = nil
+    var supabaseUserId: UUID? = nil
+
+    // Sync state
+    var isSyncing: Bool = false
 
     private let claudeService = ClaudeService()
     private let stravaService = StravaService()
     private let supabaseService = SupabaseService()
+    private lazy var syncService = SyncService(
+        stravaService: stravaService,
+        supabaseService: supabaseService
+    )
 
     init() {
         // Restore auth state from Keychain on launch
@@ -28,6 +36,10 @@ class AppState {
            let id = Int64(idString) {
             isAuthenticated = true
             stravaAthleteId = id
+        }
+        if let uuidString = KeychainHelper.load(for: KeychainHelper.supabaseUserId),
+           let uuid = UUID(uuidString: uuidString) {
+            supabaseUserId = uuid
         }
     }
 
@@ -89,12 +101,27 @@ class AppState {
 
     func authenticate(contextProvider: ASWebAuthenticationPresentationContextProviding) async throws {
         let athlete = try await stravaService.authenticate(presentingFrom: contextProvider)
-        _ = try await supabaseService.createUser(
+        let userId = try await supabaseService.createUser(
             stravaAthleteId: athlete.id,
             displayName: athlete.displayName
         )
         isAuthenticated = true
         stravaAthleteId = athlete.id
+        supabaseUserId = userId
+        KeychainHelper.save(userId.uuidString, for: KeychainHelper.supabaseUserId)
+    }
+
+    // MARK: - Sync
+
+    func syncPhase1() async {
+        guard let userId = supabaseUserId else { return }
+        isSyncing = true
+        do {
+            try await syncService.syncPhase1(userId: userId)
+        } catch {
+            // Sync errors are silent in Phase 1 — Step 8 will surface sync state in UI
+        }
+        isSyncing = false
     }
 
     // MARK: - Messaging
