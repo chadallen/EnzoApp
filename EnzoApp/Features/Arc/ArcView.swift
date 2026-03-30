@@ -1,24 +1,9 @@
 import SwiftUI
-import AuthenticationServices
-
-// TEMP: smoke test helper — remove after Step 6 is verified
-private class WindowContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
-    }
-}
 
 struct ArcView: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
-    // TEMP: smoke test — remove after Step 6 is verified
-    @State private var isConnecting = false
-    @State private var connectError: String? = nil
-    private let contextProvider = WindowContextProvider()
 
     private var context: AthleteContext { appState.athleteContext }
     private var showThread: Bool { !appState.arcMessages.isEmpty || appState.isStreaming }
@@ -54,37 +39,9 @@ struct ArcView: View {
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.enzoPrimary)
             Spacer()
-            // TEMP: smoke test — remove after Step 6 is verified
-            Button {
-                isConnecting = true
-                connectError = nil
-                Task {
-                    do {
-                        try await appState.authenticate(contextProvider: contextProvider)
-                        print("✅ OAuth success — athlete ID: \(appState.stravaAthleteId ?? -1)")
-                    } catch {
-                        connectError = error.localizedDescription
-                        print("❌ OAuth error: \(error)")
-                    }
-                    isConnecting = false
-                }
-            } label: {
-                if isConnecting {
-                    ProgressView()
-                        .tint(Color.enzoAccent)
-                        .frame(width: 22, height: 22)
-                } else if appState.isAuthenticated {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Color.enzoGoal)
-                } else {
-                    Text("Connect")
-                        .font(.system(.footnote, design: .rounded, weight: .semibold))
-                        .foregroundStyle(Color.enzoAccent)
-                }
-            }
-            .disabled(isConnecting || appState.isAuthenticated)
-            // END TEMP
+            // Step 11: replace with settings sheet trigger.
+            // To wire the Connect button back for testing, see handoff.MD Step 6 section —
+            // use WindowContextProvider + AppState.authenticate(contextProvider:).
             Button {
                 // Step 11: settings sheet
             } label: {
