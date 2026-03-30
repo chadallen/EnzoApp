@@ -84,7 +84,7 @@ struct AthleteContext {
             guard let row = goalRow,
                   let segmentName = row.targetSegmentName else {
                 return GoalContext(
-                    segmentName: "—",
+                    segmentName: "",
                     requiredFitnessLabel: currentLabel,
                     requiredFitnessValue: currentValue,
                     targetDate: nil,
