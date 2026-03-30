@@ -50,6 +50,17 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>enzo</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.enzo.oauth</string>
+		</dict>
+	</array>
 	<key>STRAVA_CLIENT_ID</key>
 	<string>$(STRAVA_CLIENT_ID)</string>
 	<key>STRAVA_CLIENT_SECRET</key>
