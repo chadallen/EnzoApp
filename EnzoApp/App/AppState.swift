@@ -47,6 +47,48 @@ class AppState {
         }
     }
 
+    // MARK: - Context loading
+
+    /// Fetches fitness snapshots, user profile, and active goal from Supabase,
+    /// then builds a live AthleteContext. No-ops gracefully if not authenticated.
+    func loadContext() async {
+        guard let userId = supabaseUserId else { return }
+
+        do {
+            async let snapshotRows = supabaseService.fetchFitnessSnapshots(userId: userId)
+            async let profile = supabaseService.fetchUserProfile(userId: userId)
+            async let goalRow = supabaseService.fetchActiveGoal(userId: userId)
+
+            let (rows, userProfile, activeGoal) = try await (snapshotRows, profile, goalRow)
+
+            let snapshots = rows.map { $0.toSnapshot() }
+                .sorted { $0.month < $1.month }
+
+            let context = AthleteContext.build(
+                name: userProfile.displayName,
+                snapshots: snapshots,
+                goalRow: activeGoal,
+                lastActivityDate: userProfile.lastActivityDate
+            )
+
+            fitnessSnapshots = snapshots
+            athleteContext = context
+
+            // Restore goal into segments state if a goal segment is known.
+            if let segmentName = activeGoal?.targetSegmentName {
+                segments = segments.map { seg in
+                    var updated = seg
+                    updated.isGoalSegment = seg.name == segmentName
+                    return updated
+                }
+            }
+
+            NSLog("[Context] Loaded: \(snapshots.count) snapshots, fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
+        } catch {
+            NSLog("[Context] loadContext error: \(error)")
+        }
+    }
+
     // MARK: - Goal setting
 
     func setGoal(_ segment: SegmentScore, targetDate: Date?) {
