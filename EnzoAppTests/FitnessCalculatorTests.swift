@@ -156,38 +156,38 @@ struct FitnessCalculatorTests {
 
     // MARK: - trendDirection()
 
-    @Test("returns 'up' when recent avg exceeds prior by more than 0.05")
+    @Test("returns 'up' when recent avg exceeds prior by more than trendThreshold")
     func trendDirectionUp() {
         let result = FitnessCalculator.trendDirection(
             recentFourWeeks: 0.25,
-            priorFourWeeks: 0.18
+            priorFourWeeks: 0.18   // change = 0.07, well above threshold
         )
         #expect(result == "up")
     }
 
-    @Test("returns 'down' when recent avg is more than 0.05 below prior")
+    @Test("returns 'down' when recent avg is more than trendThreshold below prior")
     func trendDirectionDown() {
         let result = FitnessCalculator.trendDirection(
             recentFourWeeks: 0.15,
-            priorFourWeeks: 0.22
+            priorFourWeeks: 0.22   // change = -0.07, well below threshold
         )
         #expect(result == "down")
     }
 
-    @Test("returns 'flat' when change is within ±0.05")
+    @Test("returns 'flat' when change is within ±trendThreshold")
     func trendDirectionFlat() {
         let result = FitnessCalculator.trendDirection(
-            recentFourWeeks: 0.20,
-            priorFourWeeks: 0.21
+            recentFourWeeks: 0.200,
+            priorFourWeeks: 0.203  // change = -0.003, within ±0.008
         )
         #expect(result == "flat")
     }
 
-    @Test("returns 'flat' at exact 0.05 boundary")
+    @Test("returns 'flat' at exact trendThreshold boundary (not strictly greater)")
     func trendDirectionAtBoundary() {
         let result = FitnessCalculator.trendDirection(
-            recentFourWeeks: 0.25,
-            priorFourWeeks: 0.20  // change = exactly 0.05, not > 0.05
+            recentFourWeeks: 0.208,
+            priorFourWeeks: 0.200  // change = exactly 0.008, not > 0.008
         )
         #expect(result == "flat")
     }
