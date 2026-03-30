@@ -177,10 +177,14 @@ actor SyncService {
 
     // MARK: - Phase 2 sync
 
-    /// Maximum number of activities to fetch in Phase 2.
-    /// TODO: Placeholder for proof of concept — production requires proper rate-limit
-    /// batching across the full activity history (200 req/15 min, 2000 req/day).
-    static let phase2ActivityLimit = 100
+    /// Maximum number of *new* activities to fetch per Phase 2 run.
+    /// Tunable: 25 is fast for iteration; raise toward 200 once smoke tests pass.
+    /// Production full-history import will need batch pausing (200 req/15 min limit).
+    static let phase2ActivityLimit = 25
+
+    /// UserDefaults key for the timestamp of the last successful Phase 2 run.
+    /// Used to make Phase 2 incremental — only fetches activities newer than this date.
+    private static let lastPhase2SyncKey = "lastPhase2SyncTimestamp"
 
     // Strava full activity response — ephemeral, never persisted.
     struct StravaDetailActivity: Decodable {
@@ -253,11 +257,27 @@ actor SyncService {
             uniquingKeysWith: { first, _ in first }
         )
 
-        // Fetch the most recent N cycling activity IDs.
+        // Incremental: only fetch activities newer than the last Phase 2 run.
+        // On first run, lastSync is nil → fetches the most recent N activities.
+        let lastSync = UserDefaults.standard.object(forKey: Self.lastPhase2SyncKey) as? Date
+        if let lastSync {
+            NSLog("[Sync P2] Incremental — fetching activities after \(lastSync)")
+        } else {
+            NSLog("[Sync P2] First run — fetching most recent \(Self.phase2ActivityLimit) activities")
+        }
+
         let recentActivities = try await fetchRecentCyclingActivities(
             accessToken: accessToken,
-            limit: Self.phase2ActivityLimit
+            limit: Self.phase2ActivityLimit,
+            after: lastSync
         )
+
+        guard !recentActivities.isEmpty else {
+            NSLog("[Sync P2] No new activities since last sync — skipping")
+            return
+        }
+
+        NSLog("[Sync P2] Processing \(recentActivities.count) activities")
 
         // Track one row per segment. Strava returns activities newest-first,
         // so the first time we see a segment gives us its most recent effort data.
@@ -359,17 +379,20 @@ actor SyncService {
         for row in segmentMap.values {
             _ = try await supabaseService.upsertSegmentScore(row)
         }
+
+        // Mark this run's timestamp so the next sync only fetches new activities.
+        UserDefaults.standard.set(Date(), forKey: Self.lastPhase2SyncKey)
         NSLog("[Sync P2] Phase 2 complete")
     }
 
     // MARK: - Private: Phase 2 fetch helpers
 
-    private func fetchRecentCyclingActivities(accessToken: String, limit: Int) async throws -> [StravaActivity] {
+    private func fetchRecentCyclingActivities(accessToken: String, limit: Int, after: Date? = nil) async throws -> [StravaActivity] {
         var result: [StravaActivity] = []
         var page = 1
 
         while result.count < limit {
-            let batch = try await fetchPage(accessToken: accessToken, page: page)
+            let batch = try await fetchPage(accessToken: accessToken, page: page, after: after)
             if batch.isEmpty { break }
             let cycling = batch.filter { FitnessCalculator.cyclingTypes.contains($0.sportType) }
             result.append(contentsOf: cycling)
@@ -421,14 +444,18 @@ actor SyncService {
         return all
     }
 
-    private func fetchPage(accessToken: String, page: Int) async throws -> [StravaActivity] {
+    private func fetchPage(accessToken: String, page: Int, after: Date? = nil) async throws -> [StravaActivity] {
         guard var components = URLComponents(string: Self.activitiesURLString) else {
             throw SyncError.fetchFailed(nil)
         }
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "per_page", value: "200"),
             URLQueryItem(name: "page",     value: String(page))
         ]
+        if let after {
+            queryItems.append(URLQueryItem(name: "after", value: String(Int(after.timeIntervalSince1970))))
+        }
+        components.queryItems = queryItems
         guard let url = components.url else { throw SyncError.fetchFailed(nil) }
 
         var request = URLRequest(url: url)
