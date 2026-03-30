@@ -77,6 +77,15 @@ actor SupabaseService {
         }
     }
 
+    /// Looks up a user's Supabase UUID by their Strava athlete ID.
+    /// Used as a fallback when the UUID wasn't cached in Keychain (e.g. authenticated before Step 7).
+    func fetchUserId(stravaAthleteId: Int64) async throws -> UUID? {
+        let urlString = "\(baseURL)/users?strava_athlete_id=eq.\(stravaAthleteId)&limit=1"
+        struct UserRow: Decodable { let id: UUID }
+        let rows: [UserRow] = try await get(urlString: urlString)
+        return rows.first?.id
+    }
+
     // MARK: - Goals
 
     func fetchActiveGoal(userId: UUID) async throws -> GoalRow? {

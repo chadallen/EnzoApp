@@ -118,12 +118,31 @@ class AppState {
     // MARK: - Sync
 
     func syncPhase1() async {
-        guard let userId = supabaseUserId else { return }
+        var userId = supabaseUserId
+
+        // Fallback: look up UUID from Supabase if not cached in Keychain (e.g. authenticated pre-Step 7)
+        if userId == nil, let athleteId = stravaAthleteId {
+            NSLog("[Sync] supabaseUserId missing — looking up from Supabase for athleteId \(athleteId)")
+            userId = try? await supabaseService.fetchUserId(stravaAthleteId: athleteId)
+            if let resolved = userId {
+                supabaseUserId = resolved
+                KeychainHelper.save(resolved.uuidString, for: KeychainHelper.supabaseUserId)
+                NSLog("[Sync] resolved userId: \(resolved)")
+            }
+        }
+
+        guard let userId else {
+            NSLog("[Sync] no userId — aborting (not authenticated?)")
+            return
+        }
+
+        NSLog("[Sync] starting Phase 1 for userId \(userId)")
         isSyncing = true
         do {
             try await syncService.syncPhase1(userId: userId)
+            NSLog("[Sync] Phase 1 complete")
         } catch {
-            // Sync errors are silent in Phase 1 — Step 8 will surface sync state in UI
+            NSLog("[Sync] Phase 1 error: \(error)")
         }
         isSyncing = false
     }
