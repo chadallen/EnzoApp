@@ -212,7 +212,6 @@ actor StravaService {
 
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             let body = String(data: data, encoding: .utf8)
             throw StravaError.tokenExchangeFailed(body)
         }

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import AuthenticationServices
 
 @Observable
 @MainActor
@@ -13,7 +14,22 @@ class AppState {
     var isStreaming = false
     var streamingText = ""
 
+    // Auth state — populated after successful OAuth flow
+    var isAuthenticated: Bool = false
+    var stravaAthleteId: Int64? = nil
+
     private let claudeService = ClaudeService()
+    private let stravaService = StravaService()
+    private let supabaseService = SupabaseService()
+
+    init() {
+        // Restore auth state from Keychain on launch
+        if let idString = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
+           let id = Int64(idString) {
+            isAuthenticated = true
+            stravaAthleteId = id
+        }
+    }
 
     // MARK: - Goal setting
 
@@ -68,6 +84,20 @@ class AppState {
                "My current fitness is \(athleteContext.currentFitnessLabel), trending \(athleteContext.trendDirection). " +
                "React to this goal choice — be honest about where I stand and whether a target date makes sense."
     }
+
+    // MARK: - Authentication
+
+    func authenticate(contextProvider: ASWebAuthenticationPresentationContextProviding) async throws {
+        let athlete = try await stravaService.authenticate(presentingFrom: contextProvider)
+        _ = try await supabaseService.createUser(
+            stravaAthleteId: athlete.id,
+            displayName: athlete.displayName
+        )
+        isAuthenticated = true
+        stravaAthleteId = athlete.id
+    }
+
+    // MARK: - Messaging
 
     func sendMessage(_ text: String) async {
         let userMsg = ArcMessage(role: .user, content: text)
