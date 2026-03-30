@@ -839,53 +839,28 @@ func trendDirection(
 
 ### Segment Strike Score
 
-```swift
-// Strike score using fitness trend as multiplier on last segment effort
-func strikeScore(
-    lastEffortSeconds: Double,
-    prSeconds: Double,
-    fitnessValue: Double,
-    trendDirection: String
-) -> Double {
-    guard prSeconds > 0, lastEffortSeconds > 0 else { return 0 }
+Implemented in `Utils/SegmentScorer.swift` (Step 9). Formula uses fitness delta, not effort time projection:
 
-    // Trend multiplier: up = slight boost, down = slight penalty, flat = neutral
-    let trendMultiplier: Double
-    switch trendDirection {
-    case "up": trendMultiplier = 1.05
-    case "down": trendMultiplier = 0.95
-    default: trendMultiplier = 1.0
-    }
-
-    // Project next effort time based on current fitness and trend
-    let projectedSeconds = lastEffortSeconds * (1 - ((fitnessValue - 0.5) * 0.1)) * (1 / trendMultiplier)
-
-    // Strike score: how close is the projection to beating PR
-    // 1.0 = projected to match or beat PR, 0.0 = far off
-    let ratio = prSeconds / projectedSeconds
-    return min(max((ratio - 0.85) / 0.15, 0), 1)
-}
-
-// Strike label from score (user-facing)
-func strikeLabel(for score: Double) -> String {
-    switch score {
-    case 0.70...: return "No brainer"
-    case 0.45..<0.70: return "Worth a shot"
-    default: return "Not quite ready"
-    }
-}
 ```
+base = clamp(0.5 + (currentFitnessValue - fitnessValueAtPR) × 0.8, 0, 1)
+trendBonus = "up" → +0.05 | "down" → -0.05 | "flat" → 0
+score = clamp(base + trendBonus, 0, 1)
+// PRs set within 30 days: score × 0.85 recency discount
+```
+
+At fitness parity (delta = 0) → score = 0.5 "Worth a shot". Well above PR fitness → approaches 1.0. Well below → approaches 0.0.
+
+`requiredFitnessLabel` = one tier below the label at which the PR was set (Epic→Strong, Strong→Building, etc.).
 
 ### Tuning Notes
 
-All constants below are starting values. Run against real Strava data in Step 8 and adjust:
-- Elevation multiplier: `0.01` (100m climbing ≈ 1km flat)
-- Gravel surface bonus: `1.15`
-- Minimum ride duration: `30 minutes`
-- Trend threshold: `0.05` change in 4-week window
-- Trend multiplier range: `0.95 – 1.05`
-- Fitness projection sensitivity: `0.1` (10% fitness swing ≈ 1% time swing)
-- Strike score normalization: `0.85 – 1.0` ratio range
+Constants confirmed against real data:
+- Elevation multiplier: `0.01` (100m climbing ≈ 1km flat) ✅
+- Gravel surface bonus: `1.15` ✅
+- Minimum ride duration: `30 minutes` ✅
+- Trend threshold: `±0.008` (tuned in Step 8; efficiency range ~0.10–0.28) ✅
+- Strike thresholds: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready" ✅
+- Further strike threshold tuning deferred to Step 11 (Polish pass) once real segment data is available
 
 ---
 
@@ -1017,7 +992,20 @@ enum Config {
 
 ## 17. Build Order
 
-See Build Order section of Claude.MD
+See Build Order section of CLAUDE.md for the authoritative step list. Current order:
+
+1. ✅ Project setup
+2. ✅ Arc UI (static)
+3. ✅ Claude API wired
+4. ✅ Goal setting UI
+5. ✅ Supabase schema + models
+6. ✅ Strava OAuth
+7. ✅ Historical sync Phase 1
+8. ✅ Context payload + live Enzo
+9. ✅ Historical sync Phase 2 + segment scoring
+10. Onboarding flow
+11. Polish pass
+12. Strava webhooks (deferred from original Step 10 — manual sync is acceptable for beta)
 
 ---
 
