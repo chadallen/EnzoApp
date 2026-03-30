@@ -1,93 +1,73 @@
-# Session Handoff — Step 8 Complete
+# Session Handoff — Step 9 Complete
 
 ## What was completed this session
 
-**Step 8: Context Payload + Live Enzo** — 8 commits merged to main (including ArcView sync button wiring).
+**Step 9: Historical Sync Phase 2 + Segment Scoring** — 4 commits to main.
 
 | Commit | What |
 |---|---|
-| 74bfbb2 | Lower trend threshold to 0.008; make it a named constant |
-| b27969f | SupabaseService: `fetchUserProfile`, `updateLastActivityDate`; SyncService writes last ride date |
-| 9a74865 | `AthleteContext.build()` factory method + 13 passing `AthleteContextTests` |
-| f7be13a | `AppState.loadContext()` — fetch snapshots/profile/goal from Supabase |
-| 6a06821 | `AppState.generateBriefing()` + `generateLookahead()` — streaming Claude calls |
-| 4243860 | Wire ArcView: live briefingText/lookaheadText, `.task` trigger, loading states |
-| d85a468 | CLAUDE.md: Step 8 marked complete, build notes |
-| latest  | ArcView person.circle button → debug sync trigger |
+| 0246d66 | `SegmentScorer.swift` + `SegmentScorerTests.swift` (13 passing tests) |
+| 52b2716 | `SyncService.syncPhase2()` — Strava detail fetch, segment extraction, strike scoring, Supabase upsert. `AppState.loadSegments()`, `syncPhase2()`, `isSyncingPhase2`. Phase 1 now chains into Phase 2 automatically. Fixed `requiredFitnessLabel` in `setGoal`. |
+| 79ca3bc | Fix upsert 409 (`on_conflict` columns in URL). Increase Phase 2 delay to 1.5s. |
 
-**The Arc is now live.** On launch, `ArcView.task` calls `loadContext()` (reads Supabase), then `generateBriefing()` + `generateLookahead()` concurrently (calls Claude). Enzo narrates real fitness data.
+## Smoke test — required before marking Step 9 fully verified
 
-## Required Supabase migration (if not yet run)
+The code is complete but the end-to-end sync had not been confirmed when the session ended (Strava rate limit was hit during debugging). Before starting Step 10:
 
-```sql
-alter table users add column last_activity_date date;
-```
+1. Wait for Strava's 15-minute rate limit window to reset after the last failed run
+2. Tap the person.circle button in ArcView
+3. Watch the log stream (`log stream --predicate 'process == "EnzoApp"'` or Sweetpad logs)
+4. Expected sequence:
+   ```
+   [Sync] starting Phase 1 for userId ...
+   [Sync] Phase 1 complete
+   [Sync] starting Phase 2 for userId ...
+   [Sync P2] Upserting N segment rows   ← N should be > 0
+   [Sync P2] Phase 2 complete
+   [Sync] Phase 2 complete — reloading segments
+   [Segments] Loaded N segments from Supabase
+   ```
+5. Phase 2 takes ~2.5 minutes (1.5s × 100 activities)
+6. After completion: Segments tab should show real segments, not the 5 Bay Area preview segments
+7. Acceptance criteria (from `skills/testing.md`): at least one segment scores above 0.5, strike labels display correctly
 
-Then tap the person.circle button in the app to trigger `syncPhase1()` and rewrite the 97 `fitness_snapshots` rows with corrected ±0.008 trend directions (upsert overwrites).
+If `[Sync P2] Upserting 0 segment rows` appears, it means rate limiting hit again before any activities were fetched — wait another 15 minutes and retry.
 
 ## Current app state
 
-- **Arc briefing + lookahead**: Live from Claude, using real 97-month fitness history
-- **Fitness data**: Almost all "Baseline" or "Recovering" — this is the real state of Chad's training history
-- **Segments tab**: Still running off `SegmentScore.previewSegments` — real segment data is Step 9
-- **Goal**: Restores from Supabase `goals` table on launch if previously set
-- **Sync trigger**: person.circle icon in ArcView header (temporary debug trigger; replace with settings sheet in Step 11)
+- **Arc**: Live briefing + lookahead from Claude, real 97-month fitness history
+- **Segments tab**: Will show real data after first successful Phase 2 sync; shows preview data until then
+- **Sync trigger**: person.circle icon in ArcView header (runs Phase 1 + Phase 2 sequentially)
+- **Phase 2**: 100-activity cap (placeholder — see build notes), 1.5s delay between calls
 
-## Step 9: Historical Sync Phase 2 + Segment Scoring
+## Step 10: Strava Webhooks
 
-### Before writing any code
+Before writing any code, read:
+1. `CLAUDE.md` — orientation and all build notes
+2. `PRD.MD` Section 6 — webhook strategy (ongoing sync section)
+3. `skills/swift-patterns.MD`
 
-Read in this order:
-1. `CLAUDE.md` — full orientation, hard rules, build notes
-2. `PRD.MD` Section 6 — Phase 2 sync (`GET /activities/{id}?include_all_efforts=true`)
-3. `PRD.MD` Section 5 — `segment_scores` table schema
-4. `skills/testing.md` — SegmentScorer test requirements
-5. `skills/swift-patterns.MD` — data flow section
+Then present a written plan and get approval before writing code.
 
-Then **present a written plan to Chad and get approval before writing any code**.
+### What Step 10 builds
 
-### What Step 9 builds
+Real-time new activity handling via Strava webhooks:
+- Supabase Edge Function receives Strava webhook POST
+- Fetches the new activity detail
+- Updates current month's `fitness_snapshot` (upsert)
+- Re-scores affected segments
+- Triggers Arc regeneration if significant fitness change
 
-**1. `Utils/SegmentScorer.swift`** (pure static enum, parallel to `FitnessCalculator`)
-- Input: segment effort data (prSeconds, prDate, fitnessValueAtPR, currentFitnessValue, currentTrend)
-- Output: `strike_score` (0.0–1.0) and `strikeLabel`
-- Strike thresholds: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready"
-- Write `SegmentScorerTests.swift` alongside it
+This requires a Supabase Edge Function (Deno/TypeScript) — first non-Swift code in the project. The Edge Function receives the webhook, calls back to Strava for activity detail, does the computation, and writes to Supabase tables.
 
-**2. Extend `SyncService`** — add `syncPhase2(userId:)`
-- Fetches `GET /activities/{id}?include_all_efforts=true` for all cycling activities
-- Extracts `segment_efforts` array; reads `segment.athlete_pr_effort` for PR data
-- For each segment: looks up `fitness_value_at_pr` from `fitness_snapshots` by month of `pr_achieved_at`
-- Runs `SegmentScorer` to compute `strike_score` and `strikeLabel`
-- Upserts to `segment_scores` table
-- Must run as background task — add 0.1s delay between requests (rate limit: 200 req/15 min)
+### First thing to do
 
-**3. Wire `AppState`** — add `syncPhase2()` method, expose `isSyncingPhase2` progress flag. After Phase 2 completes, call `loadContext()` so real segments populate in the UI.
+Read PRD.MD Section 6 (ongoing sync / webhook strategy) carefully before planning — the webhook flow involves Supabase Edge Functions which is new territory for this project.
 
-**4. Wire `SegmentsView` + `SegmentDetailView`** — switch from `SegmentScore.previewSegments` to real Supabase data fetched via `SupabaseService.fetchSegmentScores(userId:)`. These views exist but show preview data.
+## Decisions made this session
 
-**5. Fix `requiredFitnessLabel` in `AppState.setGoal`** — currently uses `segment.fitnessValueAtPR` directly (known placeholder). Fix using `SegmentScorer`'s derived required fitness logic.
-
-### Key spec details for Step 9
-
-- Segment PR data source: `activity.segment_efforts[].segment.athlete_pr_effort.pr_elapsed_time` and `.start_date_local` — NOT from a separate endpoint
-- `fitness_value_at_pr`: look up `fitness_snapshots` row where `month` matches `YYYY-MM` of `pr_achieved_at`
-- `current_fitness_value`: use `athleteContext.currentFitnessValue` at time of computation
-- Rate limit: add `try? await Task.sleep(nanoseconds: 100_000_000)` between Phase 2 activity fetches
-- Phase 2 is background — don't block UI; `isSyncingPhase2` flag drives any progress indicator
-
-### Known issues to resolve in Step 9
-
-- `requiredFitnessLabel` in `AppState.setGoal` is a placeholder (see CLAUDE.md build note)
-- `appState.segments` still uses `.previewSegments` — replace with live Supabase data
-
-## Decisions made this session not yet in PRD.MD / CLAUDE.md
-
-All decisions from this session are now reflected in CLAUDE.md and PRD.MD. Key ones:
-- `recent_weeks` in contextPayload is empty array placeholder — deferred to Step 10
-- `days_since_last_ride` uses `users.last_activity_date` (qualifying cycling rides only)
-- Briefing/lookahead regenerate on every launch — caching with UserDefaults is Step 12
-
-## First file to open
-
-`EnzoApp/Utils/SegmentScorer.swift` — it doesn't exist yet, create it.
+- Phase 2 activity limit = 100 (proof of concept placeholder; TODO comment in `SyncService.phase2ActivityLimit`)
+- Delay between Phase 2 calls = 1.5s (was 0.1s — hit rate limits)
+- Phase 1 chains into Phase 2 automatically (single button does both)
+- `fitness_value_at_pr` lookup: fetch all fitness snapshots once at start of Phase 2, use as dictionary keyed by "YYYY-MM"
+- Supabase upsert needs explicit `?on_conflict=` columns in URL — applied to both `fitness_snapshots` and `segment_scores`
