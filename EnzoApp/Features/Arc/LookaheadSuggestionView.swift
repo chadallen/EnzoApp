@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LookaheadSuggestionView: View {
     let text: String
+    var isLoading: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -11,11 +12,18 @@ struct LookaheadSuggestionView: View {
                 .textCase(.uppercase)
                 .tracking(1)
 
-            Text(text)
-                .font(.system(.body))
-                .foregroundStyle(Color.enzoPrimary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
+            if text.isEmpty {
+                Text("Working out what makes sense...")
+                    .font(.system(.body))
+                    .foregroundStyle(Color.enzoSecondary)
+                    .italic()
+            } else {
+                Text(text)
+                    .font(.system(.body))
+                    .foregroundStyle(Color.enzoPrimary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text("A suggestion, not a plan. Adjust freely.")
                 .font(.system(.caption, design: .rounded))
