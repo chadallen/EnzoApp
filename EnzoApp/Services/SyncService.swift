@@ -272,8 +272,10 @@ actor SyncService {
         let isoBasic = ISO8601DateFormatter()
 
         for activity in recentActivities {
-            // Rate limit: 0.1s between detail fetches.
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            // Rate limit: Strava allows 200 req/15 min (~0.22 req/sec).
+            // 1.5s delay = ~0.67 req/sec — comfortably under limit, ~2.5 min for 100 activities.
+            // TODO: Production needs batch pausing (sleep 15 min after 200 calls) for full history.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
 
             let detail: StravaDetailActivity
             do {
