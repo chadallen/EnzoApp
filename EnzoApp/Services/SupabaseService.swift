@@ -151,6 +151,71 @@ actor SupabaseService {
         return try await upsert(urlString: urlString, row: row)
     }
 
+    /// Deactivates all current active goals for the user, then inserts a new active goal.
+    /// Uses a separate insert-only struct to avoid sending a null `id` field (which would
+    /// conflict with PostgreSQL's NOT NULL constraint on the auto-generated primary key).
+    func saveGoal(
+        userId: UUID,
+        segmentName: String,
+        targetDate: Date?,
+        requiredFitnessLabel: String,
+        requiredFitnessValue: Double
+    ) async throws {
+        // Deactivate existing active goals
+        let deactivateURL = "\(baseURL)/goals?user_id=eq.\(userId.uuidString.lowercased())&is_active=eq.true"
+        var deactivateReq = try makeRequest(urlString: deactivateURL)
+        deactivateReq.httpMethod = "PATCH"
+        deactivateReq.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        deactivateReq.httpBody = try JSONEncoder().encode(["is_active": false])
+        _ = try? await URLSession.shared.data(for: deactivateReq)
+
+        // Insert new active goal (no id field — Supabase auto-generates it)
+        struct GoalInsert: Encodable {
+            let userId: String
+            let rawDescription: String
+            let goalType: String
+            let targetSegmentName: String
+            let targetDate: String?
+            let requiredFitnessLabel: String
+            let requiredFitnessValue: Double
+            let isActive: Bool
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case rawDescription = "raw_description"
+                case goalType = "goal_type"
+                case targetSegmentName = "target_segment_name"
+                case targetDate = "target_date"
+                case requiredFitnessLabel = "required_fitness_label"
+                case requiredFitnessValue = "required_fitness_value"
+                case isActive = "is_active"
+            }
+        }
+
+        let insert = GoalInsert(
+            userId: userId.uuidString.lowercased(),
+            rawDescription: segmentName,
+            goalType: "segment_pr",
+            targetSegmentName: segmentName,
+            targetDate: targetDate.map { Self.dateFormatter.string(from: $0) },
+            requiredFitnessLabel: requiredFitnessLabel,
+            requiredFitnessValue: requiredFitnessValue,
+            isActive: true
+        )
+
+        let urlString = "\(baseURL)/goals"
+        var request = try makeRequest(urlString: urlString)
+        request.httpMethod = "POST"
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(insert)
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw SupabaseError.httpError(code, nil)
+        }
+    }
+
     // MARK: - Private helpers
 
     private func makeRequest(urlString: String) throws -> URLRequest {

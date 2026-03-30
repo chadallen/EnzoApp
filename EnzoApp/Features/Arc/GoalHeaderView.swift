@@ -25,6 +25,22 @@ struct GoalHeaderView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if goal.segmentName.isEmpty {
+                emptyGoalState
+            } else {
+                goalContent
+            }
+        }
+        .padding()
+        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+        .sheet(isPresented: $showingGoalSetting) {
+            GoalSettingView()
+                .environment(appState)
+        }
+    }
+
+    private var goalContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
             // Line 1: Segment name
             Text(String(goal.segmentName.prefix(24)) + " PR")
                 .font(.system(.title2, design: .rounded, weight: .bold))
@@ -48,11 +64,28 @@ struct GoalHeaderView: View {
             .foregroundStyle(Color.enzoSecondary)
             .padding(.top, 4)
         }
-        .padding()
-        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
-        .sheet(isPresented: $showingGoalSetting) {
-            GoalSettingView()
-                .environment(appState)
+    }
+
+    private var emptyGoalState: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No goal set")
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(Color.enzoPrimary)
+
+            Text(context.currentFitnessLabel + " " + trendArrow)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(fitnessLabelColor)
+
+            Text("Pick a segment to chase.")
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+
+            Button("Set a goal") {
+                showingGoalSetting = true
+            }
+            .font(.system(.caption, design: .rounded))
+            .foregroundStyle(Color.enzoAccent)
+            .padding(.top, 4)
         }
     }
 }
