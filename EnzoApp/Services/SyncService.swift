@@ -228,7 +228,7 @@ actor SyncService {
         let startDateLocal: String
 
         enum CodingKeys: String, CodingKey {
-            case prElapsedTime  = "pr_elapsed_time"
+            case prElapsedTime  = "elapsed_time"   // Strava field is "elapsed_time", not "pr_elapsed_time"
             case startDateLocal = "start_date_local"
         }
     }
