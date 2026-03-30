@@ -2,83 +2,90 @@
 
 ## What was completed this session
 
-Step 5: Supabase schema + models (commits 26126da → c64f6e9)
+Step 6: Strava OAuth (commits 7fb5e03 → 65420e7)
 
-- `26126da` — Added `FitnessSnapshotRow` Codable DTO (`Models/FitnessSnapshot+Supabase.swift`)
-- `92a86e3` — Added `SegmentScoreRow` Codable DTO (`Models/SegmentScore+Supabase.swift`)
-- `7656a4a` — Added `GoalRow` Codable DTO (`Models/Goal+Supabase.swift`)
-- `d4acf7e` — Created `SupabaseService` actor with REST read/write for fitness_snapshots, segment_scores, goals
-- `2e32e16` — `SupabaseServiceTests.swift`: 9 Codable unit tests + integration test (gated behind env var)
-- `c64f6e9` — Marked Step 5 complete in CLAUDE.md
+- `7fb5e03` — Register `enzo://` URL scheme in `Info.plist` for OAuth redirect
+- `4e90227` — Update PRD: Strava redirect URI is `enzo://oauth`, callback domain is `oauth`
+- `33b7180` — Add `KeychainHelper`: save/load/delete for `kSecClassGenericPassword` + Strava key constants
+- `4c8d445` — Add `KeychainHelperTests`: save/load/delete/overwrite round-trip tests (7 tests)
+- `efc3982` — Add `StravaService`: OAuth URL builder, `ASWebAuthenticationSession` flow, token exchange, refresh, athlete fetch
+- `d880db6` — Add `StravaServiceTests`: URL construction and token/athlete JSON decoding (8 tests)
+- `046f990` — Add `SupabaseService.createUser`: upsert users row by `strava_athlete_id`, return UUID
+- `da93cc1` — Wire `AppState`: `isAuthenticated`, `stravaAthleteId`, `authenticate()` via `StravaService` + `SupabaseService`
+- `65420e7` — Fix test files: add `Foundation` import for `UUID`, `URLComponents`, `JSONDecoder`
 
-Build succeeds. 19 tests pass (was 10, now 19). Supabase tables exist and are accessible. Integration test confirmed working after exporting `SUPABASE_INTEGRATION_TESTS=1` then running xcodebuild.
+Build succeeds. **34 tests pass** (was 19; added 7 Keychain + 8 Strava tests). App still launches into ArcView with hardcoded data — no auth gating yet.
+
+**One action required before OAuth will work:**
+Go to [developers.strava.com](https://developers.strava.com) → My API Application → change the "Authorization Callback Domain" from `localhost` to `oauth`. The `enzo://oauth` redirect cannot be intercepted until this is updated.
 
 ---
 
-## What comes next: Step 6 — Strava OAuth
+## What comes next: Step 7 — Historical Sync Phase 1
 
 ### Before writing any code, read these in order
 
-1. **`CLAUDE.md`** — full orientation, build notes (especially the Strava client ID note at the bottom), hard rules
-2. **`PRD.MD` Section 6** — Strava OAuth flow details, redirect URI, token storage, athlete profile fetch
-3. **`PRD.MD` Section 17** — build order, Step 6 definition
-4. **`skills/swift-patterns.MD`** — service layer patterns
-5. **`skills/testing.md`** — acceptance criteria: Step 6 requires access token stored in Keychain + athlete profile fetched
+1. **`CLAUDE.md`** — orientation and build notes (especially the Strava data flow rules)
+2. **`PRD.MD` Section 6** — Sync Strategy (Phase 1 details starting at "Activity list + HR")
+3. **`PRD.MD` Section 5** — Fitness computation model (efficiency formula, filtering rules, monthly snapshots)
+4. **`PRD.MD` Section 12** — Fitness Computation Detail (full algorithm)
+5. **`skills/swift-patterns.MD`** — data flow section (`Strava → Supabase`)
+6. **`skills/testing.md`** — `FitnessCalculator` test requirements
 
-### What Step 6 involves
+### What Step 7 involves
 
-**Before writing any code — confirm with Chad:**
-- `STRAVA_CLIENT_ID` is currently empty in `Config/Debug.xcconfig`. Chad needs to add it. Find it in the Strava API settings for the app (developers.strava.com → My API Application).
-- The Strava app must have a redirect URI registered. The standard iOS pattern is a custom URL scheme like `enzo://strava-oauth`. Confirm Chad's registered redirect URI.
+**`FitnessCalculator.swift`** — new file in `Utils/`. Pure functions, no actors:
+- `activityLoad(durationHours:avgHR:)` — computes per-ride efficiency: `adjusted_distance / (duration_hours × avg_hr)`
+- `monthlySnapshots(from activities:)` — groups rides by month, computes monthly avg efficiency + hours + ride count
+- `fitnessValue(monthEfficiency:historicalMin:historicalMax:)` — normalizes to 0.0–1.0
+- `fitnessLabel(for:)` — same thresholds as `AthleteContext.fitnessLabel(for:)`
+- `trendDirection(snapshots:)` — rate of change over last 4 weeks vs prior 4 weeks
 
-**Swift side:**
-- `StravaService.swift` — already a placeholder in `Services/`. Fill it in as a Swift `actor`, same pattern as `ClaudeService` and `SupabaseService`.
-- `KeychainHelper.swift` — already a placeholder in `Utils/`. Implement `save(_:for:)`, `load(for:)`, `delete(for:)` using `Security` framework (`kSecClassGenericPassword`).
-- OAuth flow:
-  1. Build the Strava authorization URL with `client_id`, `redirect_uri`, `response_type=code`, `scope=read,activity:read_all`
-  2. Open it via `ASWebAuthenticationSession` (no SFSafariViewController — ASWebAuth is the correct iOS pattern for OAuth)
-  3. Capture the `code` from the redirect URI callback
-  4. Exchange `code` for `access_token` + `refresh_token` via POST to `https://www.strava.com/oauth/token`
-  5. Store both tokens in Keychain via `KeychainHelper`
-  6. Fetch athlete profile: `GET https://www.strava.com/api/v3/athlete` with `Authorization: Bearer <access_token>`
-  7. Create a `users` row in Supabase with `strava_athlete_id` and `display_name`
-- Token refresh: implement `refreshTokenIfNeeded()` — check expiry before every Strava API call, refresh if expired using the refresh token
+**`FitnessCalculatorTests.swift`** — write alongside, all tests in the spec's testing skill.
 
-**AppState wiring:**
-- Add `isAuthenticated: Bool` and `stravaAthleteId: Int?` to `AppState`
-- The app still launches into ArcView (no auth gating yet — that's Step 11 Onboarding)
-- Step 6 just establishes that auth works; the UI doesn't change
+**`SyncService.swift`** — new file in `Services/`. Swift actor:
+- `syncPhase1(athleteId:)` — paginates `GET /athlete/activities` at 200/page
+- Filters to cycling sport types: `Ride`, `VirtualRide`, `MountainBikeRide`, `GravelRide`, `EMountainBikeRide`
+- Excludes rides < 30 minutes or no HR data
+- Calls `FitnessCalculator` in-memory
+- Writes `FitnessSnapshotRow`s to Supabase
+- Discards raw activity data
+- Uses `StravaService.refreshTokenIfNeeded()` before any Strava API call
 
-**Testing:**
-- `KeychainHelperTests.swift` — unit test save/load/delete round-trip
-- `StravaServiceTests.swift` — unit test URL construction, token parsing
+**`AppState`** — add `syncPhase1()` method that calls through `SyncService`. App does not change launch behavior.
 
-### Key things to NOT do in Step 6
-- Don't build an onboarding screen yet — that's Step 11
-- Don't start syncing activities yet — that's Step 7
-- Don't change the app's launch flow — still goes directly to ArcView
+**Testing acceptance criterion:** Fitness snapshots written to Supabase match expected values from known activities. You can verify with known Chad activities once the sync actually runs.
 
-### Acceptance criteria (from skills/testing.md)
-- Access token stored in Keychain after OAuth flow completes
-- Athlete profile fetched and `display_name` + `strava_athlete_id` accessible
-- `users` row created in Supabase
+### Key things to NOT do in Step 7
+- Don't start Phase 2 (segment efforts) — that's Step 9
+- Don't change the app's launch flow
+- Don't display live data in the UI yet — that's Step 8
+
+### Strava API details for Phase 1
+- Endpoint: `GET https://www.strava.com/api/v3/athlete/activities`
+- Params: `per_page=200`, `page=N`
+- Stop paginating when response has < 200 items
+- Each `SummaryActivity` includes `average_heartrate` directly — no per-activity calls needed
+- Fields to extract: `id`, `start_date`, `moving_time`, `distance`, `sport_type`, `has_heartrate`, `average_heartrate`, `trainer`, `total_elevation_gain`
 
 ---
 
-## Bugs carried forward (do not fix in Step 6)
+## Bugs carried forward
 
-- `GoalSettingView` preview for the "segment selected" state uses placeholder Enzo copy — fix in Step 11 Enzo voice review
+- `GoalSettingView` preview for "segment selected" state uses placeholder Enzo copy — fix in Step 11
 - `AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly, so Hawk Hill shows "Epic fitness needed" instead of "Strong" — fix in Step 9 when `SegmentScorer` is built
+- Swift 6 concurrency warnings in `StravaService` and `SupabaseService` (from `Bundle.main` / `@MainActor` `Config` properties) — warnings only, not errors; fix in a cleanup pass
 
 ---
 
 ## Decisions from this session (recorded in CLAUDE.md Build Notes)
 
-- `SupabaseService` uses URLSession REST directly (no SDK) — same pattern as ClaudeService
-- Codable row DTOs live in `+Supabase.swift` extension files alongside domain models
-- `FitnessSnapshot.month` stored as "YYYY-MM-01" in Postgres (date type), trimmed back to "YYYY-MM" on read
-- RLS is disabled on all Supabase tables (dev-only) — will add policies in Step 6 scoped to authenticated users
-- Integration test env var must be `export`ed in shell before xcodebuild; `VAR=value xcodebuild` prefix doesn't reach the simulator process; `-testenv` flag is not valid on this Xcode version
+- Strava redirect URI is `enzo://oauth`; `enzo` registered as a URL type in `Info.plist`
+- `STRAVA_CLIENT_ID = 217529` in `Debug.xcconfig` (gitignored)
+- In Strava API settings the callback domain must be `oauth` (not `localhost`)
+- `KeychainHelper` is an enum with static methods; `Security` framework only — no UI deps
+- `StravaService.authenticate(presentingFrom:)` takes `ASWebAuthenticationPresentationContextProviding` — the calling view must conform to this protocol (done in Step 11 Onboarding when the "Connect Strava" button is built)
+- `AppState.init()` restores `isAuthenticated`/`stravaAthleteId` from Keychain on launch
 
 ---
 
@@ -88,4 +95,4 @@ Build succeeds. 19 tests pass (was 10, now 19). Supabase tables exist and are ac
 CLAUDE.md
 ```
 
-Then ask Chad for `STRAVA_CLIENT_ID` and the registered redirect URI before opening any Swift files.
+Then `PRD.MD` Section 12 (Fitness Computation Detail) — that's the most complex part of Step 7 and you want to understand the algorithm before touching `FitnessCalculator.swift`.
