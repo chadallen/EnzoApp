@@ -43,7 +43,7 @@ These inform every product, UI, and copy decision:
 * **Primary language:** Swift / SwiftUI
 * **Target platform:** iOS 17+, iPhone only (iPad later)
 * **Backend:** Supabase (Postgres + Edge Functions)
-* **AI:** Anthropic Claude API (`claude-sonnet-4-20250514`)
+* **AI:** Anthropic Claude API (`claude-sonnet-4-6`)
 * **Data source:** Strava API (OAuth 2.0)
 * **Assumed user:** Established cyclists with meaningful Strava history. The fitness model requires sufficient ride data to produce reliable signals — riders with fewer than ~100 rides or less than a year of history will see reduced accuracy. Enzo is not designed for beginners.
 
@@ -63,7 +63,7 @@ These inform every product, UI, and copy decision:
 | Networking | `URLSession` + `async/await` | No third-party HTTP library |
 | Auth | Strava OAuth 2.0 | Tokens stored in iOS Keychain |
 | Backend | Supabase (Postgres) | Derived metrics only, never raw Strava data |
-| AI | Anthropic Claude API | `claude-sonnet-4-20250514`, streaming enabled |
+| AI | Anthropic Claude API | `claude-sonnet-4-6`, streaming enabled |
 | Local storage | `UserDefaults` (preferences) + Keychain (tokens) | No CoreData for MVP |
 
 ### Beyond MVP
@@ -361,7 +361,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form. All
 
 ```swift
 let claudeAPIURL = "https://api.anthropic.com/v1/messages"
-let claudeModel = "claude-sonnet-4-20250514"
+let claudeModel = "claude-sonnet-4-6"
 let claudeMaxTokens = 1024
 // API key in Keychain only, never hardcoded
 ```
@@ -1013,22 +1013,7 @@ enum Config {
 
 ## 17. Build Order
 
-Follow this sequence. Each step produces something visible or testable before moving on.
-
-1. ✅ **Project setup** — Xcode project, Sweetpad config, 2-tab shell, secrets infrastructure
-2. ✅ **Arc UI (static)** — All Arc sections with hardcoded data. App launches directly into ArcView. No auth, no onboarding.
-3. ✅ **Claude wiring (hardcoded context)** — ArcInputBar wired to Claude API. Streaming working. System prompt tuned.
-4. **Goal setting UI** — GoalSettingView with Claude interpretation flow.
-5. **Supabase schema + models** — Create tables, Swift models, SupabaseService read/write.
-6. **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
-7. **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
-8. **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
-9. **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
-10. **Strava webhooks** — Real-time new activity handling.
-11. **Onboarding flow** — Connect screen, sync animation, goal setting as front door.
-12. **Polish pass** — Animations, empty states, error states, copy review, settings.
-
-> **Before starting Step 4:** Complete the model refactor described in Claude.MD Build Notes. Models must reflect the new fitness architecture before any new views are built against them.
+See Build Order section of Claude.MD
 
 ---
 

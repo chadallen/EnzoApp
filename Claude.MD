@@ -18,6 +18,23 @@ The full product spec is at `PRD.md`. Hardcoded preview data for Steps 1–5 is 
 - **Strava OAuth 2.0** for authentication and data access.
 - **No third-party dependencies** unless the spec explicitly names one.
 
+
+## Build Order
+
+Follow this sequence. Each step produces something visible or testable before moving on.
+
+1. ✅ **Project setup** — Xcode project, Sweetpad config, 2-tab shell, secrets infrastructure
+2. ✅ **Arc UI (static)** — All Arc sections with hardcoded data. App launches directly into ArcView. No auth, no onboarding.
+3. ✅ **Claude wiring (hardcoded context)** — ArcInputBar wired to Claude API. Streaming working. System prompt tuned.
+4. ✅ **Goal setting UI** — GoalSettingView with Claude interpretation flow.
+5. ✅ **Supabase schema + models** — Create tables, Swift models, SupabaseService read/write.
+6. **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
+7. **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
+8. **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
+9. **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
+10. **Strava webhooks** — Real-time new activity handling.
+11. **Onboarding flow** — Connect screen, sync animation, goal setting as front door.
+12. **Polish pass** — Animations, empty states, error states, copy review, settings.
 ---
 
 ## Hard Rules
@@ -54,14 +71,8 @@ The full product spec is at `PRD.md`. Hardcoded preview data for Steps 1–5 is 
 - No streaks. No missed workout tracking. No guilt mechanics of any kind.
 - Copy tone: warm, direct, forward-looking. See system prompt in spec Section 7.
 
-### Build Order
-Follow Section 17 of the spec exactly. Do not skip steps. Key checkpoints:
-- Steps 1–4: Hardcoded data only. App launches directly into ArcView. No auth flow, no onboarding.
-- Step 3: Claude API wired with hardcoded context payload — use values from Section 18.
-- Step 5: Supabase schema and models.
-- Step 6: Strava OAuth — first live API. Moved earlier because bulk export is not a viable dev fixture.
-- Steps 7–9: Real data sync, fitness computation, segment scoring.
-- Step 11: Onboarding flow — built last, after everything behind it works.
+
+
 
 ### Commits
 Commit after every discrete unit of work — not at the end of a session.
@@ -104,13 +115,17 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
 │   │   ├── FitnessSnapshot.swift     ← Identifiable by month string; .previewSnapshots (18 months)
+│   │   ├── FitnessSnapshot+Supabase.swift ← Step 5 ✓ — FitnessSnapshotRow Codable DTO; toSnapshot()
 │   │   ├── SegmentScore.swift        ← Identifiable+Hashable by name; .previewSegments (5 segments)
 │   │   │                                 filter(_:by:) for goal search
+│   │   ├── SegmentScore+Supabase.swift ← Step 5 ✓ — SegmentScoreRow Codable DTO; toSegmentScore()
+│   │   ├── Goal+Supabase.swift       ← Step 5 ✓ — GoalRow Codable DTO for goals table
 │   │   └── ArcMessage.swift          ← role: .enzo / .user
 │   ├── Services/
 │   │   ├── ClaudeService.swift       ← Step 3 ✓ — Swift actor; stream(_:context:) → AsyncStream<String>
 │   │   ├── StravaService.swift       ← Step 6
-│   │   ├── SupabaseService.swift     ← Step 5
+│   │   ├── SupabaseService.swift     ← Step 5 ✓ — Swift actor; fetch/upsert for fitness_snapshots,
+│   │   │                                 segment_scores, goals via URLSession REST (no SDK)
 │   │   └── SyncService.swift         ← Step 7
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
@@ -125,7 +140,9 @@ EnzoApp/                              ← repo root / VS Code workspace
 │       ├── Debug.xcconfig            ← gitignored — never commit
 │       └── Release.xcconfig          ← gitignored — never commit
 ├── EnzoAppTests/                     ← unit test target (PBXFileSystemSynchronizedRootGroup)
-│   └── GoalSettingTests.swift        ← Step 4 ✓ — filter + prompt tests (10 passing)
+│   ├── GoalSettingTests.swift        ← Step 4 ✓ — filter + prompt tests (10 passing)
+│   └── SupabaseServiceTests.swift    ← Step 5 ✓ — Codable DTO unit tests (9 passing) +
+│                                         integration test (gated on SUPABASE_INTEGRATION_TESTS=1)
 ├── .gitignore
 ├── CLAUDE.md
 ├── PRD.MD                            ← full product spec — source of truth
@@ -249,3 +266,17 @@ Lives in `Features/Arc/` for Steps 4–10. In Step 11 (Onboarding), it needs to 
 
 **requiredFitnessLabel in setGoal — known placeholder**
 `AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly. For Hawk Hill (0.98 → "Epic"), the header shows "Epic fitness needed" rather than the spec's "Strong". The correct derivation belongs in `SegmentScorer` (Step 9) and will be fixed then.
+**Supabase REST API (no SDK)**
+`SupabaseService` is a Swift `actor` using `URLSession` directly — no Supabase Swift SDK. Auth headers on every request: `apikey: <anon key>` and `Authorization: Bearer <anon key>`. Upserts use `POST` with `Prefer: resolution=merge-duplicates,return=representation` — this resolves unique constraint conflicts and returns the full inserted/updated row including its server-assigned UUID. The `return=representation` header is critical; without it, upserts return 204 with no body and decoding fails.
+
+**Codable row DTOs**
+`FitnessSnapshotRow`, `SegmentScoreRow`, `GoalRow` live in `Models/+Supabase.swift` files alongside their domain model counterparts. These are wire-format DTOs, not domain models — they map to DB column names (snake_case) via `CodingKeys`. `FitnessSnapshot.month` ("YYYY-MM") is stored as "YYYY-MM-01" (PostgreSQL `date` type); `toSnapshot()` trims the suffix back. `SegmentScoreRow.stravaSegmentId` is non-optional (required by DB) — SyncService provides it from Strava in Step 9.
+
+**Supabase RLS**
+All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies will be scoped to authenticated users in Step 6 when Strava OAuth is wired.
+
+**Integration test env var**
+The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
+
+**Strava client ID missing**
+`STRAVA_CLIENT_ID` is empty in `Config/Debug.xcconfig`. Chad needs to add it before Step 6 can proceed. The client secret is already set. Find the client ID in the Strava API settings for the app.
