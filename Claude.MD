@@ -28,8 +28,8 @@ Follow this sequence. Each step produces something visible or testable before mo
 3. ✅ **Claude wiring (hardcoded context)** — ArcInputBar wired to Claude API. Streaming working. System prompt tuned.
 4. ✅ **Goal setting UI** — GoalSettingView with Claude interpretation flow.
 5. ✅ **Supabase schema + models** — Create tables, Swift models, SupabaseService read/write.
-6. **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
-7. **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
+6. ✅ **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
+7. ✅ **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
 8. **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
 9. **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
 10. **Strava webhooks** — Real-time new activity handling.
@@ -126,12 +126,16 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── StravaService.swift       ← Step 6 ✓ — Swift actor; OAuth URL builder, ASWebAuthenticationSession,
 │   │   │                                 token exchange + storage, refreshTokenIfNeeded(), fetchAthlete()
 │   │   ├── SupabaseService.swift     ← Step 5 ✓ — Swift actor; fetch/upsert for fitness_snapshots,
-│   │   │                                 segment_scores, goals, createUser(stravaAthleteId:displayName:)
-│   │   └── SyncService.swift         ← Step 7
+│   │   │                                 segment_scores, goals, createUser(stravaAthleteId:displayName:),
+│   │   │                                 fetchUserId(stravaAthleteId:)
+│   │   └── SyncService.swift         ← Step 7 ✓ — Swift actor; syncPhase1(userId:), isQualifying(_:),
+│   │                                     computeSnapshots(from:userId:) [static, pure, testable]
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
 │   │   ├── KeychainHelper.swift      ← Step 6 ✓ — save/load/delete kSecClassGenericPassword; Strava key constants
-│   │   ├── FitnessCalculator.swift   ← Step 7
+│   │   │                                 + supabaseUserId constant (Step 7)
+│   │   ├── FitnessCalculator.swift   ← Step 7 ✓ — pure static enum; efficiency, fitnessValue,
+│   │   │                                 trendDirection, fitnessLabel, cyclingTypes
 │   │   ├── SegmentScorer.swift       ← Step 9
 │   │   └── Extensions/
 │   │       ├── Color+Hex.swift       ← Color(hex: "RRGGBB") initializer
@@ -145,7 +149,9 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── SupabaseServiceTests.swift    ← Step 5 ✓ — Codable DTO unit tests (9 passing) +
 │   │                                     integration test (gated on SUPABASE_INTEGRATION_TESTS=1)
 │   ├── KeychainHelperTests.swift     ← Step 6 ✓ — save/load/delete/overwrite round-trip (7 passing)
-│   └── StravaServiceTests.swift      ← Step 6 ✓ — URL construction + token/athlete JSON decoding (8 passing)
+│   ├── StravaServiceTests.swift      ← Step 6 ✓ — URL construction + token/athlete JSON decoding (8 passing)
+│   ├── FitnessCalculatorTests.swift  ← Step 7 ✓ — efficiency, fitnessValue, trend, label (18 passing)
+│   └── SyncServiceTests.swift        ← Step 7 ✓ — qualifying filter, computeSnapshots pipeline (23 passing)
 ├── .gitignore
 ├── CLAUDE.md
 ├── PRD.MD                            ← full product spec — source of truth
@@ -174,7 +180,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 4: Goal setting UI
 - [x] Step 5: Supabase schema + models
 - [x] Step 6: Strava OAuth
-- [ ] Step 7: Historical sync Phase 1 (activities + fitness computation)
+- [x] Step 7: Historical sync Phase 1 (activities + fitness computation)
+
 - [ ] Step 8: Context payload + Arc content generation (live Enzo)
 - [ ] Step 9: Historical sync Phase 2 + segment scoring
 - [ ] Step 10: Strava webhooks
@@ -291,6 +298,21 @@ SUPABASE_HOST = hizswbzxwfxddocryvci.supabase.co
 SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 ```
 Apply this pattern to ANY URL stored in xcconfig. `$()` expands to empty string at build time, so the final value is `https://hizswbzxwfxddocryvci.supabase.co`. This is already applied in `Debug.xcconfig` — apply the same to `Release.xcconfig` before Step 8.
+
+**Step 7: lazy var incompatible with @Observable**
+`lazy var` in a `@MainActor @Observable` class causes a compiler error because `@Observable` generates init accessors that can't reference lazy properties. Pattern: initialize services that depend on other services inside `init()` by creating local `let` bindings first, then assigning to stored `let` properties. `SyncService` follows this pattern in `AppState.init()`.
+
+**SyncService fitness computation**
+`SyncService.computeSnapshots(from:userId:)` is a static, pure function — testable without network. Each month's `FitnessSnapshotRow` uses a 2-month rolling window for `fitnessValue`/`avgEfficiency`, and that month's rides only for `hoursRidden`/`activityCount`. Trend direction compares rides in the 4 weeks before month-end vs the prior 4 weeks. Months with no prior-window rides default to `"flat"`.
+
+**supabaseUserId storage**
+Step 6 discarded the UUID returned by `supabaseService.createUser()`. Fixed in Step 7: stored in `AppState.supabaseUserId` and persisted to Keychain under `KeychainHelper.supabaseUserId = "supabase_user_id"`. Restored from Keychain in `AppState.init()`. Required for `syncPhase1()` to know which user row to write snapshots under.
+
+**NSLog vs print() for Sweetpad/device log**
+When running via Sweetpad (not Xcode), `print()` goes to stdout and does NOT appear in the iOS unified log stream. Use `NSLog()` for any logging that needs to be visible via `log stream --predicate 'process == "EnzoApp"'`. All sync logging in `AppState.syncPhase1()` uses `NSLog` for this reason.
+
+**Step 7 smoke test results**
+First sync wrote 97 rows to `fitness_snapshots`. All rows have `trend_direction = "flat"` — the ±0.05 threshold in `FitnessCalculator.trendDirection` may need tuning against real ride data. Step 8 task: look at the actual efficiency values across months before wiring the live UI, and adjust the threshold if labels don't match intuition.
 
 **Swift 6 concurrency warnings**
 Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
