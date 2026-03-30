@@ -36,6 +36,47 @@ actor SupabaseService {
         return try await upsert(urlString: urlString, row: row)
     }
 
+    // MARK: - Users
+
+    func createUser(stravaAthleteId: Int64, displayName: String) async throws -> UUID {
+        struct UserRow: Codable {
+            let stravaAthleteId: Int64
+            let displayName: String
+
+            enum CodingKeys: String, CodingKey {
+                case stravaAthleteId = "strava_athlete_id"
+                case displayName = "display_name"
+            }
+        }
+
+        struct UserRowResponse: Decodable {
+            let id: UUID
+        }
+
+        let urlString = "\(baseURL)/users"
+        var request = try makeRequest(urlString: urlString)
+        request.httpMethod = "POST"
+        request.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try JSONEncoder().encode(UserRow(stravaAthleteId: stravaAthleteId, displayName: displayName))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let body = String(data: data, encoding: .utf8)
+            throw SupabaseError.httpError(statusCode, body)
+        }
+
+        do {
+            let rows = try JSONDecoder().decode([UserRowResponse].self, from: data)
+            guard let first = rows.first else { throw SupabaseError.emptyResponse }
+            return first.id
+        } catch {
+            throw SupabaseError.decodingFailed
+        }
+    }
+
     // MARK: - Goals
 
     func fetchActiveGoal(userId: UUID) async throws -> GoalRow? {
