@@ -20,7 +20,8 @@ actor SupabaseService {
     }
 
     func upsertFitnessSnapshot(_ row: FitnessSnapshotRow) async throws -> FitnessSnapshotRow {
-        let urlString = "\(baseURL)/fitness_snapshots"
+        // on_conflict tells Supabase which unique constraint to use for merge-duplicates resolution.
+        let urlString = "\(baseURL)/fitness_snapshots?on_conflict=user_id,month"
         return try await upsert(urlString: urlString, row: row)
     }
 
@@ -32,7 +33,8 @@ actor SupabaseService {
     }
 
     func upsertSegmentScore(_ row: SegmentScoreRow) async throws -> SegmentScoreRow {
-        let urlString = "\(baseURL)/segment_scores"
+        // on_conflict tells Supabase which unique constraint to use for merge-duplicates resolution.
+        let urlString = "\(baseURL)/segment_scores?on_conflict=user_id,strava_segment_id"
         return try await upsert(urlString: urlString, row: row)
     }
 
