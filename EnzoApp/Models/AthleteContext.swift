@@ -32,6 +32,102 @@ struct AthleteContext {
         }
     }
 
+    // MARK: - Factory: build from real Supabase data
+
+    /// Assembles a live AthleteContext from fetched snapshots and an optional goal row.
+    /// Pure function — no network, fully testable.
+    ///
+    /// - Parameters:
+    ///   - name: Athlete display name from Supabase users table.
+    ///   - snapshots: All fetched FitnessSnapshot rows, any order.
+    ///   - goalRow: Active GoalRow from Supabase, or nil if no goal is set.
+    ///   - lastActivityDate: Most recent qualifying ride date, used for days_since_last_ride.
+    static func build(
+        name: String,
+        snapshots: [FitnessSnapshot],
+        goalRow: GoalRow?,
+        lastActivityDate: Date?
+    ) -> AthleteContext {
+        let sorted = snapshots.sorted { $0.month < $1.month }
+
+        // Current fitness = most recent snapshot; fall back to zero if no data yet.
+        let current = sorted.last
+        let currentValue = current?.value ?? 0.0
+        let currentLabel = current?.label ?? "Recovering"
+        let currentTrend = current?.trend ?? "flat"
+
+        // Peak = snapshot with highest fitness value.
+        let peak = sorted.max(by: { $0.value < $1.value })
+        let peakLabel = peak?.label ?? "Recovering"
+        let peakMonth = peak.map { formatPeakMonth($0.month) } ?? "—"
+
+        // yearsActive: from first snapshot month to today.
+        let yearsActive: Int = {
+            guard let first = sorted.first,
+                  let firstDate = monthDate(from: first.month) else { return 0 }
+            let components = Calendar.current.dateComponents([.year], from: firstDate, to: Date())
+            return max(components.year ?? 0, 1)
+        }()
+
+        // totalActivities: sum of all snapshot ride counts.
+        let totalActivities = sorted.reduce(0) { $0 + $1.rides }
+
+        // days_since_last_ride: from lastActivityDate to today, or 0 if unknown.
+        let daysSinceLastRide: Int = {
+            guard let last = lastActivityDate else { return 0 }
+            let days = Calendar.current.dateComponents([.day], from: last, to: Date()).day ?? 0
+            return max(days, 0)
+        }()
+
+        // Reconstruct GoalContext from persisted GoalRow, or use a placeholder.
+        let goal: GoalContext = {
+            guard let row = goalRow,
+                  let segmentName = row.targetSegmentName else {
+                return GoalContext(
+                    segmentName: "—",
+                    requiredFitnessLabel: currentLabel,
+                    requiredFitnessValue: currentValue,
+                    targetDate: nil,
+                    weeksRemaining: nil
+                )
+            }
+            let requiredValue = row.requiredFitnessValue ?? currentValue
+            let requiredLabel = row.requiredFitnessLabel ?? fitnessLabel(for: requiredValue)
+            var targetDate: Date? = nil
+            var weeksRemaining: Int? = nil
+            if let dateStr = row.targetDate {
+                let f = DateFormatter()
+                f.dateFormat = "yyyy-MM-dd"
+                f.timeZone = TimeZone(identifier: "UTC")
+                targetDate = f.date(from: dateStr)
+                if let td = targetDate {
+                    let days = Calendar.current.dateComponents([.day], from: Date(), to: td).day ?? 0
+                    weeksRemaining = max(0, days / 7)
+                }
+            }
+            return GoalContext(
+                segmentName: segmentName,
+                requiredFitnessLabel: requiredLabel,
+                requiredFitnessValue: requiredValue,
+                targetDate: targetDate,
+                weeksRemaining: weeksRemaining
+            )
+        }()
+
+        return AthleteContext(
+            name: name,
+            yearsActive: yearsActive,
+            totalActivities: totalActivities,
+            currentFitnessLabel: currentLabel,
+            currentFitnessValue: currentValue,
+            trendDirection: currentTrend,
+            peakFitnessLabel: peakLabel,
+            peakFitnessMonth: peakMonth,
+            daysSinceLastRide: daysSinceLastRide,
+            goal: goal
+        )
+    }
+
     // MARK: - Hardcoded preview data (Section 18)
 
     static let preview = AthleteContext(
@@ -66,6 +162,24 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
 """
 
     static let previewChartContext = "Your peak was last August — your best in years. September dropped off sharply. You've been building back since October."
+
+    // MARK: - Private helpers
+
+    private static func formatPeakMonth(_ month: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        guard let date = f.date(from: month) else { return month }
+        let display = DateFormatter()
+        display.dateFormat = "MMMM yyyy"
+        return display.string(from: date)
+    }
+
+    private static func monthDate(from month: String) -> Date? {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f.date(from: month)
+    }
 
     // MARK: - Claude context payload
 
@@ -126,6 +240,7 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
             "goal": goalDict,
             "fitness_history": fitnessHistory,
             "top_segments": topSegments,
+            "recent_weeks": [[String: Any]](),   // populated in Step 10 (webhooks)
             "days_since_last_ride": daysSinceLastRide
         ]
         if !peakDict.isEmpty {
