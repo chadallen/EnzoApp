@@ -79,8 +79,7 @@ struct GoalHeaderView: View {
         switch days {
         case 0: return "today"
         case 1: return "1 day to go"
-        case 2...6: return "\(days) days to go"
-        case 7...13: return "1 week to go"
+        case 2...13: return "\(days) days to go"
         default: return "\(days / 7) weeks to go"
         }
     }
