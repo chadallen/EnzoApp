@@ -220,6 +220,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 
 Small things noted during sessions but not worth stopping for. Pick these up in a future polish pass.
 
+- **Dark header on Targets tab** — tried Option A (black `enzoPrimary` header background with white text) as a high-contrast alternative to the accent tint. No other screen uses that level of contrast yet, so deferred. Revisit when more of the app's visual language is settled.
 - **Sync progress indicator during manual sync** — when sync is triggered from SettingsSheet and the sheet is dismissed, there's no visible indicator in the main UI. Could be a subtle activity indicator in the top bar while `isSyncingPhase2` is true.
 - **FitnessChartView axis polish** — x-axis label overlap at some timeframes, Y-axis labels hidden. Attempted in the Today tab UI session, reverted due to alignment issues on device. Needs dedicated time.
 - **`phase2ActivityLimit` still at 25** — raise to 100+ once smoke tests on distance/elevation data look clean.
