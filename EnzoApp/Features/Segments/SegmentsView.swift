@@ -25,59 +25,65 @@ struct SegmentsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.enzoBg.ignoresSafeArea()
+        VStack(spacing: 0) {
+            if !sortedSegments.isEmpty {
+                sortBar
+            }
 
-                if sortedSegments.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "figure.outdoor.cycle")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Color.enzoSecondary)
-                        Text("No segments yet")
-                            .font(.system(.headline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.enzoPrimary)
-                        Text("Enzo will find your best opportunities once your rides sync.")
-                            .font(.system(.body))
-                            .foregroundStyle(Color.enzoSecondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(sortedSegments) { segment in
-                            NavigationLink(value: segment) {
-                                SegmentStrikeRow(segment: segment)
-                            }
-                            .listRowBackground(Color.enzoCard)
-                            .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+            if sortedSegments.isEmpty {
+                emptyState
+            } else {
+                List {
+                    ForEach(sortedSegments) { segment in
+                        NavigationLink(value: segment) {
+                            SegmentStrikeRow(segment: segment)
                         }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                }
-            }
-            .navigationTitle("Segments")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Color.enzoBg, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        ForEach(SortOrder.allCases, id: \.self) { order in
-                            Button(order.rawValue) { sortOrder = order }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .foregroundStyle(Color.enzoAccent)
+                        .listRowBackground(Color.enzoCard)
+                        .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
                     }
                 }
-            }
-            .navigationDestination(for: SegmentScore.self) { segment in
-                SegmentDetailView(segment: segment)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
+        .navigationDestination(for: SegmentScore.self) { segment in
+            SegmentDetailView(segment: segment)
+        }
+    }
+
+    private var sortBar: some View {
+        HStack {
+            Spacer()
+            Menu {
+                ForEach(SortOrder.allCases, id: \.self) { order in
+                    Button(order.rawValue) { sortOrder = order }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(.subheadline))
+                    .foregroundStyle(Color.enzoAccent)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+        }
+        .background(Color.enzoBg)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "figure.outdoor.cycle")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.enzoSecondary)
+            Text("No segments yet")
+                .font(.system(.headline, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.enzoPrimary)
+            Text("Enzo will find your best opportunities once your rides sync.")
+                .font(.system(.body))
+                .foregroundStyle(Color.enzoSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -141,6 +147,8 @@ struct SegmentStrikeRow: View {
 }
 
 #Preview {
-    SegmentsView()
-        .environment(AppState())
+    NavigationStack {
+        SegmentsView()
+            .environment(AppState())
+    }
 }

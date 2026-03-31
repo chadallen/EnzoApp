@@ -4,7 +4,6 @@ struct ArcView: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
-    @State private var showSettings = false
 
     private var context: AthleteContext { appState.athleteContext }
     private var showThread: Bool { !appState.arcMessages.isEmpty || appState.isStreaming }
@@ -12,39 +11,7 @@ struct ArcView: View {
     var body: some View {
         ZStack {
             Color.enzoBg.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                header
-
-                GoalHeaderView(context: context)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-
-                Divider()
-                    .background(Color.enzoSecondary.opacity(0.1))
-
-                if let errorMessage = appState.syncErrorMessage {
-                    HStack(spacing: 8) {
-                        Text(errorMessage)
-                            .font(.system(.caption))
-                            .foregroundStyle(Color.enzoAmber)
-                        Spacer()
-                        Button {
-                            Task { await appState.syncPhase1() }
-                        } label: {
-                            Text("Retry")
-                                .font(.system(.caption, weight: .semibold))
-                                .foregroundStyle(Color.enzoAmber)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(Color.enzoAmber.opacity(0.08))
-                }
-
-                scrollContent
-            }
+            scrollContent
         }
         .safeAreaInset(edge: .bottom) {
             inputArea
@@ -59,40 +26,39 @@ struct ArcView: View {
         }
     }
 
-    // MARK: - Sub-views
-
-    private var header: some View {
-        HStack {
-            Text("Enzo")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.enzoPrimary)
-            Spacer()
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.enzoSecondary)
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsSheet()
-                    .environment(appState)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-    }
+    // MARK: - Scroll content
 
     private var scrollContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
+                    GoalHeaderView(context: context)
+                        .padding(.top, 12)
+
+                    if let errorMessage = appState.syncErrorMessage {
+                        HStack(spacing: 8) {
+                            Text(errorMessage)
+                                .font(.system(.caption))
+                                .foregroundStyle(Color.enzoAmber)
+                            Spacer()
+                            Button {
+                                Task { await appState.syncPhase1() }
+                            } label: {
+                                Text("Retry")
+                                    .font(.system(.caption, weight: .semibold))
+                                    .foregroundStyle(Color.enzoAmber)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color.enzoAmber.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                    }
+
                     ArcBriefingView(
                         text: appState.briefingText,
                         isLoading: appState.isGeneratingBriefing
                     ) {
-                        Task { await appState.generateBriefing() }
+                        Task { await appState.generateBriefing(forceRefresh: true) }
                     }
 
                     LookaheadSuggestionView(
@@ -117,7 +83,7 @@ struct ArcView: View {
                     Color.clear.frame(height: 100).id("bottom")
                 }
                 .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.top, 4)
             }
             .onAppear { scrollProxy = proxy }
             .onChange(of: appState.arcMessages.count) {
@@ -161,7 +127,7 @@ struct ArcView: View {
         }
         .background(
             Color.enzoBg
-                .shadow(color: .black.opacity(0.3), radius: 12, y: -4)
+                .shadow(color: .black.opacity(0.08), radius: 12, y: -4)
                 .ignoresSafeArea()
         )
     }
