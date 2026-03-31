@@ -153,8 +153,9 @@ class AppState {
 
     /// Generates today's Arc briefing by calling Claude with the current context.
     /// Streams tokens into briefingText so the card updates progressively.
-    func generateBriefing() async {
+    func generateBriefing(forceRefresh: Bool = false) async {
         guard supabaseUserId != nil else { return }
+        guard briefingText.isEmpty || forceRefresh else { return }
         isGeneratingBriefing = true
         briefingText = ""
 
@@ -173,8 +174,9 @@ class AppState {
     }
 
     /// Generates the "what to do next" lookahead by calling Claude with the current context.
-    func generateLookahead() async {
+    func generateLookahead(forceRefresh: Bool = false) async {
         guard supabaseUserId != nil else { return }
+        guard lookaheadText.isEmpty || forceRefresh else { return }
         isGeneratingLookahead = true
         lookaheadText = ""
 
