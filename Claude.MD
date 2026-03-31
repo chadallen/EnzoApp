@@ -230,6 +230,24 @@ Small things noted during sessions but not worth stopping for. Pick these up in 
 
 ---
 
+## Prompt Playground
+
+`scripts/enzo_playground.py` — iterate on Enzo's system prompt, briefing/lookahead/goal prompts, and model without building the app. Responses stream to terminal in ~2 seconds.
+
+```bash
+# one-liner examples
+python3 scripts/enzo_playground.py --mode briefing --fitness recovering --trend up
+python3 scripts/enzo_playground.py --mode chat --message "Am I close to Hawk Hill?"
+```
+
+Full usage: `scripts/README.md`. Requires `ANTHROPIC_API_KEY` in environment and `pip3 install anthropic`.
+
+When prompt changes are finalized, paste back into Swift source:
+- System prompt → `EnzoApp/Services/ClaudeService.swift` → `systemPrompt`
+- Briefing/lookahead/goal prompts → `EnzoApp/App/AppState.swift` → static prompt functions
+
+---
+
 ## Skills
 
 Reusable guidelines for specific types of work. Read the relevant skill before starting that type of work — don't rely on memory or defaults.
