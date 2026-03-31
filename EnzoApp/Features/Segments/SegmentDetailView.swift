@@ -2,6 +2,11 @@ import SwiftUI
 
 struct SegmentDetailView: View {
     let segment: SegmentScore
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var hasTargetDate = false
+    @State private var targetDate = Calendar.current.date(byAdding: .weekOfYear, value: 6, to: Date()) ?? Date()
 
     private var pillColor: Color {
         switch segment.strikeScore {
@@ -127,6 +132,59 @@ struct SegmentDetailView: View {
                     }
                     .padding()
                     .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Goal card
+                    if segment.isGoalSegment {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.enzoAccent)
+                            Text("This is your current goal")
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoAccent)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.enzoAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle(isOn: $hasTargetDate) {
+                                Text("Set a target date")
+                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(Color.enzoPrimary)
+                            }
+                            .tint(Color.enzoAccent)
+
+                            if hasTargetDate {
+                                DatePicker(
+                                    "Target date",
+                                    selection: $targetDate,
+                                    in: Date()...,
+                                    displayedComponents: .date
+                                )
+                                .datePickerStyle(.compact)
+                                .foregroundStyle(Color.enzoPrimary)
+                            }
+
+                            Button {
+                                appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
+                                Task {
+                                    await appState.generateBriefing(forceRefresh: true)
+                                    await appState.generateLookahead(forceRefresh: true)
+                                }
+                                dismiss()
+                            } label: {
+                                Text("Set this goal")
+                                    .font(.system(.body, design: .rounded, weight: .bold))
+                                    .foregroundStyle(Color.enzoBg)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.enzoAccent, in: RoundedRectangle(cornerRadius: 14))
+                            }
+                        }
+                        .padding()
+                        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+                    }
                 }
                 .padding()
             }
