@@ -4,6 +4,7 @@ struct ArcView: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
+    @State private var showSettings = false
 
     private var context: AthleteContext { appState.athleteContext }
     private var showThread: Bool { !appState.arcMessages.isEmpty || appState.isStreaming }
@@ -47,15 +48,16 @@ struct ArcView: View {
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.enzoPrimary)
             Spacer()
-            // Step 11: replace with settings sheet trigger.
-            // To wire the Connect button back for testing, see handoff.MD Step 6 section —
-            // use WindowContextProvider + AppState.authenticate(contextProvider:).
             Button {
-                Task { await appState.syncPhase1() }
+                showSettings = true
             } label: {
-                Image(systemName: "person.circle")
-                    .font(.system(size: 22))
+                Image(systemName: "gearshape")
+                    .font(.system(size: 20))
                     .foregroundStyle(Color.enzoSecondary)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsSheet()
+                    .environment(appState)
             }
         }
         .padding(.horizontal)
