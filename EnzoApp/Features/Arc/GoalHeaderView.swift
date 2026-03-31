@@ -69,11 +69,11 @@ struct GoalHeaderView: View {
                             .textCase(.uppercase)
                             .kerning(0.5)
                         Text(goal.segmentName)
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .foregroundStyle(Color.enzoPrimary)
-                            .lineLimit(1)
-                        Text(goalSegment.strikeLabel)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.enzoPrimary)
+                            .lineLimit(2)
+                        Text(goalSegment.strikeLabel)
+                            .font(.system(.title, design: .rounded, weight: .bold))
                             .foregroundStyle(readColor)
                     }
 
