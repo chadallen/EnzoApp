@@ -729,7 +729,7 @@ Enzo/
 │   └── AppState.swift
 ├── Features/
 │   ├── Onboarding/
-│   │   ├── OnboardingView.swift
+│   │   ├── ConnectView.swift
 │   │   ├── GoalSettingView.swift
 │   │   └── SyncProgressView.swift
 │   ├── Arc/
