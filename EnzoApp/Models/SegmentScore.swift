@@ -11,6 +11,8 @@ struct SegmentScore: Identifiable, Hashable {
     let strikeScore: Double      // 0.0–1.0
     let strikeLabel: String      // "No brainer", "Worth a shot", "Not quite ready"
     var isGoalSegment: Bool = false
+    var distanceMeters: Double? = nil
+    var elevationDeltaMeters: Double? = nil
 
     var id: String { name }
 
@@ -45,7 +47,9 @@ struct SegmentScore: Identifiable, Hashable {
             lastEffortSeconds: 401,
             strikeScore: 0.18,
             strikeLabel: "Not quite ready",
-            isGoalSegment: true
+            isGoalSegment: true,
+            distanceMeters: 2736,
+            elevationDeltaMeters: 101
         ),
         SegmentScore(
             name: "Camino Alto Cutoff",
