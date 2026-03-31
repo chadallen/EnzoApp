@@ -63,8 +63,6 @@ struct GoalHeaderView: View {
             // Stat comparison row
             let currentPct = Int(context.currentFitnessValue * 100)
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
-                let prLabel = AthleteContext.fitnessLabel(for: goalSegment.fitnessValueAtPR)
-                let prPct = Int(goalSegment.fitnessValueAtPR * 100)
                 HStack(alignment: .top, spacing: 0) {
                     // Segment stats column (only when data is available)
                     if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
@@ -112,28 +110,6 @@ struct GoalHeaderView: View {
                         Text("\(currentPct)")
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(Color.enzoPrimary)
-                    }
-
-                    // Divider
-                    Rectangle()
-                        .fill(Color.enzoSecondary.opacity(0.2))
-                        .frame(width: 1, height: 110)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 2)
-
-                    // PR fitness column
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("PR fitness")
-                            .font(.system(.caption, design: .rounded))
-                            .foregroundStyle(Color.enzoSecondary)
-                            .textCase(.uppercase)
-                            .kerning(0.3)
-                        Text(prLabel)
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.enzoSecondary)
-                        Text("\(prPct)")
-                            .font(.system(.title2, design: .monospaced))
-                            .foregroundStyle(Color.enzoSecondary)
                     }
 
                     Spacer(minLength: 0)
