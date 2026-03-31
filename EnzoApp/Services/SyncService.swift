@@ -110,10 +110,12 @@ actor SyncService {
         monthFormatter.dateFormat = "yyyy-MM"
         monthFormatter.timeZone = TimeZone(identifier: "UTC")
 
-        // All-time min/max efficiency across every qualifying ride — used for normalization.
+        // Percentile-based normalization: use 5th/95th percentile instead of absolute min/max.
+        // Prevents outlier months (illness, barely riding) from compressing all normal months
+        // into a narrow band in the middle of the scale.
         let allEfficiencies = rides.map { $0.efficiencyValue }
-        let allTimeMin = allEfficiencies.min()!
-        let allTimeMax = allEfficiencies.max()!
+        let allTimeMin = FitnessCalculator.percentile(5, of: allEfficiencies)
+        let allTimeMax = FitnessCalculator.percentile(95, of: allEfficiencies)
 
         // Group rides by "yyyy-MM" key.
         var ridesByMonth: [String: [RideData]] = [:]

@@ -213,6 +213,46 @@ struct FitnessCalculatorTests {
         #expect(FitnessCalculator.fitnessLabel(for: 0.0)  == "Recovering")
     }
 
+    // MARK: - percentile()
+
+    @Test("0th percentile returns minimum value")
+    func percentileZeroReturnsMin() {
+        let result = FitnessCalculator.percentile(0, of: [0.10, 0.15, 0.20, 0.25, 0.30])
+        #expect(abs(result - 0.10) < 0.0001)
+    }
+
+    @Test("100th percentile returns maximum value")
+    func percentileHundredReturnsMax() {
+        let result = FitnessCalculator.percentile(100, of: [0.10, 0.15, 0.20, 0.25, 0.30])
+        #expect(abs(result - 0.30) < 0.0001)
+    }
+
+    @Test("50th percentile returns median")
+    func percentileFiftyReturnsMedian() {
+        let result = FitnessCalculator.percentile(50, of: [0.10, 0.15, 0.20, 0.25, 0.30])
+        #expect(abs(result - 0.20) < 0.0001)
+    }
+
+    @Test("single value always returns that value regardless of percentile")
+    func percentileSingleValue() {
+        let result = FitnessCalculator.percentile(5, of: [0.22])
+        #expect(abs(result - 0.22) < 0.0001)
+    }
+
+    @Test("empty array returns 0")
+    func percentileEmptyReturnsZero() {
+        let result = FitnessCalculator.percentile(50, of: [])
+        #expect(result == 0)
+    }
+
+    @Test("5th percentile of large array is near the bottom")
+    func percentileFifthNearBottom() {
+        // 5th of 20 values: index = 0.05 * 19 = 0.95 → between [0] and [1]
+        let values = (1...20).map { Double($0) * 0.01 }  // 0.01, 0.02, ..., 0.20
+        let result = FitnessCalculator.percentile(5, of: values)
+        #expect(result < 0.03)
+    }
+
     // MARK: - cyclingTypes
 
     @Test("cycling types set contains all expected sport types")
