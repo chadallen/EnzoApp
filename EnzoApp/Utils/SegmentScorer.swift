@@ -9,11 +9,10 @@ enum SegmentScorer {
 
     // MARK: - Constants
 
-    /// Strike score threshold for "No brainer" label.
-    static let noBrainerThreshold: Double = 0.70
-
-    /// Strike score threshold for "Worth a shot" label (lower bound).
+    static let strikeNowThreshold: Double = 0.80
+    static let almostThereThreshold: Double = 0.65
     static let worthAShotThreshold: Double = 0.45
+    static let gettingThereThreshold: Double = 0.25
 
     // MARK: - Strike score (0.0–1.0)
 
@@ -55,9 +54,11 @@ enum SegmentScorer {
     /// Maps a strike score to a user-facing readiness label.
     static func strikeLabel(for score: Double) -> String {
         switch score {
-        case noBrainerThreshold...: return "No brainer"
-        case worthAShotThreshold..<noBrainerThreshold: return "Worth a shot"
-        default: return "Not quite ready"
+        case strikeNowThreshold...:                          return "Strike now"
+        case almostThereThreshold..<strikeNowThreshold:     return "Almost there"
+        case worthAShotThreshold..<almostThereThreshold:    return "Worth a shot"
+        case gettingThereThreshold..<worthAShotThreshold:   return "Getting there"
+        default:                                             return "Build first"
         }
     }
 

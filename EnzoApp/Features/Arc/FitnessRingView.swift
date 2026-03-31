@@ -10,9 +10,10 @@ struct FitnessRingView: View {
 
     private func readinessColor(for score: Double) -> Color {
         switch score {
-        case 0.70...: return .enzoGoal
-        case 0.45..<0.70: return .enzoAmber
-        default: return .enzoSecondary
+        case 0.80...:       return .enzoGoal
+        case 0.65..<0.80:   return .enzoChartPrimary
+        case 0.45..<0.65:   return .enzoAmber
+        default:            return .enzoSecondary
         }
     }
 
