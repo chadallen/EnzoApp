@@ -54,6 +54,7 @@ struct PROpportunitiesCard: View {
 private struct SegmentOpportunityRow: View {
     let segment: SegmentScore
     let rank: Int
+    @State private var isPulsing = false
 
     private var strikePillColor: Color {
         switch segment.strikeScore {
@@ -118,6 +119,14 @@ private struct SegmentOpportunityRow: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(strikePillColor.opacity(0.15), in: Capsule())
+                .scaleEffect(isPulsing ? 1.06 : 1.0)
+                .animation(
+                    segment.strikeLabel == "No brainer"
+                        ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                        : .default,
+                    value: isPulsing
+                )
+                .onAppear { isPulsing = segment.strikeLabel == "No brainer" }
         }
         .padding(.vertical, 6)
     }
