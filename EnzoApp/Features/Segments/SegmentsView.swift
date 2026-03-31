@@ -29,17 +29,34 @@ struct SegmentsView: View {
             ZStack {
                 Color.enzoBg.ignoresSafeArea()
 
-                List {
-                    ForEach(sortedSegments) { segment in
-                        NavigationLink(value: segment) {
-                            SegmentStrikeRow(segment: segment)
-                        }
-                        .listRowBackground(Color.enzoCard)
-                        .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+                if sortedSegments.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "figure.outdoor.cycle")
+                            .font(.system(size: 48))
+                            .foregroundStyle(Color.enzoSecondary)
+                        Text("No segments yet")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.enzoPrimary)
+                        Text("Enzo will find your best opportunities once your rides sync.")
+                            .font(.system(.body))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(sortedSegments) { segment in
+                            NavigationLink(value: segment) {
+                                SegmentStrikeRow(segment: segment)
+                            }
+                            .listRowBackground(Color.enzoCard)
+                            .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Segments")
             .navigationBarTitleDisplayMode(.large)
