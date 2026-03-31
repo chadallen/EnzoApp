@@ -10,4 +10,6 @@ extension Color {
     static let enzoSecondary     = Color(hex: "666666")
     static let enzoChartPrimary  = Color(hex: "1E88E5")
     static let enzoChartSecondary = Color(hex: "90CAF9")
+    static let enzoRingHigh      = Color(hex: "27AE60")  // ring: Epic / Strong
+    static let enzoRingLow       = Color(hex: "E67E22")  // ring: Baseline / Recovering
 }
