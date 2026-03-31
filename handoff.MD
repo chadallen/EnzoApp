@@ -1,6 +1,6 @@
-# Session Handoff — Score cleanup session
+# Session Handoff — Score UI Cleanup (ready to implement)
 
-## What was completed this session
+## What was completed last session (Score Cleanup)
 
 | Change | Files touched | Commit |
 |---|---|---|
@@ -9,19 +9,23 @@
 | Fix missing `import Foundation` in SegmentScorerTests (pre-existing bug) | `SegmentScorerTests.swift` | e5ce9e3 |
 | Remove recency discount from strike score formula | `SegmentScorer.swift`, `SegmentScorerTests.swift` | 524a2e4 |
 
+## What happened in the most recent session (planning only)
+
+Read docs, reviewed the Score UI Cleanup plan. No code was written. Git is clean on main. The plan below is fully designed and ready to implement.
+
 ---
 
 ## Current app state
 
 All changes committed and pushed. Working tree is clean. Branch: `main`.
 
-**Important:** After these scoring changes, the stored values in Supabase are stale. Chad needs to:
+**Important — Chad must do this before testing score values:**
 **Settings → Reset sync history → Sync now**
-to rewrite all fitness snapshots (with percentile normalization) and segment scores (without recency discount).
+This rewrites all fitness snapshots (percentile normalization) and segment scores (without recency discount). Do this before any score values make sense on device.
 
 ---
 
-## Next session: Score UI cleanup
+## Next session: Score UI Cleanup (implement this)
 
 ### Overview
 
@@ -83,7 +87,7 @@ New layout: `[fitness donut] [readiness donut] [STATUS + LAST RIDE stats] [Space
 The readiness donut:
 - Only renders when `goalSegment != nil` and goal segment name is non-empty
 - Value: `goalSegment.strikeScore` (0.0–1.0), same `SectorMark` pattern as the fitness ring
-- Ring color: use the same `pillColor` logic already in `SegmentDetailView` — green (`enzoGoal`) for ≥ 0.70, amber (`enzoAmber`) for 0.45–0.70, secondary (`enzoSecondary`) for < 0.45. Define this as a private computed var on `FitnessRingView`.
+- Ring color: green (`enzoGoal`) for ≥ 0.70, amber (`enzoAmber`) for 0.45–0.70, secondary (`enzoSecondary`) for < 0.45. Define this as a private computed var on `FitnessRingView`.
 - Center label: `Int(goalSegment.strikeScore * 100)` — same style as the fitness score
 - Frame: same 120×120 as the fitness donut
 - Below the donut, a small caption label: the goal segment name, truncated, in `enzoSecondary caption2`
@@ -128,7 +132,7 @@ The `segment_scores` table still has `fitness_value_at_pr` and `current_fitness_
 
 ---
 
-## Build notes from this session
+## Build notes from previous sessions (Score Cleanup)
 
 **Percentile normalization (5th/95th percentile)**
 `FitnessCalculator.percentile(_:of:)` added as a pure static helper. `SyncService.computeSnapshots` now uses `percentile(5, ...)` and `percentile(95, ...)` instead of absolute `min()`/`max()`. Prevents outlier months (illness, minimal riding) from compressing all normal months into a narrow band. Fitness values will spread more meaningfully across the 0–100 range after re-sync.
