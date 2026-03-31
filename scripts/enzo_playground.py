@@ -48,92 +48,47 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# ── SYSTEM PROMPT ─────────────────────────────────────────────────────────
-# Mirror of ClaudeService.swift → systemPrompt
-# Edit this to tune Enzo's personality, rules, and format constraints.
+# ── PROMPT LOADING ────────────────────────────────────────────────────────
+# Prompts live in scripts/prompts/*.md — edit those files, not this one.
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Enzo — a cycling training companion with deep knowledge of this athlete's \
-history and an easy, direct way of talking about it. You're not a certified coach \
-and you don't pretend to be. You're the knowledgeable friend who's done a lot of \
-miles and knows how to read a fitness trend.
 
-Your name is Enzo. Use it occasionally but not constantly — like a person would.
+PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-Your personality:
-- Direct and warm. You tell the truth but you're not harsh about it.
-- European cycling sensibility — you care about the craft of riding, not just metrics.
-- Unhurried. You take the long view. One bad week doesn't define anything.
-- Occasionally a little poetic about riding, but never pretentious.
+def _load(filename: str) -> str:
+    path = PROMPTS_DIR / filename
+    if not path.exists():
+        raise FileNotFoundError(f"Prompt file missing: {path}")
+    return path.read_text().strip()
 
-Your job:
-- Help this athlete stay oriented toward their goal.
-- React to their recent riding honestly and specifically.
-- Suggest what makes sense next — loosely, not rigidly.
-- Never make them feel bad for gaps, missed rides, or changed goals.
-
-Rules:
-- Always use their actual numbers and labels. Never give advice that could apply to anyone.
-- Fitness is described using these labels only: Epic, Strong, Building, Baseline, Recovering.
-- Segment readiness uses: No brainer, Worth a shot, Not quite ready.
-- Frame everything relative to their personal history and their goal.
-- Don't reference power, FTP, or watts unless the athlete brings it up.
-- A suggestion is not a plan. Make that clear when offering workouts.
-
-Format:
-- 2-4 sentences for simple questions.
-- Up to 3 short paragraphs for complex ones.
-- No bullet points in conversational responses.
-- Bullet points only for workout suggestions, and keep them loose.
-- No exclamation marks."""
-
-
-# ---------------------------------------------------------------------------
-# ── PROMPTS ───────────────────────────────────────────────────────────────
-# Mirrors AppState.swift static prompt builders.
-# Edit these to iterate on output quality.
-# ---------------------------------------------------------------------------
+def _system_prompt() -> str:
+    return _load("system.md")
 
 def briefing_prompt(ctx: dict) -> str:
-    """Mirror of AppState.briefingPrompt(context:)"""
-    return (
-        "Generate today's Arc briefing. Write 2-3 sentences: where their fitness stands relative "
-        "to their goal, what the trend means, and one forward-looking line. "
-        "Be specific to their actual data — reference their current fitness label, goal segment, "
-        "and trend direction. Do not start with 'I' or 'You'."
-    )
-
+    return _load("briefing.md")
 
 def lookahead_prompt(ctx: dict) -> str:
-    """Mirror of AppState.lookaheadPrompt(context:)"""
-    fitness = ctx["athlete"]["current_fitness_label"]
-    trend   = ctx["athlete"]["trend_direction"]
-    days    = ctx["days_since_last_ride"]
-    return (
-        "Generate a 5-7 day lookahead suggestion. What should this athlete do in the next week? "
-        f"Keep it loose — not a rigid plan. Be specific to their current fitness ({fitness}), "
-        f"trend ({trend}), and days since last ride ({days}). "
-        "2-3 sentences max. Do not include any headers or labels — just the suggestion."
-    )
-
+    # Substitute live context values into the template
+    template = _load("lookahead.md")
+    return template  # context values are already in the athlete payload sent to Claude
 
 def goal_reaction_prompt(ctx: dict) -> str:
-    """Mirror of AppState.goalReactionPrompt(segment:athleteContext:)"""
     goal    = ctx["goal"]
     athlete = ctx["athlete"]
-    # Find goal segment in top_segments for pr details
     seg = next((s for s in ctx.get("top_segments", []) if s.get("is_goal_segment")), None)
-    pr_time    = seg["pr_seconds"] if seg else "unknown"
-    pr_date    = seg["pr_date"]    if seg else "unknown"
+    pr_time       = seg["pr_seconds"] if seg else "unknown"
+    pr_date       = seg["pr_date"]    if seg else "unknown"
     fitness_at_pr = seg["fitness_at_pr"] if seg else goal["required_fitness_label"]
     segment_name  = goal["segment_name"]
     current_label = athlete["current_fitness_label"]
     trend         = athlete["trend_direction"]
-    return (
-        f"I want to set {segment_name} as my PR goal. "
-        f"I set that PR ({pr_time}s) on {pr_date} "
-        f"when I was at {fitness_at_pr} fitness. "
-        f"My current fitness is {current_label}, trending {trend}. "
-        "React to this goal choice — be honest about where I stand and whether a target date makes sense."
+    template = _load("goal_reaction.md")
+    return template.format(
+        segment_name  = segment_name,
+        pr_time       = f"{pr_time}s",
+        pr_date       = pr_date,
+        fitness_at_pr = fitness_at_pr,
+        current_fitness = current_label,
+        trend         = trend,
     )
 
 
@@ -278,7 +233,7 @@ def stream_response(client: anthropic.Anthropic, user_message: str, context: dic
     with client.messages.stream(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        system=SYSTEM_PROMPT,
+        system=_system_prompt(),
         messages=[{"role": "user", "content": full_message}],
     ) as stream:
         for text in stream.text_stream:

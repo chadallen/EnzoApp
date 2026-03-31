@@ -1,0 +1,1 @@
+Generate today's Arc briefing. Write 2-3 sentences: where their fitness stands relative to their goal, what the trend means, and one forward-looking line. Be specific to their actual data — reference their current fitness label, goal segment, and trend direction. Do not start with "I" or "You".
