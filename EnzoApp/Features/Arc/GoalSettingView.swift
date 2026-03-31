@@ -11,9 +11,15 @@ struct GoalSettingView: View {
     @State private var reactionText = ""
     @State private var isStreamingReaction = false
     @State private var streamTask: Task<Void, Never>? = nil
+    @State private var showPathB = false
+
+    /// Called instead of dismiss() when GoalSettingView is used in the onboarding flow.
+    /// When nil, the view behaves as a sheet with a Cancel button.
+    var onGoalConfirmed: (() -> Void)?
 
     // For previews only — allows pre-selecting a segment without @State in #Preview
-    init(previewSegment: SegmentScore? = nil) {
+    init(onGoalConfirmed: (() -> Void)? = nil, previewSegment: SegmentScore? = nil) {
+        self.onGoalConfirmed = onGoalConfirmed
         _selectedSegment = State(initialValue: previewSegment)
         if let seg = previewSegment {
             _reactionText = State(initialValue: "Hawk Hill. Solid choice. You set that PR at Epic fitness last August — you're Recovering right now but trending up. There's real ground to cover, but your history shows you can move fast when you're consistent. A target date isn't required, but if you have one in mind it helps me calibrate.")
@@ -33,10 +39,28 @@ struct GoalSettingView: View {
                 VStack(spacing: 0) {
                     searchBar
                         .padding(.top, 8)
-                        .padding(.bottom, 12)
+
+                    if !appState.segments.isEmpty && !showPathB && selectedSegment == nil {
+                        Button {
+                            showPathB = true
+                            searchText = ""
+                        } label: {
+                            Text("Help me pick one")
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoAccent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    Spacer().frame(height: 12)
 
                     if let segment = selectedSegment {
                         selectedFlow(segment: segment)
+                    } else if showPathB {
+                        pathBList
                     } else {
                         segmentList
                     }
@@ -45,9 +69,11 @@ struct GoalSettingView: View {
             .navigationTitle("Which segment?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Color.enzoSecondary)
+                if onGoalConfirmed == nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                            .foregroundStyle(Color.enzoSecondary)
+                    }
                 }
             }
         }
@@ -91,6 +117,35 @@ struct GoalSettingView: View {
                 }
             }
             .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Path B (top segments by strike score)
+
+    private var pathBList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Top opportunities right now")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(Color.enzoSecondary)
+                    Spacer()
+                    Button("Search instead") {
+                        showPathB = false
+                    }
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.enzoAccent)
+                }
+                .padding(.horizontal)
+
+                ForEach(appState.segments.prefix(3)) { segment in
+                    segmentRow(segment)
+                        .onTapGesture { selectSegment(segment) }
+                        .padding(.horizontal)
+                }
+            }
+            .padding(.top, 4)
+            .padding(.bottom, 32)
         }
     }
 
@@ -160,6 +215,7 @@ struct GoalSettingView: View {
                 selectedSegment = nil
                 reactionText = ""
                 isStreamingReaction = false
+                showPathB = false
             }
             .font(.system(.caption, design: .rounded, weight: .semibold))
             .foregroundStyle(Color.enzoAccent)
@@ -212,7 +268,11 @@ struct GoalSettingView: View {
     private func confirmButton(_ segment: SegmentScore) -> some View {
         Button {
             appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
-            dismiss()
+            if let onGoalConfirmed {
+                onGoalConfirmed()
+            } else {
+                dismiss()
+            }
         } label: {
             Text("Set this goal")
                 .font(.system(.body, design: .rounded, weight: .bold))
