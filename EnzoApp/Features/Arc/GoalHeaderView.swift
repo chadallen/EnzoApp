@@ -66,6 +66,39 @@ struct GoalHeaderView: View {
                 let prLabel = AthleteContext.fitnessLabel(for: goalSegment.fitnessValueAtPR)
                 let prPct = Int(goalSegment.fitnessValueAtPR * 100)
                 HStack(alignment: .top, spacing: 0) {
+                    // Segment stats column (only when data is available)
+                    if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Segment")
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(Color.enzoSecondary)
+                                .textCase(.uppercase)
+                                .kerning(0.3)
+                            if let dist = goalSegment.distanceMeters {
+                                Text(String(format: "%.1f mi", dist * 0.000621371))
+                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(Color.enzoSecondary)
+                            }
+                            Text(goalSegment.prFormatted)
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoSecondary)
+                            Text(formattedPRDate(goalSegment.prDate))
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoSecondary)
+                            if let elev = goalSegment.elevationDeltaMeters {
+                                Text(String(format: "+%.0f ft", elev * 3.28084))
+                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(Color.enzoSecondary)
+                            }
+                        }
+
+                        Rectangle()
+                            .fill(Color.enzoSecondary.opacity(0.2))
+                            .frame(width: 1, height: 110)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 2)
+                    }
+
                     // Current fitness column
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Current fitness")
@@ -101,39 +134,6 @@ struct GoalHeaderView: View {
                         Text("\(prPct)%")
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(Color.enzoSecondary)
-                    }
-
-                    // Segment stats column (only when data is available)
-                    if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
-                        Rectangle()
-                            .fill(Color.enzoSecondary.opacity(0.2))
-                            .frame(width: 1, height: 110)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 2)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Segment")
-                                .font(.system(.caption, design: .rounded))
-                                .foregroundStyle(Color.enzoSecondary)
-                                .textCase(.uppercase)
-                                .kerning(0.3)
-                            if let dist = goalSegment.distanceMeters {
-                                Text(String(format: "%.1f mi", dist * 0.000621371))
-                                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                                    .foregroundStyle(Color.enzoSecondary)
-                            }
-                            Text(goalSegment.prFormatted)
-                                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                            Text(formattedPRDate(goalSegment.prDate))
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                            if let elev = goalSegment.elevationDeltaMeters {
-                                Text(String(format: "+%.0f ft", elev * 3.28084))
-                                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                                    .foregroundStyle(Color.enzoSecondary)
-                            }
-                        }
                     }
 
                     Spacer()
