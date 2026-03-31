@@ -24,6 +24,25 @@ struct ArcView: View {
                 Divider()
                     .background(Color.enzoSecondary.opacity(0.1))
 
+                if let errorMessage = appState.syncErrorMessage {
+                    HStack(spacing: 8) {
+                        Text(errorMessage)
+                            .font(.system(.caption))
+                            .foregroundStyle(Color.enzoAmber)
+                        Spacer()
+                        Button {
+                            Task { await appState.syncPhase1() }
+                        } label: {
+                            Text("Retry")
+                                .font(.system(.caption, weight: .semibold))
+                                .foregroundStyle(Color.enzoAmber)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color.enzoAmber.opacity(0.08))
+                }
+
                 scrollContent
             }
         }
