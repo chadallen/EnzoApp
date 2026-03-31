@@ -32,8 +32,13 @@ struct ArcView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    GoalHeaderView(context: context)
+                    FitnessRingView(context: context)
                         .padding(.top, 12)
+
+                    FitnessChartView(
+                        snapshots: appState.fitnessSnapshots,
+                        goalValue: context.goal.requiredFitnessValue
+                    )
 
                     if let errorMessage = appState.syncErrorMessage {
                         HStack(spacing: 8) {
@@ -65,16 +70,6 @@ struct ArcView: View {
                         text: appState.lookaheadText,
                         isLoading: appState.isGeneratingLookahead
                     )
-
-                    FitnessChartView(
-                        snapshots: appState.fitnessSnapshots,
-                        goalValue: context.goal.requiredFitnessValue,
-                        contextText: appState.briefingText.isEmpty
-                            ? AthleteContext.previewChartContext
-                            : String(appState.briefingText.prefix(120))
-                    )
-
-                    PROpportunitiesCard(segments: appState.segments)
 
                     if showThread {
                         messageThread
