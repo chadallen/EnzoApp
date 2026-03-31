@@ -60,15 +60,23 @@ struct GoalHeaderView: View {
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
                 let readColor = readinessColor(for: goalSegment.strikeScore)
 
-                // Hero: readiness label + segment name
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(goalSegment.strikeLabel)
-                        .font(.system(.title, design: .rounded, weight: .bold))
-                        .foregroundStyle(readColor)
-                    Text(goal.segmentName)
-                        .font(.system(.subheadline, design: .rounded))
+                // Header: segment name + readiness tag
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current target segment")
+                        .font(.system(.caption, design: .rounded))
                         .foregroundStyle(Color.enzoSecondary)
+                        .textCase(.uppercase)
+                        .kerning(0.5)
+                    Text(goal.segmentName)
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(Color.enzoPrimary)
                         .lineLimit(1)
+                    Text(goalSegment.strikeLabel)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(readColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(readColor.opacity(0.12), in: Capsule())
                 }
 
                 HStack(alignment: .top) {
