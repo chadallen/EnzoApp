@@ -25,7 +25,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if !appState.isAuthenticated {
-                ConnectPlaceholderView()
+                ConnectView()
             } else if appState.isResolvingOnboarding {
                 // loadContext() is running — hold here to avoid flashing GoalSettingView
                 // for existing users whose hasCompletedOnboarding hasn't been set yet.
@@ -44,26 +44,6 @@ struct RootView: View {
     }
 }
 
-/// Placeholder for the Connect screen — replaced by ConnectView in Chunk 2.
-struct ConnectPlaceholderView: View {
-    var body: some View {
-        ZStack {
-            Color.enzoBg.ignoresSafeArea()
-            VStack(spacing: 16) {
-                Image(systemName: "figure.outdoor.cycle")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.enzoAccent)
-                Text("Connect Strava")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(Color.enzoPrimary)
-                Text("Coming soon — Chunk 2")
-                    .font(.system(.caption))
-                    .foregroundStyle(Color.enzoSecondary)
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
-}
 
 struct MainTabView: View {
     var body: some View {
