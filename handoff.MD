@@ -35,57 +35,98 @@ Step 10 Chunk 1 — all 6 files, plus several bug fixes and UX improvements disc
 
 ---
 
-## Step 10 Chunk 2 — next
+## Step 10 Chunk 2 — split into 2a / 2b / 2c
 
-### Files to build
+Chunk 2 was split to preserve context window across sessions. Each chunk is independently testable before moving to the next.
+
+---
+
+### Chunk 2a — AppState + SyncService (backend only, no new views)
+
+**Files:**
 
 | File | What |
 |---|---|
-| `Features/Onboarding/ConnectView.swift` | **Create** — hero screen, "Connect Strava" CTA wired to `appState.authenticate(contextProvider:)`. Uses `WindowContextProvider`. On success, transitions to `SyncProgressView`. |
-| `Features/Onboarding/SyncProgressView.swift` | **Create** — shown after auth while Phase 1 + Phase 2 run. Route-drawing animation + crossfading copy phases. On completion, sets `hasCompletedOnboarding = true` and advances to `GoalSettingView`. |
-| `App/AppState.swift` | **Modify** — add Claude response cache: persist `briefingText`/`lookaheadText` to UserDefaults after generation. On launch, restore cached values immediately so Arc has content before Claude responds. Invalidate cache after 24 hours or on new sync. |
-| `EnzoAppApp.swift` | **Modify** — replace `ConnectPlaceholderView()` with `ConnectView()` in the unauthenticated gate branch. |
+| `App/AppState.swift` | Add `isOnboardingSyncing`, `syncedActivityCount`, `startOnboardingSync()`; add Claude response cache |
+| `Services/SyncService.swift` | Change `syncPhase1(userId:)` return type from `Void` to `Int` (total activities fetched) |
 
-### ConnectView spec (PRD Section 8, Journey 1 Step 1)
+**AppState changes:**
+- `var isOnboardingSyncing: Bool = false` — set true by `startOnboardingSync()`, cleared by SyncProgressView's `onComplete`. Distinct from `isSyncing` so manual syncs (SettingsSheet) don't re-trigger the onboarding screen.
+- `var syncedActivityCount: Int = 0` — set after Phase 1 returns; shown in SyncProgressView as "N rides and counting"
+- `func startOnboardingSync() async` — sets `isOnboardingSyncing = true`, then calls `syncPhase1()`. Does NOT clear `isOnboardingSyncing` — SyncProgressView clears it after completion animation.
+- **Claude response cache**: after `generateBriefing/Lookahead()` loop completes, write to UserDefaults with timestamp. In `loadContext()` after building context, restore cached values if < 24h old (skip Claude call). Invalidate in `syncPhase1()` after sync completes and in `disconnect()`. Keys: `"cachedBriefing"`, `"briefingCachedAt"`, `"cachedLookahead"`, `"lookaheadCachedAt"`.
 
-- Clean hero screen. Dark background.
-- App name "Enzo" in rounded bold at top.
-- Tagline: *"Meet Enzo. Your cycling companion."*
-- Single CTA: "Connect Strava" — accent blue pill button
-- Tapping calls `appState.authenticate(contextProvider: WindowContextProvider())`
-- On success: transition to `SyncProgressView` (not directly to goal setting — sync must run first)
-- On error: show "Strava couldn't connect — tap to retry." inline below the button
+**SyncService change:**
+- `func syncPhase1(userId:) async throws -> Int` — return `activities.count` (total fetched, not just qualifying)
+- `AppState.syncPhase1()` captures return value and sets `syncedActivityCount`
 
-### SyncProgressView spec (PRD Section 8, Journey 1 Step 2)
+**Testability:** verify via NSLog — `[Sync] activity count: N` and UserDefaults cache keys populated after generateBriefing/Lookahead.
 
-- Blocks progression — sync must complete before goal setting
-- **Animation:** Abstract cycling route draws itself across the dark background using SwiftUI path + `trim(from:to:)` animation, looping with slight fade-out and redraw. Accent color (`#4FC3F7`) on dark background.
-- **Copy phases** (crossfade between them as sync progresses):
-  1. *"Reading your rides..."* — Phase 1 activity fetch
-  2. *"Finding your best efforts..."* — Phase 2 segment extraction
-  3. *"Sizing up your fitness..."* — metrics computation
-  4. *"Scoping your opportunities..."* — strike scores calculating
-  5. *"Enzo is almost ready..."* — final writes
-- Secondary text below: *"[N] rides and counting"* — show actual activity count from Phase 1
-- If sync takes > 60 seconds: add *"Big history — this is worth it."* below the counter
-- On completion: crossfade to `GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })`
+---
 
-### How SyncProgressView drives phase transitions
+### Chunk 2b — ConnectView + EnzoAppApp routing
 
-`AppState` needs to expose enough state for `SyncProgressView` to drive its copy phases:
-- Phase 1 in progress: `isSyncing == true`
-- Phase 2 in progress: `isSyncingPhase2 == true`
-- Both false and no error: sync complete
+**Files:**
 
-The view can derive its copy phase from these two booleans. No new state needed on AppState for the basic implementation.
+| File | What |
+|---|---|
+| `Features/Onboarding/ConnectView.swift` | **Create** — hero screen, "Connect Strava" CTA |
+| `EnzoAppApp.swift` | Replace `ConnectPlaceholderView` with `ConnectView`; add `isOnboardingSyncing` gate branch |
 
-### Claude response cache
+**ConnectView spec (PRD Section 8, Journey 1 Step 1):**
+- `.enzoBg` background, "Enzo" SF Pro Rounded Bold header, tagline *"Meet Enzo. Your cycling companion."*, cycling SF Symbol (`figure.outdoor.cycle`, large, `enzoAccent`)
+- "Connect Strava" accent pill button
+- `@State var isConnecting: Bool`, `@State var errorMessage: String?`
+- On tap: `isConnecting = true`, `await appState.authenticate(contextProvider: WindowContextProvider())`, then `Task { await appState.startOnboardingSync() }`
+- Error: inline *"Strava couldn't connect — tap to retry."* below button; reset `isConnecting = false`
 
-- After `generateBriefing()` completes: `UserDefaults.standard.set(briefingText, forKey: "cachedBriefing")` + `UserDefaults.standard.set(Date(), forKey: "briefingCachedAt")`
-- Same for `generateLookahead()` → `"cachedLookahead"` / `"lookaheadCachedAt"`
-- On launch (`loadContext()` completion): restore cached values if cache is < 24 hours old
-- Invalidate on sync: after `syncPhase1/2` completes, clear the cache keys so next launch regenerates
-- This prevents Arc from showing empty briefing/lookahead during the Claude API call on every relaunch
+**EnzoAppApp changes:**
+- Replace `ConnectPlaceholderView()` with `ConnectView()` in the `!isAuthenticated` branch
+- Add gate branch: `else if appState.isOnboardingSyncing { SyncProgressView(onComplete: { appState.isOnboardingSyncing = false }) }` — between `isResolvingOnboarding` and `!hasCompletedOnboarding`
+- Remove `ConnectPlaceholderView` struct entirely
+
+**Full gate order after Chunk 2b:**
+```
+!isAuthenticated            → ConnectView
+isResolvingOnboarding       → Color.enzoBg (blank hold)
+isOnboardingSyncing         → SyncProgressView(onComplete:)   ← new
+!hasCompletedOnboarding     → GoalSettingView(onGoalConfirmed:)
+else                        → MainTabView
+```
+
+---
+
+### Chunk 2c — SyncProgressView
+
+**Files:**
+
+| File | What |
+|---|---|
+| `Features/Onboarding/SyncProgressView.swift` | **Create** — route animation + copy phases + completion |
+
+**Spec (PRD Section 8, Journey 1 Step 2):**
+- **Route animation:** `GeometryReader` + custom `Path` with bezier curves (rolling terrain, switchback, climb). Full path drawn faintly in `enzoAccent.opacity(0.15)`. Animated `trim(from:to:)` segment at full `enzoAccent`, repeating with `.linear(duration: 3).repeatForever(autoreverses: false)`. Gives "drawing through landscape" effect.
+- **Copy phases** (enum, 5 cases): crossfade between them. `@State var currentPhase` advances on timer within each sync stage — P1 (`isSyncing`) cycles phases 1–2; P2 (`isSyncingPhase2`) cycles phases 3–5.
+- **Activity counter:** `"\(appState.syncedActivityCount) rides and counting"` in `enzoTextSecondary` monospaced; appears once count > 0.
+- **Long sync:** `@State var elapsed: TimeInterval` tracked by 1s timer; shows *"Big history — this is worth it."* after 60s.
+- **Completion detection:** `@State var syncHasStarted = false` — set when either flag goes true. When both return to false after `syncHasStarted`, plays final copy phase, waits 0.8s, calls `onComplete`.
+- `onComplete: () -> Void` — passed in from RootView; sets `appState.isOnboardingSyncing = false`
+
+---
+
+### Full flow after all chunks complete
+
+```
+ConnectView taps "Connect Strava"
+  → authenticate() → isAuthenticated = true
+  → startOnboardingSync() → isOnboardingSyncing = true
+  → RootView routes to SyncProgressView
+  → isSyncing = true → false, isSyncingPhase2 = true → false
+  → SyncProgressView final beat → onComplete → isOnboardingSyncing = false
+  → RootView routes to GoalSettingView
+  → goal confirmed → hasCompletedOnboarding = true
+  → RootView routes to MainTabView
+```
 
 ---
 
