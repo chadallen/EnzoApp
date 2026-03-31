@@ -16,22 +16,10 @@ struct SegmentDetailView: View {
         }
     }
 
-    private var deltaLine: String {
-        let labelAtPR = AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR)
-        let labelNow = AthleteContext.fitnessLabel(for: segment.currentFitnessValue)
-        if segment.fitnessDelta > 0.05 {
-            return "You're at \(labelNow) — fitter than when you set this PR at \(labelAtPR). A good window to go after it."
-        } else if segment.fitnessDelta >= -0.05 {
-            return "You're at \(labelNow) — roughly the same fitness as when you set this PR."
-        } else {
-            return "You were at \(labelAtPR) when you set this PR. You're at \(labelNow) now. Close the gap and come back to this one."
-        }
-    }
-
     private var strikeLine: String {
         switch segment.strikeScore {
         case 0.70...:
-            return "You're in better shape now than when you set this PR. A good window to go after it."
+            return "You're fit and trending in the right direction. A good window to go after it."
         case 0.45..<0.70:
             return "Getting close — a few more weeks of consistent riding and the timing will be right."
         default:
@@ -78,40 +66,6 @@ struct SegmentDetailView: View {
                                 }
                             }
                         }
-                    }
-                    .padding()
-                    .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
-
-                    // Fitness comparison
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Fitness comparison")
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.enzoSecondary)
-                            .textCase(.uppercase)
-                            .tracking(1)
-
-                        HStack(spacing: 0) {
-                            fitnessBlock(
-                                label: AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR),
-                                pct: Int(segment.fitnessValueAtPR * 100),
-                                sublabel: "When PR set"
-                            )
-
-                            Image(systemName: "arrow.right")
-                                .foregroundStyle(Color.enzoSecondary.opacity(0.5))
-
-                            fitnessBlock(
-                                label: AthleteContext.fitnessLabel(for: segment.currentFitnessValue),
-                                pct: Int(segment.currentFitnessValue * 100),
-                                sublabel: "Today",
-                                labelColor: segment.fitnessDelta >= 0 ? Color.enzoGoal : Color.enzoPrimary
-                            )
-                        }
-
-                        Text(deltaLine)
-                            .font(.system(.subheadline))
-                            .foregroundStyle(Color.enzoPrimary)
-                            .lineSpacing(3)
                     }
                     .padding()
                     .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
@@ -200,27 +154,6 @@ struct SegmentDetailView: View {
         .navigationTitle(segment.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
-    }
-
-    private func fitnessBlock(
-        label: String,
-        pct: Int,
-        sublabel: String,
-        labelColor: Color = Color.enzoPrimary
-    ) -> some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(labelColor)
-            Text("\(pct)")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(Color.enzoSecondary)
-            Text(sublabel)
-                .font(.system(.caption2, design: .rounded))
-                .foregroundStyle(Color.enzoSecondary.opacity(0.7))
-                .padding(.top, 2)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private func statBlock(value: String, label: String, mono: Bool = false, color: Color = Color.enzoPrimary) -> some View {
