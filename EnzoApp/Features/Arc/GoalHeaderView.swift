@@ -34,7 +34,7 @@ struct GoalHeaderView: View {
         }
         .padding()
         .background(
-            Color.enzoCard,
+            fullWidth ? Color.enzoAccent.opacity(0.08) : Color.enzoCard,
             in: fullWidth
                 ? AnyShape(UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
                 : AnyShape(RoundedRectangle(cornerRadius: 16))

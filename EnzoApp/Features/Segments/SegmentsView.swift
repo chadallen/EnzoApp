@@ -37,11 +37,11 @@ struct SegmentsView: View {
                 emptyState
             } else {
                 List {
-                    ForEach(sortedSegments) { segment in
+                    ForEach(Array(sortedSegments.enumerated()), id: \.element.id) { index, segment in
                         NavigationLink(value: segment) {
                             SegmentStrikeRow(segment: segment)
                         }
-                        .listRowBackground(Color.enzoCard)
+                        .listRowBackground(index.isMultiple(of: 2) ? Color.enzoCard : Color.enzoBg)
                         .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
                     }
                 }
