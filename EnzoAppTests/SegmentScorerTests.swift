@@ -91,25 +91,39 @@ struct SegmentScorerTests {
 
     // MARK: - Strike label
 
-    @Test("No brainer label for score >= 0.70")
-    func noBrainerLabel() {
-        #expect(SegmentScorer.strikeLabel(for: 0.70) == "No brainer")
-        #expect(SegmentScorer.strikeLabel(for: 0.85) == "No brainer")
-        #expect(SegmentScorer.strikeLabel(for: 1.00) == "No brainer")
+    @Test("Strike now label for score >= 0.80")
+    func strikeNowLabel() {
+        #expect(SegmentScorer.strikeLabel(for: 0.80) == "Strike now")
+        #expect(SegmentScorer.strikeLabel(for: 0.90) == "Strike now")
+        #expect(SegmentScorer.strikeLabel(for: 1.00) == "Strike now")
     }
 
-    @Test("Worth a shot label for score 0.45–0.70")
+    @Test("Almost there label for score 0.65–0.80")
+    func almostThereLabel() {
+        #expect(SegmentScorer.strikeLabel(for: 0.65) == "Almost there")
+        #expect(SegmentScorer.strikeLabel(for: 0.72) == "Almost there")
+        #expect(SegmentScorer.strikeLabel(for: 0.799) == "Almost there")
+    }
+
+    @Test("Worth a shot label for score 0.45–0.65")
     func worthAShotLabel() {
         #expect(SegmentScorer.strikeLabel(for: 0.45) == "Worth a shot")
-        #expect(SegmentScorer.strikeLabel(for: 0.57) == "Worth a shot")
-        #expect(SegmentScorer.strikeLabel(for: 0.699) == "Worth a shot")
+        #expect(SegmentScorer.strikeLabel(for: 0.55) == "Worth a shot")
+        #expect(SegmentScorer.strikeLabel(for: 0.649) == "Worth a shot")
     }
 
-    @Test("Not quite ready label for score < 0.45")
-    func notQuiteReadyLabel() {
-        #expect(SegmentScorer.strikeLabel(for: 0.00) == "Not quite ready")
-        #expect(SegmentScorer.strikeLabel(for: 0.20) == "Not quite ready")
-        #expect(SegmentScorer.strikeLabel(for: 0.449) == "Not quite ready")
+    @Test("Getting there label for score 0.25–0.45")
+    func gettingThereLabel() {
+        #expect(SegmentScorer.strikeLabel(for: 0.25) == "Getting there")
+        #expect(SegmentScorer.strikeLabel(for: 0.35) == "Getting there")
+        #expect(SegmentScorer.strikeLabel(for: 0.449) == "Getting there")
+    }
+
+    @Test("Build first label for score < 0.25")
+    func buildFirstLabel() {
+        #expect(SegmentScorer.strikeLabel(for: 0.00) == "Build first")
+        #expect(SegmentScorer.strikeLabel(for: 0.10) == "Build first")
+        #expect(SegmentScorer.strikeLabel(for: 0.249) == "Build first")
     }
 
     // MARK: - Required fitness label
