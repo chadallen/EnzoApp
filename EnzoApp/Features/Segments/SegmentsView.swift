@@ -3,6 +3,7 @@ import SwiftUI
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .strikeScore
+    @State private var showingGoalSetting = false
 
     enum SortOrder: String, CaseIterable {
         case strikeScore = "Strike Score"
@@ -56,7 +57,15 @@ struct SegmentsView: View {
 
     private var sortBar: some View {
         HStack {
+            Button("Change goal") {
+                showingGoalSetting = true
+            }
+            .font(.system(.caption, design: .rounded))
+            .foregroundStyle(Color.enzoSecondary)
+            .padding(.leading)
+
             Spacer()
+
             Menu {
                 ForEach(SortOrder.allCases, id: \.self) { order in
                     Button(order.rawValue) { sortOrder = order }
@@ -70,6 +79,10 @@ struct SegmentsView: View {
             .padding(.vertical, 10)
         }
         .background(Color.enzoBg)
+        .sheet(isPresented: $showingGoalSetting) {
+            GoalSettingView()
+                .environment(appState)
+        }
     }
 
     private var emptyState: some View {

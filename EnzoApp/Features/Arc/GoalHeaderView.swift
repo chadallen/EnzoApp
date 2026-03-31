@@ -136,7 +136,7 @@ struct GoalHeaderView: View {
                             .foregroundStyle(Color.enzoSecondary)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
             } else {
                 // Fallback: no goal segment synced yet — show current fitness only
@@ -155,11 +155,6 @@ struct GoalHeaderView: View {
                 }
             }
 
-            Button("Change goal") {
-                showingGoalSetting = true
-            }
-            .font(.system(.caption, design: .rounded))
-            .foregroundStyle(Color.enzoSecondary)
         }
     }
 
