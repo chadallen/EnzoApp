@@ -48,7 +48,7 @@ struct GoalHeaderView: View {
     private var goalContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Line 1: Current target
-            Text("Current target: \(goal.segmentName).")
+            Text("Current target: \(goal.segmentName)")
                 .font(.system(.headline, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.enzoPrimary)
                 .lineLimit(1)
