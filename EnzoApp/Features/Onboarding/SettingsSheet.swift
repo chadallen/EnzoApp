@@ -62,8 +62,8 @@ struct SettingsSheet: View {
     }
 
     private var syncStatusText: String {
-        if appState.isSyncing { return "Phase 1 running..." }
-        if appState.isSyncingPhase2 { return "Phase 2 running..." }
+        if appState.isSyncing { return "Fetching rides..." }
+        if appState.isSyncingPhase2 { return "Scoring segments..." }
         return ""
     }
 
