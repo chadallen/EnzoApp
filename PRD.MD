@@ -345,7 +345,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form. All
 
 * Phase 1 completes in seconds — fitness timeline is usable immediately
 * Phase 2 is the expensive operation: 1 call per activity. For 800 activities = ~4 batches of 200. At 200 req/15 min this takes ~15 minutes total.
-* **Current implementation (Step 9 POC):** capped at 100 most recent cycling activities with 1.5s delay between calls (~2.5 min). Full history batching deferred to Step 12.
+* **Current implementation:** `phase2ActivityLimit = 25` (tuned down from 100 in Step 9 after rate limit issues during development). Incremental sync: saves `lastPhase2SyncTimestamp` to UserDefaults after each run; subsequent syncs only fetch activities newer than that timestamp. Raise limit to 100+ in Step 11. Full history batching deferred to Step 12.
 * Run Phase 2 as a background task. App is fully usable while it runs.
 * Store sync progress in Supabase so it survives app restarts — deferred to Step 12 polish.
 
@@ -1000,7 +1000,7 @@ See Build Order section of CLAUDE.md for the authoritative step list. Current or
 7. ✅ Historical sync Phase 1
 8. ✅ Context payload + live Enzo
 9. ✅ Historical sync Phase 2 + segment scoring
-10. Onboarding flow
+10. ✅ Onboarding flow
 11. Polish pass
 12. Strava webhooks (deferred from original Step 10 — manual sync is acceptable for beta)
 

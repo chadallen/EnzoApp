@@ -6,9 +6,10 @@
 |---|---|
 | `c77aba6` | Step 10 Chunk 2c: SyncProgressView — route animation, copy phases, completion detection |
 | `e949ca2` | Step 10 Chunk 2c: wire isOnboardingSyncing gate branch in RootView |
-| `b18c35c` | Fix partial auth state causing infinite blank hold screen on relaunch |
-| `68b2484` | Fix createUser 409: add on_conflict=strava_athlete_id for upsert resolution |
+| `b18c35c` | Fix: partial auth Keychain state causing infinite blank hold screen on relaunch |
+| `68b2484` | Fix: createUser 409 — add ?on_conflict=strava_athlete_id for upsert resolution |
 | `abc3795` | Docs: expand on_conflict build note to cover createUser (all upserts) |
+| `0058882` | Session close: Step 10 complete, Step 11 handoff |
 
 ---
 
@@ -21,51 +22,63 @@ ConnectView → Connect Strava → SyncProgressView (route animation + copy phas
 → sync completes → GoalSettingView → goal confirmed → MainTabView
 ```
 
-- **SyncProgressView**: bezier route animation, 5 crossfading copy phases, activity counter, 60s long-sync message, completion detection → onComplete
-- **Auth reconnect**: createUser upsert now works correctly for existing Supabase users (`?on_conflict=strava_athlete_id`)
-- **Partial auth guard**: AppState.init() requires both stravaAthleteId + supabaseUserId in Keychain for isAuthenticated=true; loadContext() always clears isResolvingOnboarding even on early return
-- **NSLog in ConnectView**: `[ConnectView] authenticate error:` added for future debugging — can be removed in Step 11 polish
+- Auth reconnect works: `createUser` upsert finds the existing user row via `?on_conflict=strava_athlete_id`
+- Returning users with a cached session skip credentials (Strava auto-completes OAuth)
+- Partial auth guard: `AppState.init()` requires both `stravaAthleteId` + `supabaseUserId` in Keychain; `loadContext()` always clears `isResolvingOnboarding` even on early return
+- Claude response cache: briefing + lookahead persist to UserDefaults 24h; restored on relaunch; invalidated on sync / disconnect
+- Known artifact: brief flash of preview text before cache restores on relaunch (fix in Step 11)
 
 ---
 
 ## Step 11: Polish pass — next
 
-Read PRD.MD Section 9 (Polish) for the full list. Key areas:
+### Reading order before starting
+1. `CLAUDE.md` — build status + all build notes
+2. `PRD.MD` Section 8 (User Journeys) — confirm onboarding is exactly right
+3. `skills/swift-design.MD` — animation patterns, empty state rules
+4. `skills/enzo-voice.MD` — copy rules before touching any string
+5. `skills/swift-patterns.MD` — before any architecture decision
 
-### Animations
-- Section fade-in stagger on Arc load (per swift-design.MD)
-- "Strike now" pill pulse animation on PROpportunitiesCard/SegmentsView
-- Fitness chart draw-in already works; verify it still does
+### Polish items (prioritized)
 
-### Empty states
-- Segments tab when no segment data yet
-- Arc sections while briefing/lookahead are generating (loading skeletons or spinners)
+**Cleanup (quick wins, do first):**
+- Remove `NSLog("[ConnectView] authenticate error: \(error)")` from `ConnectView.swift` — dev-only
+- Raise `phase2ActivityLimit` in `SyncService.swift` from `25` to `100`
 
-### Error states
-- Strava token expired mid-session → surface Enzo-voiced error, prompt reconnect
-- Sync failure → amber message in SettingsSheet
+**UX bug fix:**
+- Preview text flash on relaunch: `briefingText`/`lookaheadText` initialize to preview strings before `loadContext()` restores the cache. Fix: initialize to `""` (empty) in `AppState` and only set defaults in `generateBriefing/Lookahead()` fallback path, not as stored property defaults. `ArcBriefingView`/`LookaheadSuggestionView` already have loading states — they should show spinner when text is empty.
 
-### Copy review
-- Review all UI strings against enzo-voice.MD
-- Remove any placeholder or dev-only copy
+**Animations:**
+- Arc section fade-in stagger: each section in `ArcView` fades in with `0.1s` delay per index (see `swift-design.MD` Motion section)
+- "No brainer" strike pill pulse: `SegmentScore.strikeLabel == "No brainer"` rows get a subtle pulse animation on the pill badge
 
-### Settings
-- SettingsSheet: show last sync date
-- Consider showing syncedActivityCount somewhere in settings
+**Empty states (every view that can be empty needs one):**
+- `SegmentsView`: when `appState.segments` is empty, show `figure.cycling` SF Symbol + "Enzo will find your best opportunities once your rides sync."
+- `ArcBriefingView`: loading spinner while `isGeneratingBriefing` — already has one, verify it's visible
+- `LookaheadSuggestionView`: loading spinner while `isGeneratingLookahead` — already has one, verify it's visible
+- `PROpportunitiesCard`: if no segments loaded yet, show placeholder
 
-### Performance / UX
-- Brief flash of preview text before cached content restores (known artifact) — fix sequencing so cache is restored before first render
-- Remove the `[ConnectView] authenticate error:` NSLog (dev-only)
-- Raise `phase2ActivityLimit` from 25 toward 100+
+**Error states:**
+- Strava token expired mid-session: `refreshTokenIfNeeded()` throws → surface in UI as "Strava needs you to reconnect — takes 10 seconds." (amber, with retry)
+- Sync failure: if `syncPhase1()` throws, show amber message in `SettingsSheet`
 
-### Known deferred items
+**Copy review:**
+- Read every user-visible string in: `ConnectView`, `SyncProgressView`, `GoalSettingView`, `ArcView`, `SegmentsView`, `SegmentDetailView`, `SettingsSheet`, `GoalHeaderView`
+- Check against `enzo-voice.MD` — no "Error", no "AI", no exclamation marks, no guilt copy
+
+**Settings:**
+- `SettingsSheet`: add "Last synced: [date]" line. Date comes from `users.last_synced_at` in Supabase — may need a `fetchLastSyncedAt` call or store it in `AppState` after sync.
+
+**Tech debt:**
+- Swift 6 concurrency warnings in `StravaService.swift` and `SupabaseService.swift` — warnings only, build succeeds. Root cause: `Config` computed vars and `KeychainHelper` static methods are inferred `@MainActor`. Fix with explicit `nonisolated` annotations or `@MainActor` propagation.
+
+### Known deferred (not Step 11)
 - `recent_weeks: []` in context payload — Step 12
-- RLS policies on Supabase tables — deferred, anon key dev-only
-- Swift 6 concurrency warnings in StravaService/SupabaseService — warnings only
+- RLS policies on Supabase tables — before App Store
 - Strava webhooks — Step 12
 
 ---
 
 ## First thing to do in next session
 
-Read PRD.MD Section 9 for the polish spec, then read skills/swift-design.MD for animation patterns. Start with the Arc section fade-in stagger — it's the highest-visibility animation and touches ArcView which you'll need open anyway for copy review.
+Open `EnzoApp/Features/Onboarding/ConnectView.swift` and remove the `NSLog("[ConnectView] authenticate error: \(error)")` line — that's the fastest possible win and gets dev noise out before anything else. Then move to `SyncService.swift` and raise `phase2ActivityLimit` from `25` to `100`. Commit each separately. Then read PRD.MD and swift-design.MD before touching any views.
