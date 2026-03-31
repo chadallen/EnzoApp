@@ -46,7 +46,7 @@ struct FitnessRingView: View {
                     .chartLegend(.hidden)
                     .frame(width: 120, height: 120)
 
-                    Text("\(Int(context.currentFitnessValue * 100))%")
+                    Text("\(Int(context.currentFitnessValue * 100))")
                         .font(.system(.title3, design: .rounded, weight: .bold))
                         .foregroundStyle(ringColor)
                 }
@@ -126,11 +126,11 @@ struct FitnessRingView: View {
             .frame(height: 12)
 
             HStack {
-                Text("You · \(Int(current * 100))%")
+                Text("You · \(Int(current * 100))")
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(ringColor)
                 Spacer()
-                Text("PR · \(Int(pr * 100))%")
+                Text("PR · \(Int(pr * 100))")
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(Color.enzoAccent)
             }
