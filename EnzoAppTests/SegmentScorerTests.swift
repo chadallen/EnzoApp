@@ -29,15 +29,15 @@ struct SegmentScorerTests {
         #expect(score <= 0.10)
     }
 
-    @Test("Score is 0.5 at exact fitness parity with flat trend")
-    func parityScoreIsHalf() {
+    @Test("Score is 0.75 at exact fitness parity with flat trend")
+    func parityScoreIsSeventyFive() {
         let score = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50,
             currentFitnessValue: 0.50,
             trendDirection: "flat",
             prDate: "2020-01-01"
         )
-        #expect(score == 0.5)
+        #expect(score == 0.75)
     }
 
     @Test("Score is always in 0.0–1.0 range")
