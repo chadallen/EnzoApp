@@ -125,6 +125,9 @@ struct GoalHeaderView: View {
                                 .font(.system(.title3, design: .rounded, weight: .bold))
                                 .foregroundStyle(readColor)
                         }
+                        Text(goalSegment.strikeLabel)
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(readColor)
                         Text("Readiness")
                             .font(.system(.caption2, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
