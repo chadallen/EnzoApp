@@ -30,11 +30,11 @@ Follow this sequence. Each step produces something visible or testable before mo
 5. ✅ **Supabase schema + models** — Create tables, Swift models, SupabaseService read/write.
 6. ✅ **Strava OAuth** — Auth flow, token storage, athlete profile fetch.
 7. ✅ **Historical sync Phase 1** — Paginated activity fetch. Run FitnessCalculator in-memory. Write fitness snapshots to Supabase.
-8. **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
-9. **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
-10. **Strava webhooks** — Real-time new activity handling.
-11. **Onboarding flow** — Connect screen, sync animation, goal setting as front door.
-12. **Polish pass** — Animations, empty states, error states, copy review, settings.
+8. ✅ **Context payload + live Enzo** — Build AthleteContext from Supabase. Feed into all Claude calls. Tune model constants against real data.
+9. ✅ **Historical sync Phase 2 + segment scoring** — Background fetch of activity details. Extract segment efforts. Run SegmentScorer. Wire Segments tab and Arc PR card.
+10. **Onboarding flow** — Connect screen, sync animation, goal setting as front door. *(was Step 11)*
+11. **Polish pass** — Animations, empty states, error states, copy review, settings. *(was Step 12)*
+12. **Strava webhooks** — Real-time new activity handling. *(deferred from Step 10 — not needed for beta; manual sync is acceptable)*
 ---
 
 ## Hard Rules
@@ -96,10 +96,11 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   └── AppState.swift            ← @Observable @MainActor global state; inject via .environment
 │   │                                     Step 8: loadContext(), generateBriefing(), generateLookahead(),
 │   │                                     briefingText, lookaheadText, isGeneratingBriefing/Lookahead
+│   │                                     Step 9: loadSegments(), syncPhase2(), isSyncingPhase2
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
 │   │   │   ├── ArcView.swift         ← composes all sections; .task triggers loadContext+generate on launch
-│   │   │   │                             person.circle button = debug sync trigger (replace in Step 11)
+│   │   │   │                             person.circle button = debug sync trigger (replace in Step 10)
 │   │   │   ├── GoalHeaderView.swift  ← goal name, fitness label, trend, "Change goal" button
 │   │   │   ├── GoalSettingView.swift ← Step 4 ✓ — sheet: search, Enzo reaction, date, confirm
 │   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card; isLoading spinner
@@ -113,7 +114,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── Segments/
 │   │   │   ├── SegmentsView.swift    ← full list, goal segment first, sort menu
 │   │   │   └── SegmentDetailView.swift ← PR card, fitness comparison, strike assessment
-│   │   └── Onboarding/               ← Step 11 only — not built yet
+│   │   └── Onboarding/               ← Step 10 — not built yet
 │   ├── Models/
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
@@ -135,13 +136,14 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   └── SyncService.swift         ← Step 7 ✓ — Swift actor; syncPhase1(userId:), isQualifying(_:),
 │   │                                     computeSnapshots(from:userId:) [static, pure, testable]
 │   │                                     Step 8: writes last_activity_date to users after sync
+│   │                                     Step 9: syncPhase2(userId:) — detail fetch, segment extraction, upsert
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
 │   │   ├── KeychainHelper.swift      ← Step 6 ✓ — save/load/delete kSecClassGenericPassword; Strava key constants
 │   │   │                                 + supabaseUserId constant (Step 7)
 │   │   ├── FitnessCalculator.swift   ← Step 7 ✓ — pure static enum; efficiency, fitnessValue,
 │   │   │                                 trendDirection (trendThreshold=0.008), fitnessLabel, cyclingTypes
-│   │   ├── SegmentScorer.swift       ← Step 9 — not yet built
+│   │   ├── SegmentScorer.swift       ← Step 9 ✓ — pure static enum; strikeScore, strikeLabel, requiredFitnessLabel
 │   │   └── Extensions/
 │   │       ├── Color+Hex.swift       ← Color(hex: "RRGGBB") initializer
 │   │       └── Color+Enzo.swift      ← semantic constants: .enzoBg .enzoCard .enzoAccent
@@ -157,7 +159,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   ├── StravaServiceTests.swift      ← Step 6 ✓ — URL construction + token/athlete JSON decoding (8 passing)
 │   ├── FitnessCalculatorTests.swift  ← Step 7 ✓ — efficiency, fitnessValue, trend, label (18 passing)
 │   ├── SyncServiceTests.swift        ← Step 7 ✓ — qualifying filter, computeSnapshots pipeline (23 passing)
-│   └── AthleteContextTests.swift     ← Step 8 ✓ — build factory, contextPayload, fitnessLabel (13 passing)
+│   ├── AthleteContextTests.swift     ← Step 8 ✓ — build factory, contextPayload, fitnessLabel (13 passing)
+│   └── SegmentScorerTests.swift      ← Step 9 ✓ — strikeScore, strikeLabel, requiredFitnessLabel (13 passing)
 ├── .gitignore
 ├── CLAUDE.md
 ├── PRD.MD                            ← full product spec — source of truth
@@ -189,10 +192,10 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 7: Historical sync Phase 1 (activities + fitness computation)
 
 - [x] Step 8: Context payload + Arc content generation (live Enzo)
-- [ ] Step 9: Historical sync Phase 2 + segment scoring
-- [ ] Step 10: Strava webhooks
-- [ ] Step 11: Onboarding flow
-- [ ] Step 12: Polish pass
+- [x] Step 9: Historical sync Phase 2 + segment scoring
+- [ ] Step 10: Onboarding flow
+- [ ] Step 11: Polish pass
+- [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
 ---
 
@@ -278,10 +281,10 @@ https://github.com/chadallen/EnzoApp — private. Push all work here. xcconfig f
 `ClaudeService` is a Swift `actor`. Any `AppState` method that calls into it must be marked `async` so the call can be `await`ed. `sendMessage` and `goalReactionStream` both follow this pattern. All future AppState methods that call actor-isolated services need the same treatment.
 
 **GoalSettingView location**
-Lives in `Features/Arc/` for Steps 4–10. In Step 11 (Onboarding), it needs to be reachable from the onboarding flow — move it to a shared location then if needed. Don't pre-optimize.
+Lives in `Features/Arc/` for Steps 4–9. In Step 10 (Onboarding), it needs to be reachable from the onboarding flow — move it to a shared location then if needed. Don't pre-optimize.
 
-**requiredFitnessLabel in setGoal — known placeholder**
-`AppState.setGoal` sets `requiredFitnessValue = segment.fitnessValueAtPR` directly. For Hawk Hill (0.98 → "Epic"), the header shows "Epic fitness needed" rather than the spec's "Strong". The correct derivation belongs in `SegmentScorer` (Step 9) and will be fixed then.
+**requiredFitnessLabel in setGoal — fixed in Step 9**
+`AppState.setGoal` now calls `SegmentScorer.requiredFitnessLabel(fitnessValueAtPR:)`, which returns one tier below the PR fitness label (Epic→Strong, Strong→Building, etc.). Hawk Hill (Epic PR) now correctly shows "Strong fitness needed".
 **Supabase REST API (no SDK)**
 `SupabaseService` is a Swift `actor` using `URLSession` directly — no Supabase Swift SDK. Auth headers on every request: `apikey: <anon key>` and `Authorization: Bearer <anon key>`. Upserts use `POST` with `Prefer: resolution=merge-duplicates,return=representation` — this resolves unique constraint conflicts and returns the full inserted/updated row including its server-assigned UUID. The `return=representation` header is critical; without it, upserts return 204 with no body and decoding fails.
 
@@ -289,7 +292,7 @@ Lives in `Features/Arc/` for Steps 4–10. In Step 11 (Onboarding), it needs to 
 `FitnessSnapshotRow`, `SegmentScoreRow`, `GoalRow` live in `Models/+Supabase.swift` files alongside their domain model counterparts. These are wire-format DTOs, not domain models — they map to DB column names (snake_case) via `CodingKeys`. `FitnessSnapshot.month` ("YYYY-MM") is stored as "YYYY-MM-01" (PostgreSQL `date` type); `toSnapshot()` trims the suffix back. `SegmentScoreRow.stravaSegmentId` is non-optional (required by DB) — SyncService provides it from Strava in Step 9.
 
 **Supabase RLS**
-All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added in Step 6 — defer to Step 11 (Onboarding) when the full user identity model is in place.
+All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added in Step 6 — defer to Step 10 (Onboarding) when the full user identity model is in place.
 
 **Integration test env var**
 The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
@@ -331,13 +334,55 @@ After running it, trigger a sync from the app. `SyncService.syncPhase1()` will n
 `FitnessCalculator.trendThreshold` changed from 0.05 to 0.008. Calibrated against real Supabase data (efficiency range ~0.10–0.28). The 97 existing rows in `fitness_snapshots` were computed with the old threshold — re-running sync will rewrite them with corrected trend directions (upsert overwrites).
 
 **Step 8: loadContext() + generateBriefing/Lookahead pattern**
-`AppState.loadContext()` fetches snapshots, user profile, and active goal concurrently from Supabase, then calls `AthleteContext.build()`. `generateBriefing()` and `generateLookahead()` stream Claude responses into `briefingText`/`lookaheadText`. All three are triggered by `.task` in `ArcView` on every launch. Falls back to `AthleteContext.previewBriefing/previewLookahead` until authenticated. Caching (daily refresh, UserDefaults) is Step 12 polish.
+`AppState.loadContext()` fetches snapshots, user profile, and active goal concurrently from Supabase, then calls `AthleteContext.build()`. `generateBriefing()` and `generateLookahead()` stream Claude responses into `briefingText`/`lookaheadText`. All three are triggered by `.task` in `ArcView` on every launch. Falls back to `AthleteContext.previewBriefing/previewLookahead` until authenticated. Caching (daily refresh, UserDefaults) is Step 11 polish.
 
 **Step 8: fitness data is mostly Baseline/Recovering**
 Real Supabase data shows 97 months almost entirely in "Recovering" or "Baseline" with one "Building" month. This is the actual fitness state vs. the illustrative hardcoded preview. Enzo will narrate the real state. The fitness model normalization (all-time min/max) may need tuning in Step 9 once segment data gives more context.
 
 **Step 8: recent_weeks is empty in contextPayload**
-`contextPayload()` includes `recent_weeks: []` as a placeholder. Per-activity weekly breakdown is deferred to Step 10 (webhooks), when individual ride data will be available.
+`contextPayload()` includes `recent_weeks: []` as a placeholder. Per-activity weekly breakdown is deferred to Step 12 (webhooks), when individual ride data will be available.
+
+**Step 9: Supabase upsert requires on_conflict columns**
+`SupabaseService.upsertFitnessSnapshot` and `upsertSegmentScore` both append `?on_conflict=user_id,month` and `?on_conflict=user_id,strava_segment_id` respectively to the URL. Without this, Supabase returns 409 when `id` is null because it can't determine which unique constraint to use for `merge-duplicates` resolution.
+
+**Phase 2 rate limit and incremental sync (updated this session)**
+Strava limits: 200 requests/15 min, 2000/day. Phase 1 uses ~4–5 requests (paginated list). Phase 2 first run uses ~26 requests (1 list page + 25 detail calls). Two full syncs in one 15-minute window exceeded the limit during development.
+
+Fix: Phase 2 is now **incremental**. After each successful run, a `lastPhase2SyncTimestamp` is saved to `UserDefaults`. The next run passes `after=<unix timestamp>` to the Strava activities API, fetching only activities newer than that date. If no new activities → Phase 2 logs "No new activities — skipping" and returns immediately without any Strava API calls.
+
+`phase2ActivityLimit = 25` (was 100). This is a tunable constant — raise toward 200 once smoke tests consistently pass. Production full-history import will need batch pausing (200 req/15 min), deferred to Step 11.
+
+**To reset Phase 2 and re-fetch from scratch:** call `appState.resetSyncHistory()` — this is wired to a "Reset sync history" button in `SettingsSheet` (built in Step 10 Chunk 1). It clears `lastPhase2SyncTimestamp` from UserDefaults. `SyncService.lastPhase2SyncKey` is `static` (not private) so AppState can reference it. Do not add temp reset code — use the SettingsSheet button.
+
+**Step 9: Phase 2 triggered automatically after Phase 1**
+`AppState.syncPhase1()` calls `syncPhase2()` on completion. The person.circle button in ArcView triggers both phases sequentially. `isSyncingPhase2` flag is available for a future progress indicator.
+
+**Step 9: loadSegments() falls back to preview data if Supabase is empty**
+`AppState.loadSegments()` is a no-op (keeps `SegmentScore.previewSegments`) if the `segment_scores` table returns zero rows. This means the first launch before any sync shows preview data — correct behavior.
+
+**Step 9: SegmentScorer strike score formula**
+`base = clamp(0.5 + (currentFitness - fitnessAtPR) × 0.8, 0, 1)`. Trend adds ±0.05. PRs set within 30 days get ×0.85 recency discount. Thresholds: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready". `requiredFitnessLabel` returns one tier below the PR fitness label.
+
+**Step 10 (Onboarding) context**
+Step 10 is split into two chunks. Chunk 1 builds the auth gating shell, SettingsSheet, and GoalSettingView Path B. Chunk 2 builds ConnectView (real OAuth hero screen) and SyncProgressView (route-drawing animation). The app currently launches directly into ArcView — no auth gating. Step 10 Chunk 1 adds the gate. See handoff.MD for the full approved plan.
+
+**Strava webhooks deferred to Step 12**
+Webhooks were originally Step 10. Decision: not needed for beta — testers can tap to sync manually after a ride. Deferred to after the Polish pass (Step 11). The manual sync button (person.circle → settings in Step 10) stays as the primary sync mechanism through beta.
+
+**Smoke test — PASSED (pre-Step 10 gate complete)**
+Phase 2 confirmed end-to-end: `[Sync P2] Upserting 109 segment rows`, `[Segments] Loaded 109 segments from Supabase`. Segments tab shows real segments. Goal persistence confirmed across relaunches. Step 10 code may proceed.
+
+**Goal persistence via saveGoal() (fixed this session)**
+`AppState.setGoal()` previously only updated in-memory state — goals were lost on relaunch. Fixed: `setGoal()` now fires a background Task calling `supabaseService.saveGoal()`. `saveGoal()` first PATCHes all existing active goals for the user to `is_active=false`, then POSTs a new goal row **without an `id` field** (using a private `GoalInsert` struct). Sending `"id": null` would conflict with PostgreSQL's NOT NULL + DEFAULT constraint on the auto-generated PK — the separate insert struct avoids this.
+
+**GoalHeaderView empty state (fixed this session)**
+`GoalHeaderView` now shows "No goal set / Set a goal" when `goal.segmentName.isEmpty`. The no-goal placeholder in `AthleteContext.build()` was `"—"` (em dash, non-empty) — changed to `""` so the `isEmpty` check works. If you see `"— PR"` in the header again, check the `AthleteContext.build()` fallback GoalContext.
+
+**GoalSettingView used hardcoded preview segments (fixed this session)**
+`filteredSegments` was referencing `SegmentScore.previewSegments` instead of `appState.segments`. Fixed. Goal search now shows real Supabase segments after sync.
+
+**Phase 2 PR detection uses pr_rank, not athlete_pr_effort (fixed, commit 93dee1f)**
+`athlete_pr_effort` is defined in Strava's `SummarySegment` schema but is **not populated** in activity detail API responses — it's always nil. The reliable signal is `pr_rank == 1` on `DetailedSegmentEffort`: if this effort is the athlete's all-time PR on this segment, `pr_rank` is 1. `StravaSegmentEffort` now has `prRank: Int?` and `startDateLocal: String`. The loop records a `SegmentScoreRow` only when `effort.prRank == 1`, using `effort.elapsedTime` as `prSeconds` and `effort.startDateLocal` as `prAchievedAt`. `StravaSegmentSummary` no longer has `athletePrEffort` — it only needs `id` and `name`. **Limitation:** only segments with a PR in the fetched activity window are captured. Raise `phase2ActivityLimit` in Step 11 to expand coverage.
 
 **Swift 6 concurrency warnings**
 Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
