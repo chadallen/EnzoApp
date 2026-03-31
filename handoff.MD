@@ -1,22 +1,13 @@
-# Session Handoff — Targets Tab + Today Tab Header Session
+# Session Handoff — Score cleanup session
 
 ## What was completed this session
 
 | Change | Files touched | Commit |
 |---|---|---|
-| GoalHeaderView pinned to Targets tab as full-width accent-tint header | `GoalHeaderView.swift`, `SegmentsView.swift` | c7c73cd |
-| Redesign GoalHeaderView: segment name hero + two-column fitness comparison | `GoalHeaderView.swift` | 2d4f16f, 361ab5b |
-| Segment stats column in GoalHeaderView (distance, PR time, date, elevation) | `GoalHeaderView.swift`, `SegmentScore.swift` | 9f742b5, b181e65, a01296b |
-| Wire distance/elevation through Strava API → SegmentScoreRow → SegmentScore | `SyncService.swift`, `SegmentScore+Supabase.swift` | 400b39b |
-| Supabase migration: `distance_meters`, `elevation_delta_meters` columns added | (manual SQL — already run) | — |
-| Accent tint on goal header + alternating row shading on Targets list | `GoalHeaderView.swift`, `SegmentsView.swift` | c07c631 |
-| Distance/elevation added to segment list row subtitle | `SegmentsView.swift` | ae8687c |
-| "Change goal" removed from header; "Explore more segments" non-clickable header | `SegmentsView.swift` | 855b278, 4443c64 |
-| SegmentDetailView: consolidated goal-setting, stats card, fitness %, readiness header | `SegmentDetailView.swift` | 4443c64, 4467e9a |
-| Prompt chips removed from Today tab | `ArcView.swift` | 63489ce |
-| FitnessRingView pinned as accent-tint full-width header on Today tab | `ArcView.swift`, `FitnessRingView.swift` | dc6e623 |
-| Ring color → chart blue; athlete name greeting; goal progress bar | `FitnessRingView.swift` | ef8d8a7, 0756f14 |
-| Deferred Items section added to Claude.MD | `Claude.MD` | 2c7a549 |
+| Remove % symbols from all fitness and readiness score displays | `SegmentDetailView.swift`, `GoalHeaderView.swift`, `FitnessRingView.swift` | ac57716 |
+| Percentile-based normalization (5th/95th) for fitness scores | `FitnessCalculator.swift`, `SyncService.swift`, `FitnessCalculatorTests.swift` | e5ce9e3 |
+| Fix missing `import Foundation` in SegmentScorerTests (pre-existing bug) | `SegmentScorerTests.swift` | e5ce9e3 |
+| Remove recency discount from strike score formula | `SegmentScorer.swift`, `SegmentScorerTests.swift` | 524a2e4 |
 
 ---
 
@@ -24,57 +15,129 @@
 
 All changes committed and pushed. Working tree is clean. Branch: `main`.
 
-### Today tab layout
-1. `FitnessRingView` — full-width accent-tint pinned header. Shows: athlete name, donut ring (chart blue), STATUS + LAST RIDE stats, goal progress bar (current fitness fill → PR tick marker)
-2. `FitnessChartView` — history chart with YTD/1Y/5Y/All picker (scrolls)
-3. Sync error banner (conditional)
-4. `ArcBriefingView`
-5. `LookaheadSuggestionView`
-6. Message thread + `ArcInputBar` (no chips)
-
-### Targets tab layout
-1. `GoalHeaderView` — full-width accent-tint pinned header. Shows: segment name, three columns (Segment stats | Current fitness | PR fitness), "Set a goal" button in empty state
-2. "EXPLORE MORE SEGMENTS" non-clickable section label + sort menu
-3. Alternating-shaded segment list rows (distance + elevation in subtitle)
-4. `SegmentDetailView` (push): stats card, fitness % comparison, readiness score, "Set this goal" + target date
-
-### Supabase
-- `segment_scores` table has two new columns: `distance_meters float8`, `elevation_delta_meters float8`
-- Migration already run. Existing 109 rows have NULLs — need re-sync to populate.
-- **To populate distance/elevation: Settings → Reset sync history → Sync now**
+**Important:** After these scoring changes, the stored values in Supabase are stale. Chad needs to:
+**Settings → Reset sync history → Sync now**
+to rewrite all fitness snapshots (with percentile normalization) and segment scores (without recency discount).
 
 ---
 
-## Next session
+## Next session: Score UI cleanup
 
-**Theme: Ongoing UI refinements** — Chad describes what he wants, agent presents plan and waits for explicit approval, then implements. Frequent commits after each discrete change.
+### Overview
 
-### Likely topics
-- Verify distance/elevation data is flowing after re-sync (Chad needs to manually reset + re-sync)
-- PROpportunitiesCard: decide whether to bring it back on Targets tab (it still exists in codebase, just unused)
-- FitnessChartView axis polish (deferred — x-axis label overlap, Y-axis labels)
-- SegmentDetailView: Enzo one-liner ("What does Enzo think about this segment?")
-- Step 11b: Enzo voice/prompt tuning — `enzo-voice.MD` has stale fitness labels, fix those first
-- `phase2ActivityLimit` raise from 25 → 100 (deferred at Chad's request — confirm before raising)
+The SegmentDetailView and GoalHeaderView currently show three things: current fitness, fitness-at-PR, and readiness score. We are simplifying to two: **current fitness** and **readiness score**. The "fitness at time of PR" value is confusing and redundant — users need to know how fit they are now and whether they're ready to beat the PR, not what their fitness was when they set it.
 
-### First thing to do next session
-Read `Claude.MD`, `PRD.MD`, and `handoff.MD`. Then ask Chad what to work on. Wait for direction before writing any code.
+`fitnessValueAtPR` stays in the data model and is still used internally by `SegmentScorer.strikeScore()`. We are only removing its display.
+
+---
+
+### Change 1: `EnzoApp/Features/Segments/SegmentDetailView.swift`
+
+**Remove the entire "FITNESS COMPARISON" card** — the `VStack` containing the section header, the two `fitnessBlock` calls with the arrow between them, and the `deltaLine` text below. This is the card that shows "Building 63 → Building 63 / You're at Building — roughly the same fitness...".
+
+**Remove the `deltaLine` computed property** — it references `segment.fitnessValueAtPR` and `segment.fitnessDelta` and is only used by the deleted card.
+
+**Remove the `fitnessBlock` private helper function** — it was only used by the fitness comparison card.
+
+**Rewrite the `strikeLine` computed property** — the current "No brainer" case says *"You're in better shape now than when you set this PR."* That implicitly references PR fitness. Replace all three cases with self-contained copy:
+
+```swift
+private var strikeLine: String {
+    switch segment.strikeScore {
+    case 0.70...:
+        return "You're fit and trending in the right direction. A good window to go after it."
+    case 0.45..<0.70:
+        return "Getting close — a few more weeks of consistent riding and the timing will be right."
+    default:
+        return "Not quite there yet. Worth targeting once you've built more fitness."
+    }
+}
+```
+
+**After the change**, SegmentDetailView has three cards: segment stats, readiness, goal/set-goal. The `pillColor` computed property and everything in the readiness card stays.
+
+---
+
+### Change 2: `EnzoApp/Features/Arc/GoalHeaderView.swift`
+
+The `goalContent` body currently builds a 3-column `HStack`: Segment stats | divider | Current fitness | divider | PR fitness.
+
+**Remove the PR fitness column** — the `VStack` with the "PR fitness" caption, `prLabel` text, and `prPct` value.
+
+**Remove the second divider** — the `Rectangle` between current fitness and PR fitness.
+
+**Remove the `prLabel` and `prPct` local variables** — they're only used by the deleted column. `currentPct` stays (used by the current fitness column). The `goalSegment` lookup stays (still needed for the segment stats column).
+
+**After the change:** GoalHeaderView shows Segment stats | divider | Current fitness. Two columns.
+
+---
+
+### Change 3: `EnzoApp/Features/Arc/FitnessRingView.swift`
+
+**Add a second donut for goal segment readiness score** next to the existing fitness donut on the Today tab header.
+
+Currently the header ring row is: `[fitness donut] [STATUS + LAST RIDE stats] [Spacer]`
+
+New layout: `[fitness donut] [readiness donut] [STATUS + LAST RIDE stats] [Spacer]`
+
+The readiness donut:
+- Only renders when `goalSegment != nil` and goal segment name is non-empty
+- Value: `goalSegment.strikeScore` (0.0–1.0), same `SectorMark` pattern as the fitness ring
+- Ring color: use the same `pillColor` logic already in `SegmentDetailView` — green (`enzoGoal`) for ≥ 0.70, amber (`enzoAmber`) for 0.45–0.70, secondary (`enzoSecondary`) for < 0.45. Define this as a private computed var on `FitnessRingView`.
+- Center label: `Int(goalSegment.strikeScore * 100)` — same style as the fitness score
+- Frame: same 120×120 as the fitness donut
+- Below the donut, a small caption label: the goal segment name, truncated, in `enzoSecondary caption2`
+- Below the fitness donut, add a matching caption: "FITNESS" — so both donuts are labeled below
+
+The goal progress bar (current fitness fill vs PR tick) currently lives below the ring row. **Remove the goal progress bar entirely** — it referenced `fitnessValueAtPR` for the PR tick and the "PR · X" label, which we're removing everywhere. The readiness donut replaces it as the "how close am I to the PR?" signal on the header.
+
+**`FitnessRingView` signature change:** no new parameters needed — `goalSegment: SegmentScore?` already exists.
+
+---
+
+### Files to check before starting
+
+Read these before writing any code — they may also reference PR fitness:
+
+- `EnzoApp/Features/Arc/PROpportunitiesCard.swift` — check for any PR fitness label references in the row display
+- `EnzoApp/Features/Segments/SegmentsView.swift` — check `SegmentStrikeRow` subtitle
+
+If either references `fitnessValueAtPR` in the display layer, remove those references in the same pass.
+
+---
+
+### Test changes
+
+No test changes needed. All tests operate on the model and scoring logic, not the UI layer.
+
+---
+
+### Commit strategy
+
+Four commits in order:
+1. `SegmentDetailView`: remove fitness comparison card, rewrite strikeLine
+2. `GoalHeaderView`: remove PR fitness column
+3. `FitnessRingView`: add readiness donut, remove goal progress bar
+4. Any cleanup in `PROpportunitiesCard` / `SegmentsView` if needed
+
+---
+
+### Supabase state reminder
+
+The `segment_scores` table still has `fitness_value_at_pr` and `current_fitness_value` columns — these stay. We are only changing the display layer. No migration needed.
 
 ---
 
 ## Build notes from this session
 
-**GoalHeaderView fullWidth mode**
-`fullWidth: Bool = false` parameter controls background shape: `RoundedRectangle(cornerRadius: 16)` (default card) vs `UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16)` (full-width header). Background color: `enzoCard` (default) vs `enzoAccent.opacity(0.08)` (full-width). Same pattern used on both `GoalHeaderView` and `FitnessRingView`.
+**Percentile normalization (5th/95th percentile)**
+`FitnessCalculator.percentile(_:of:)` added as a pure static helper. `SyncService.computeSnapshots` now uses `percentile(5, ...)` and `percentile(95, ...)` instead of absolute `min()`/`max()`. Prevents outlier months (illness, minimal riding) from compressing all normal months into a narrow band. Fitness values will spread more meaningfully across the 0–100 range after re-sync.
 
-**SegmentDetailView is now the goal-setting entry point**
-`GoalSettingView` is only used during onboarding. All post-onboarding goal changes go through `SegmentDetailView` → "Set this goal" button. Setting goal from `SegmentDetailView` fires `generateBriefing(forceRefresh: true)` + `generateLookahead(forceRefresh: true)` — no Enzo reaction stream (that only happens in `GoalSettingView`).
+**Recency discount removed from strike score**
+`SegmentScorer.strikeScore` no longer applies a ×0.85 discount when the PR was set within 30 days. The hidden penalty created confusing contradictions (same fitness as PR day → still "not quite ready"). The `prDate` parameter is kept in the function signature for now (marked as unused in the docstring) — can be removed in a later cleanup pass.
 
-**FitnessRingView ring color change**
-Ring color is now always `enzoChartPrimary` (#1E88E5 blue) regardless of fitness tier. `enzoRingHigh` and `enzoRingLow` remain in `Color+Enzo.swift` but are unused. The tier semantics are communicated through the fitness label text, not the ring color.
+**% symbols removed**
+All fitness and readiness score displays no longer show `%`. These are scores (0–100), not percentages of something.
 
-**Goal progress bar in FitnessRingView**
-`FitnessRingView` accepts optional `goalSegment: SegmentScore?`. When provided and goal segment name is non-empty, renders a progress bar: blue fill to `currentFitnessValue` width, accent-color 3px tick at `fitnessValueAtPR` position, "You · X%" left / "PR · Y%" right labels. Uses `GeometryReader` for bar width. If `currentFitnessValue > fitnessValueAtPR` (user is fitter than PR), bar fill is clamped to PR position.
-
-**Distance/elevation graceful degrade**
-`SegmentScore.distanceMeters` and `elevationDeltaMeters` default to `nil`. All UI that uses them (`GoalHeaderView` segment stats column, `SegmentStrikeRow` subtitle, `SegmentDetailView` stats card) conditionally renders only when non-nil. Pre-sync or pre-migration the UI degrades cleanly.
+**SegmentScorerTests was missing `import Foundation`**
+Pre-existing bug — caused build failures when running any test suite. Fixed in commit `e5ce9e3`.
