@@ -19,8 +19,8 @@ enum SegmentScorer {
     /// Computes how ready the athlete is to beat their PR on a given segment.
     ///
     /// Formula:
-    /// 1. base = clamp(0.5 + fitnessDelta × 0.8, 0, 1)
-    ///    — at parity (delta=0) → 0.5 "Worth a shot"
+    /// 1. base = clamp(0.75 + fitnessDelta × 1.0, 0, 1)
+    ///    — at parity (delta=0) → 0.75 "Almost there"
     ///    — well above PR fitness → approaches 1.0
     ///    — well below PR fitness → approaches 0.0
     /// 2. trendBonus: +0.05 for "up", -0.05 for "down"
@@ -38,7 +38,7 @@ enum SegmentScorer {
         prDate: String
     ) -> Double {
         let delta = currentFitnessValue - fitnessValueAtPR
-        var score = min(max(0.5 + delta * 0.8, 0), 1)
+        var score = min(max(0.75 + delta * 1.0, 0), 1)
 
         switch trendDirection {
         case "up":   score += 0.05
