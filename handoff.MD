@@ -1,138 +1,109 @@
-# Session Handoff — Smoke Test Complete, Step 10 Chunk 1 Ready
+# Session Handoff — Step 10 Chunk 1 Complete
 
 ## What was completed this session
 
-Smoke test debugging and Phase 2 PR detection fix. No Step 10 code written.
+Step 10 Chunk 1 — all 6 files, plus several bug fixes and UX improvements discovered during testing.
 
 | Commit | What |
 |---|---|
-| `93dee1f` | Fix Phase 2: switch from `athlete_pr_effort` (not populated by Strava in activity detail responses) to `pr_rank == 1` (reliable all-time PR signal). Also exposes `SyncService.lastPhase2SyncKey` as `static` and adds `AppState.resetSyncHistory()` for SettingsSheet reset button. |
-
----
-
-## Smoke test — PASSED
-
-- Phase 2 processed 25 activities, upserted **109 segment rows**
-- `[Segments] Loaded 109 segments from Supabase` confirmed
-- Segments tab shows real segments (not preview data)
-
-**Why `athlete_pr_effort` was always nil:** Strava does not populate this field in activity detail responses despite it being in the `SummarySegment` schema. `pr_rank == 1` on the `DetailedSegmentEffort` is the correct signal — it means that effort is the athlete's all-time PR on that segment.
-
-**Limitation:** Phase 2 only captures PRs that appear as `pr_rank == 1` in the fetched activity window (currently 25 activities). Segments where the PR is older than the window won't appear. Raising `phase2ActivityLimit` in a later session will expand coverage.
+| `71f6ebc` | Add `WindowContextProvider` for ASWebAuthenticationSession anchor |
+| `43919d6` | AppState: `hasCompletedOnboarding`, `disconnect()`, onboarding auto-set in `loadContext()` |
+| `a890787` | GoalSettingView: `onGoalConfirmed` callback, hide Cancel in onboarding, add Path B |
+| `da514ac` | Add `SettingsSheet`: sync now, reset sync history, disconnect Strava |
+| `b28e669` | ArcView: replace debug sync button with gear icon opening SettingsSheet |
+| `ce3e232` | EnzoAppApp: auth gating + `ConnectPlaceholderView` |
+| `6205f7c` | Fix onboarding gate: add `isResolvingOnboarding` to avoid flash of GoalSettingView for existing users |
+| `98becfe` | GoalSettingView: rename "Change" → "Pick different" to eliminate UX confusion |
+| `f296bf6` | GoalSettingView: copy reaction text to Arc briefing, regenerate lookahead on goal confirm |
+| `09b6b22` | GoalHeaderView: show weeks remaining when target date is set |
+| `f25ea80` | GoalContext: add `daysRemaining`, show days/weeks label with sub-week precision |
+| `2a4b59d` | GoalHeaderView: show days for <14 days, weeks for 14+ |
 
 ---
 
 ## Current app state
 
-- **Smoke test:** passed — 109 real segment rows in Supabase
-- **Segments tab:** shows real segments sorted by strike score
-- **Goal header:** shows "No goal set / Set a goal" until a goal is set; goal persists to Supabase across relaunches
-- **GoalSettingView:** searches real Supabase segments
-- **Sync:** person.circle button in ArcView header triggers Phase 1 + Phase 2
-- **Phase 2:** incremental — `resetSyncHistory()` on AppState clears `lastPhase2SyncTimestamp`
-- **Auth gating:** none — app still launches directly into ArcView
+- **Auth gating:** live — `RootView` gates on `isAuthenticated` → `isResolvingOnboarding` → `hasCompletedOnboarding`
+- **Unauthenticated:** shows `ConnectPlaceholderView` (dark screen, bike icon, "Connect Strava" — placeholder only, no working button yet)
+- **Authenticated, no goal:** shows `GoalSettingView` with no Cancel button
+- **Authenticated, has goal:** lands directly in `MainTabView` (existing users auto-set via `loadContext()`)
+- **SettingsSheet:** gear icon in Arc header — Sync now, Reset sync history, Disconnect Strava
+- **Goal confirm flow:** reaction text copied to Arc briefing; lookahead regenerates for new goal
+- **Target date display:** "N days to go" for <14 days, "N weeks to go" for 14+
+- **GoalSettingView Path B:** "Help me pick one" button shows top 3 segments by strike score
+- **Disconnect:** clears all Keychain + UserDefaults state, restores preview data, triggers gate to ConnectPlaceholderView
 
 ---
 
-## Step 10: Onboarding Flow — Chunk 1 Ready to Implement
+## Step 10 Chunk 2 — next
 
-All open questions are answered. Plan is approved. Do not re-plan — implement this.
+### Files to build
 
-### Approved answers to open questions
-
-1. **Existing user bootstrapping:** Auto-set `hasCompletedOnboarding = true` at end of `loadContext()` if `activeGoal != nil`. Prevents forcing existing users through onboarding after app update. ✅ Approved.
-
-2. **GoalSettingView location:** Stays in `Features/Arc/` — just adding a callback parameter. ✅ Confirmed.
-
-### Chunk 1 files (implement all of these)
-
-| File | Change |
+| File | What |
 |---|---|
-| `Utils/WindowContextProvider.swift` | **Create** — `NSObject` + `ASWebAuthenticationPresentationContextProviding`. Needed by ConnectView (Chunk 2) to present Safari auth sheet. |
-| `App/AppState.swift` | **Modify** — add `hasCompletedOnboarding: Bool` (UserDefaults-backed, restored in `init()`), `disconnect()` method, auto-set in `loadContext()` when `activeGoal != nil` |
-| `Features/Arc/GoalSettingView.swift` | **Modify** — add `onGoalConfirmed: (() -> Void)?` callback (called instead of `dismiss()` when set), hide Cancel button when callback is present, add "Help me pick one" Path B |
-| `Features/Onboarding/SettingsSheet.swift` | **Create** — sheet with three actions: "Sync now", "Reset sync history" (calls `appState.resetSyncHistory()` then `syncPhase1()`), "Disconnect Strava" (calls `appState.disconnect()`) |
-| `Features/Arc/ArcView.swift` | **Modify** — replace person.circle debug button with gear icon that opens SettingsSheet as a sheet |
-| `EnzoAppApp.swift` | **Modify** — auth gating logic (see below) |
+| `Features/Onboarding/ConnectView.swift` | **Create** — hero screen, "Connect Strava" CTA wired to `appState.authenticate(contextProvider:)`. Uses `WindowContextProvider`. On success, transitions to `SyncProgressView`. |
+| `Features/Onboarding/SyncProgressView.swift` | **Create** — shown after auth while Phase 1 + Phase 2 run. Route-drawing animation + crossfading copy phases. On completion, sets `hasCompletedOnboarding = true` and advances to `GoalSettingView`. |
+| `App/AppState.swift` | **Modify** — add Claude response cache: persist `briefingText`/`lookaheadText` to UserDefaults after generation. On launch, restore cached values immediately so Arc has content before Claude responds. Invalidate cache after 24 hours or on new sync. |
+| `EnzoAppApp.swift` | **Modify** — replace `ConnectPlaceholderView()` with `ConnectView()` in the unauthenticated gate branch. |
 
-### Auth gating pattern (approved)
+### ConnectView spec (PRD Section 8, Journey 1 Step 1)
 
-```swift
-// EnzoAppApp.swift — WindowGroup body
-if !appState.isAuthenticated {
-    // ConnectView comes in Chunk 2 — use a placeholder for now
-    ConnectPlaceholderView()
-} else if !appState.hasCompletedOnboarding {
-    GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })
-} else {
-    MainTabView()
-}
-```
+- Clean hero screen. Dark background.
+- App name "Enzo" in rounded bold at top.
+- Tagline: *"Meet Enzo. Your cycling companion."*
+- Single CTA: "Connect Strava" — accent blue pill button
+- Tapping calls `appState.authenticate(contextProvider: WindowContextProvider())`
+- On success: transition to `SyncProgressView` (not directly to goal setting — sync must run first)
+- On error: show "Strava couldn't connect — tap to retry." inline below the button
 
-`ConnectPlaceholderView` is a minimal dark screen with "Connect Strava" text — enough to test the gate. Real ConnectView with OAuth + animation is Chunk 2.
+### SyncProgressView spec (PRD Section 8, Journey 1 Step 2)
 
-### hasCompletedOnboarding implementation
+- Blocks progression — sync must complete before goal setting
+- **Animation:** Abstract cycling route draws itself across the dark background using SwiftUI path + `trim(from:to:)` animation, looping with slight fade-out and redraw. Accent color (`#4FC3F7`) on dark background.
+- **Copy phases** (crossfade between them as sync progresses):
+  1. *"Reading your rides..."* — Phase 1 activity fetch
+  2. *"Finding your best efforts..."* — Phase 2 segment extraction
+  3. *"Sizing up your fitness..."* — metrics computation
+  4. *"Scoping your opportunities..."* — strike scores calculating
+  5. *"Enzo is almost ready..."* — final writes
+- Secondary text below: *"[N] rides and counting"* — show actual activity count from Phase 1
+- If sync takes > 60 seconds: add *"Big history — this is worth it."* below the counter
+- On completion: crossfade to `GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })`
 
-```swift
-// In AppState — stored property so @Observable tracks it; didSet persists to UserDefaults
-var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-    didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
-}
-```
+### How SyncProgressView drives phase transitions
 
-**Why stored, not computed:** `@Observable` only tracks stored properties. A computed property backed purely by UserDefaults won't trigger SwiftUI re-renders. The stored property + `didSet` pattern initializes from UserDefaults on launch and persists every change.
+`AppState` needs to expose enough state for `SyncProgressView` to drive its copy phases:
+- Phase 1 in progress: `isSyncing == true`
+- Phase 2 in progress: `isSyncingPhase2 == true`
+- Both false and no error: sync complete
 
-Auto-set in `loadContext()`:
-```swift
-// After building context, before returning:
-if activeGoal != nil && !hasCompletedOnboarding {
-    hasCompletedOnboarding = true
-}
-```
+The view can derive its copy phase from these two booleans. No new state needed on AppState for the basic implementation.
 
-### disconnect() implementation
+### Claude response cache
 
-```swift
-func disconnect() {
-    KeychainHelper.delete(for: KeychainHelper.stravaAccessToken)
-    KeychainHelper.delete(for: KeychainHelper.stravaRefreshToken)
-    KeychainHelper.delete(for: KeychainHelper.stravaAthleteId)
-    KeychainHelper.delete(for: KeychainHelper.supabaseUserId)
-    UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
-    UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
-    isAuthenticated = false
-    stravaAthleteId = nil
-    supabaseUserId = nil
-    athleteContext = .preview
-    fitnessSnapshots = FitnessSnapshot.previewSnapshots
-    segments = SegmentScore.previewSegments
-}
-```
-
-### GoalSettingView — Path B "Help me pick one"
-
-Secondary button below search bar. Shows top 3 segments by `strikeScore` from `appState.segments`. Each card shows segment name + strike label (static copy — no Claude call). Tapping a card calls `selectSegment(_:)` — same flow as Path A.
-
-Only show Path B when `appState.segments` has real data (not preview). Check: `!appState.segments.isEmpty`.
-
-### SettingsSheet — "Reset sync history" behavior
-
-Calls `appState.resetSyncHistory()` then immediately triggers `appState.syncPhase1()`. Dismisses the sheet before triggering sync. User sees normal sync progress in logs.
-
----
-
-## Chunk 2 (next session after Chunk 1)
-
-- `Features/Onboarding/ConnectView.swift` — hero screen, "Connect Strava" CTA, real OAuth
-- `Features/Onboarding/SyncProgressView.swift` — route-drawing animation, crossfading copy phases
-- Claude response cache — briefing/lookahead in UserDefaults for demo resilience
+- After `generateBriefing()` completes: `UserDefaults.standard.set(briefingText, forKey: "cachedBriefing")` + `UserDefaults.standard.set(Date(), forKey: "briefingCachedAt")`
+- Same for `generateLookahead()` → `"cachedLookahead"` / `"lookaheadCachedAt"`
+- On launch (`loadContext()` completion): restore cached values if cache is < 24 hours old
+- Invalidate on sync: after `syncPhase1/2` completes, clear the cache keys so next launch regenerates
+- This prevents Arc from showing empty briefing/lookahead during the Claude API call on every relaunch
 
 ---
 
 ## Decisions made this session
 
-- `athlete_pr_effort` is NOT populated by Strava in activity detail API responses — use `pr_rank == 1` instead
-- `phase2ActivityLimit = 25` is sufficient for finding recent PRs; raise to 100+ in Step 11 polish for broader history coverage
-- `SegmentsView` sort default (strike score desc) is correct per spec; date-based sort is a polish-pass addition
-- `resetSyncHistory()` exposed on AppState (not buried in SyncService) so SettingsSheet can call it directly
-- Segment sort by date is deferred to polish list (Step 11)
+- `isResolvingOnboarding` is set in `AppState.init()` (not lazily) so the gate never flashes GoalSettingView before loadContext runs
+- `RootView` (not `EnzoAppApp.App.body`) owns the gate logic and the `.task { await appState.loadContext() }` — keeps the @main struct minimal
+- `GoalSettingView` stays in `Features/Arc/` — no move needed even though it's used in onboarding
+- Goal confirm: reaction text → briefingText handoff is view-level (GoalSettingView), not in AppState.setGoal() — keeps the reaction text local to the view that generated it
+- `daysRemaining` added to `GoalContext` alongside `weeksRemaining` — days for display (<14), weeks for Claude context (cleaner granularity for training planning)
+- "Pick different" replaces "Change" in selected segment card — unambiguous back navigation vs confirm
+
+---
+
+## Known issues / deferred
+
+- `ConnectPlaceholderView` has no working button — Chunk 2 replaces it entirely
+- Swift 6 concurrency warnings in `StravaService.swift` / `SupabaseService.swift` — warnings only, build succeeds, fix in Step 11 polish
+- `phase2ActivityLimit = 25` — sufficient for beta, raise to 100+ in Step 11
+- `recent_weeks: []` in context payload — deferred to Step 12 (webhooks)
+- RLS policies on Supabase tables — deferred; anon key can read/write freely (dev only)
