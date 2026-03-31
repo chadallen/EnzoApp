@@ -17,3 +17,6 @@ WORKFLOW.md
 *.xcuserstate
 xcuserdata/
 .DS_Store
+
+# Python venv
+scripts/.venv/
