@@ -1,0 +1,1 @@
+Generate a 5-7 day lookahead suggestion. What should this athlete do in the next week? Keep it loose — not a rigid plan. Be specific to their current fitness, trend, and days since last ride. 2-3 sentences max. Do not include any headers or labels — just the suggestion.

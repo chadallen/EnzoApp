@@ -1,0 +1,1 @@
+I want to set {segment_name} as my PR goal. I set that PR ({pr_time}) on {pr_date} when I was at {fitness_at_pr} fitness. My current fitness is {current_fitness}, trending {trend}. React to this goal choice — be honest about where I stand and whether a target date makes sense.
