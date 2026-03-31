@@ -122,7 +122,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   └── Onboarding/               ← Step 10 Chunk 1 ✓
 │   │       ├── SettingsSheet.swift   ← Sync now, Reset sync history, Disconnect Strava
 │   │       ├── ConnectView.swift     ← Step 10 Chunk 2b ✓ — hero screen, "Connect Strava" CTA
-│   │       └── SyncProgressView.swift ← Step 10 Chunk 2c — route animation, copy phases, completion
+│   │       └── SyncProgressView.swift ← Step 10 Chunk 2c ✓ — route animation, copy phases, completion
 │   ├── Models/
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
@@ -304,13 +304,13 @@ Lives in `Features/Arc/` for Steps 4–9. In Step 10 (Onboarding), it needs to b
 `FitnessSnapshotRow`, `SegmentScoreRow`, `GoalRow` live in `Models/+Supabase.swift` files alongside their domain model counterparts. These are wire-format DTOs, not domain models — they map to DB column names (snake_case) via `CodingKeys`. `FitnessSnapshot.month` ("YYYY-MM") is stored as "YYYY-MM-01" (PostgreSQL `date` type); `toSnapshot()` trims the suffix back. `SegmentScoreRow.stravaSegmentId` is non-optional (required by DB) — SyncService provides it from Strava in Step 9.
 
 **Supabase RLS**
-All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added in Step 6 — defer to Step 10 (Onboarding) when the full user identity model is in place.
+All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added through Step 10 — defer to Step 11 or before App Store submission.
 
 **Integration test env var**
 The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
 
 **Strava OAuth (Step 6)**
-`STRAVA_CLIENT_ID = 217529` — added to `Config/Debug.xcconfig` (gitignored). Redirect URI is `enzo://oauth`; registered in `Info.plist` as `CFBundleURLTypes` with scheme `enzo`. In Strava API settings, the "Authorization Callback Domain" must be set to `oauth` (not `localhost`) — Strava strips the scheme. `StravaService` is a Swift `actor` using `ASWebAuthenticationSession` with `callbackURLScheme: "enzo"`. Tokens stored in Keychain via `KeychainHelper`. Auth state (`isAuthenticated`, `stravaAthleteId`) lives on `AppState` and is restored from Keychain on launch. The app still launches into ArcView — no auth gating until Step 11.
+`STRAVA_CLIENT_ID = 217529` — added to `Config/Debug.xcconfig` (gitignored). Redirect URI is `enzo://oauth`; registered in `Info.plist` as `CFBundleURLTypes` with scheme `enzo`. In Strava API settings, the "Authorization Callback Domain" must be set to `oauth` (not `localhost`) — Strava strips the scheme. `StravaService` is a Swift `actor` using `ASWebAuthenticationSession` with `callbackURLScheme: "enzo"`. Tokens stored in Keychain via `KeychainHelper`. Auth state (`isAuthenticated`, `stravaAthleteId`) lives on `AppState` and is restored from Keychain on launch. Auth gating is live in `RootView` since Step 10. `ASWebAuthenticationSession` with `prefersEphemeralWebBrowserSession = false` uses the shared Safari session — returning users who previously authorized the app will not be prompted for credentials again (Strava auto-completes the redirect).
 
 **xcconfig `//` comment stripping**
 In Xcode xcconfig files, `//` is treated as a comment even mid-value. `SUPABASE_URL = https://...` stores as `https:/` (second `/` and everything after is stripped). Fix: use an empty variable substitution to break up the `//`:
@@ -428,11 +428,17 @@ Phase 2 confirmed end-to-end: `[Sync P2] Upserting 109 segment rows`, `[Segments
 **Step 10 Chunk 2b — complete**
 `ConnectView.swift` is the new unauthenticated hero screen — "Enzo" header, tagline, `figure.outdoor.cycle` SF Symbol, "Connect Strava" accent pill button. On tap: `authenticate()` then `startOnboardingSync()`. Inline amber error state on auth failure. `ConnectPlaceholderView` removed. `EnzoAppApp.swift` now routes to `ConnectView` for unauthenticated state. `isOnboardingSyncing` gate branch (→ `SyncProgressView`) is added in Chunk 2c alongside the view itself.
 
-**Step 10 Chunk 2c — next**
-`SyncProgressView.swift`: bezier-curve route animation, 5 crossfading copy phases driven by `isSyncing`/`isSyncingPhase2`, activity counter (`syncedActivityCount`), 60s long-sync message, completion detection → `onComplete`. `EnzoAppApp.swift`: add `isOnboardingSyncing` gate branch between `isResolvingOnboarding` and `!hasCompletedOnboarding`.
+**Step 10 Chunk 2c — complete**
+`SyncProgressView.swift`: bezier-curve route animation (`CyclingRoutePath: Shape`, cubic bezier path suggesting terrain → switchback → climb), 5 crossfading copy phases driven by `isSyncing`/`isSyncingPhase2`, activity counter (`syncedActivityCount`), 60s long-sync message ("Big history — this is worth it."), completion detection → `onComplete`. `EnzoAppApp.swift`: `isOnboardingSyncing` gate branch added between `isResolvingOnboarding` and `!hasCompletedOnboarding`. Requires `import Combine` for `Timer.publish`. Color constants are `enzoPrimary`/`enzoSecondary` (not `enzoTextPrimary`/`enzoTextSecondary` — check Color+Enzo.swift before referencing).
+
+**Partial auth guard (Step 10 fix)**
+If `exchangeCode` succeeds but `createUser` (or `fetchAthlete`) fails, `stravaAthleteId` lands in Keychain without `supabaseUserId`. On relaunch `AppState.init()` would set `isAuthenticated = true` and `isResolvingOnboarding = true`, but `loadContext()` returned early (no `supabaseUserId`) without clearing `isResolvingOnboarding` — app stuck on blank screen forever. Two fixes applied: (1) `AppState.init()` requires both `stravaAthleteId` AND `supabaseUserId` in Keychain to set `isAuthenticated = true` — partial state is treated as unauthenticated. (2) `loadContext()` always sets `isResolvingOnboarding = false` even on early return.
 
 **Brief flash of preview text on relaunch (known, deferred)**
 On relaunch, preview briefing/lookahead text flashes briefly before `restoreCachedContent()` runs in `loadContext()`. This is a sequencing artifact — the `@Observable` default values initialize before the async context load completes. Fix in Step 11 polish pass.
+
+**ConnectView NSLog (dev-only, remove in Step 11)**
+`ConnectView.connect()` has `NSLog("[ConnectView] authenticate error: \(error)")` added in Step 10 for debugging. Remove before App Store / Step 11 polish. It is safe to leave in for beta — just noisy.
 
 **Swift 6 concurrency warnings**
 Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
