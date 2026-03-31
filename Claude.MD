@@ -91,18 +91,21 @@ EnzoApp/                              ← repo root / VS Code workspace
 ├── EnzoApp.xcodeproj/                ← Xcode project (PBXFileSystemSynchronizedRootGroup —
 │                                         new files in EnzoApp/ are auto-included, no manual add)
 ├── EnzoApp/                          ← Xcode source root
-│   ├── EnzoAppApp.swift              ← @main entry point + MainTabView (2-tab shell)
+│   ├── EnzoAppApp.swift              ← @main entry point; RootView (auth gate), ConnectPlaceholderView, MainTabView
 │   ├── App/
 │   │   └── AppState.swift            ← @Observable @MainActor global state; inject via .environment
 │   │                                     Step 8: loadContext(), generateBriefing(), generateLookahead(),
 │   │                                     briefingText, lookaheadText, isGeneratingBriefing/Lookahead
 │   │                                     Step 9: loadSegments(), syncPhase2(), isSyncingPhase2
+│   │                                     Step 10 Chunk 1: hasCompletedOnboarding, isResolvingOnboarding,
+│   │                                     disconnect(), resetSyncHistory()
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
 │   │   │   ├── ArcView.swift         ← composes all sections; .task triggers loadContext+generate on launch
-│   │   │   │                             person.circle button = debug sync trigger (replace in Step 10)
+│   │   │   │                             gear icon button → SettingsSheet (Step 10 Chunk 1)
 │   │   │   ├── GoalHeaderView.swift  ← goal name, fitness label, trend, "Change goal" button
 │   │   │   ├── GoalSettingView.swift ← Step 4 ✓ — sheet: search, Enzo reaction, date, confirm
+│   │   │   │                             Step 10 Chunk 1: onGoalConfirmed callback, Path B "Help me pick one"
 │   │   │   ├── ArcBriefingView.swift ← left-accent-bordered Enzo briefing card; isLoading spinner
 │   │   │   ├── LookaheadSuggestionView.swift ← isLoading + empty state placeholder
 │   │   │   ├── FitnessChartView.swift ← Swift Charts; LineMark+AreaMark, two RuleMarks, tap→sheet
@@ -114,7 +117,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   ├── Segments/
 │   │   │   ├── SegmentsView.swift    ← full list, goal segment first, sort menu
 │   │   │   └── SegmentDetailView.swift ← PR card, fitness comparison, strike assessment
-│   │   └── Onboarding/               ← Step 10 — not built yet
+│   │   └── Onboarding/               ← Step 10 Chunk 1 ✓
+│   │       └── SettingsSheet.swift   ← Sync now, Reset sync history, Disconnect Strava
 │   ├── Models/
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
@@ -139,6 +143,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │                                     Step 9: syncPhase2(userId:) — detail fetch, segment extraction, upsert
 │   ├── Utils/
 │   │   ├── Config.swift              ← xcconfig key accessors (Config.claudeAPIKey etc.)
+│   │   ├── WindowContextProvider.swift ← Step 10 Chunk 1 ✓ — ASWebAuthenticationPresentationContextProviding
 │   │   ├── KeychainHelper.swift      ← Step 6 ✓ — save/load/delete kSecClassGenericPassword; Strava key constants
 │   │   │                                 + supabaseUserId constant (Step 7)
 │   │   ├── FitnessCalculator.swift   ← Step 7 ✓ — pure static enum; efficiency, fitnessValue,
@@ -193,7 +198,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 
 - [x] Step 8: Context payload + Arc content generation (live Enzo)
 - [x] Step 9: Historical sync Phase 2 + segment scoring
-- [ ] Step 10: Onboarding flow
+- [x] Step 10: Onboarding flow — Chunk 1 complete (auth gating, SettingsSheet, GoalSettingView Path B)
+- [ ] Step 10: Onboarding flow — Chunk 2 (ConnectView, SyncProgressView, Claude response cache)
 - [ ] Step 11: Polish pass
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -363,8 +369,20 @@ Fix: Phase 2 is now **incremental**. After each successful run, a `lastPhase2Syn
 **Step 9: SegmentScorer strike score formula**
 `base = clamp(0.5 + (currentFitness - fitnessAtPR) × 0.8, 0, 1)`. Trend adds ±0.05. PRs set within 30 days get ×0.85 recency discount. Thresholds: ≥0.70 "No brainer", 0.45–0.70 "Worth a shot", <0.45 "Not quite ready". `requiredFitnessLabel` returns one tier below the PR fitness label.
 
-**Step 10 (Onboarding) context**
-Step 10 is split into two chunks. Chunk 1 builds the auth gating shell, SettingsSheet, and GoalSettingView Path B. Chunk 2 builds ConnectView (real OAuth hero screen) and SyncProgressView (route-drawing animation). The app currently launches directly into ArcView — no auth gating. Step 10 Chunk 1 adds the gate. See handoff.MD for the full approved plan.
+**Step 10 Chunk 1 — complete (this session)**
+Auth gating live. `RootView` in `EnzoAppApp.swift` is the new root — it calls `loadContext()` before the gate resolves and shows: `ConnectPlaceholderView` (unauthenticated) → blank dark hold screen while `isResolvingOnboarding` is true → `GoalSettingView` (authenticated, no goal) → `MainTabView`. `hasCompletedOnboarding` auto-sets in `loadContext()` when `activeGoal != nil`. `disconnect()` wipes all Keychain/UserDefaults auth state and restores preview data. `SettingsSheet` (gear icon in Arc header) exposes Sync now, Reset sync history, Disconnect Strava. `GoalSettingView` now takes `onGoalConfirmed: (() -> Void)?` — used by the onboarding gate to advance without dismiss. Path B "Help me pick one" shows top 3 segments by strike score. On goal confirm, reaction text is copied to `appState.briefingText` and `generateLookahead()` fires for the new goal.
+
+**Step 10 Chunk 2 — next**
+`ConnectView.swift` (hero screen with working "Connect Strava" CTA calling `appState.authenticate(contextProvider:)`), `SyncProgressView.swift` (route-drawing animation + crossfading copy), Claude response cache (briefing/lookahead persisted to UserDefaults).
+
+**GoalContext.daysRemaining (added this session)**
+`GoalContext` now has `daysRemaining: Int?` alongside `weeksRemaining: Int?`. Both computed from `targetDate` at the same time. `GoalHeaderView` uses `daysRemaining` for the display label: today / 1 day to go / N days to go (2–13) / N weeks to go (14+). `weeksRemaining` is still sent to Claude in the context payload.
+
+**onGoalConfirmed → Arc briefing handoff (this session)**
+When the user confirms a goal in `GoalSettingView`, `reactionText` is copied into `appState.briefingText` immediately. `generateLookahead()` fires in a background Task. No need to regenerate the briefing — the reaction IS the relevant briefing for the new goal.
+
+**isResolvingOnboarding bootstrapping fix (this session)**
+On first launch after Step 10 update, existing authenticated users had `hasCompletedOnboarding = false` (new UserDefaults key) but `loadContext()` was only called from `ArcView.task` — which never ran because the gate showed `GoalSettingView`. Fix: `RootView` calls `loadContext()` via `.task`. `isResolvingOnboarding` is set `true` in `AppState.init()` when `isAuthenticated && !hasCompletedOnboarding`, then set `false` at the end of `loadContext()`. The gate shows a blank dark screen while resolving — avoids flash of `GoalSettingView` for existing users.
 
 **Strava webhooks deferred to Step 12**
 Webhooks were originally Step 10. Decision: not needed for beta — testers can tap to sync manually after a ride. Deferred to after the Polish pass (Step 11). The manual sync button (person.circle → settings in Step 10) stays as the primary sync mechanism through beta.

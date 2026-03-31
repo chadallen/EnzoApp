@@ -477,11 +477,8 @@ Screen title: *"Which segment are you chasing?"*
 
 **Path B — User wants a suggestion:**
 * Taps "Help me pick one"
-* Enzo proposes 2-3 segments as tappable cards ranked by strike score:
-  > *"Hawk Hill — your most-ridden segment. You're not quite ready, but getting there."*
-  > *"Camino Alto Cutoff — worth a shot right now."*
-  > *"Paradise Loop climb — a stretch goal. Worth building toward."*
-* User taps one → same confirmation flow as Path A
+* Shows top 3 segments by strike score as tappable cards — segment name + PR time + strike label (static, no Claude call for the list)
+* User taps one → same Enzo reaction + confirmation flow as Path A
 
 ---
 
@@ -500,12 +497,12 @@ Three lines. No numbers.
 ```
 Hawk Hill PR
 Building ↑
-Strong fitness needed
+Strong fitness needed · 6 weeks to go
 ```
 
 - Line 1: Segment name (bold)
 - Line 2: Current fitness label + trend arrow (↑ / → / ↓), colored by state
-- Line 3: Required fitness label in secondary text
+- Line 3: Required fitness label in secondary text. If target date is set, appended with "· N days to go" (< 14 days) or "· N weeks to go" (14+ days). "today" when 0 days remain.
 
 Trend arrow is data-driven from rate of change in continuous fitness value. Not decorative.
 
