@@ -125,6 +125,24 @@ struct SegmentStrikeRow: View {
                     Text(arrow)
                         .font(.system(.caption2, weight: .semibold))
                         .foregroundStyle(segment.trendDirection == "up" ? Color.enzoGoal : Color.enzoSecondary)
+
+                    if let dist = segment.distanceMeters {
+                        Text("·")
+                            .font(.system(.caption2))
+                            .foregroundStyle(Color.enzoSecondary.opacity(0.4))
+                        Text(String(format: "%.1f mi", dist * 0.000621371))
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                    }
+
+                    if let elev = segment.elevationDeltaMeters {
+                        Text("·")
+                            .font(.system(.caption2))
+                            .foregroundStyle(Color.enzoSecondary.opacity(0.4))
+                        Text(String(format: "+%.0f ft", elev * 3.28084))
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                    }
                 }
             }
 
