@@ -57,21 +57,20 @@ struct GoalHeaderView: View {
 
     private var goalContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header: label + segment name
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Current target segment")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(Color.enzoSecondary)
-                    .textCase(.uppercase)
-                    .kerning(0.5)
-                Text(goal.segmentName)
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(Color.enzoPrimary)
-                    .lineLimit(1)
-            }
-
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
                 let readColor = readinessColor(for: goalSegment.strikeScore)
+
+                // Hero: readiness label + segment name
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(goalSegment.strikeLabel)
+                        .font(.system(.title, design: .rounded, weight: .bold))
+                        .foregroundStyle(readColor)
+                    Text(goal.segmentName)
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .lineLimit(1)
+                }
+
                 HStack(alignment: .top) {
                     // Segment stats
                     VStack(alignment: .leading, spacing: 4) {
@@ -125,9 +124,6 @@ struct GoalHeaderView: View {
                                 .font(.system(.title3, design: .rounded, weight: .bold))
                                 .foregroundStyle(readColor)
                         }
-                        Text(goalSegment.strikeLabel)
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(readColor)
                         Text("Readiness")
                             .font(.system(.caption2, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
@@ -135,7 +131,6 @@ struct GoalHeaderView: View {
                             .tracking(0.5)
                     }
                 }
-            }
         }
     }
 
