@@ -60,49 +60,21 @@ struct GoalHeaderView: View {
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
                 let readColor = readinessColor(for: goalSegment.strikeScore)
 
-                // Header: segment name + readiness tag
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current target segment")
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                        .textCase(.uppercase)
-                        .kerning(0.5)
-                    Text(goal.segmentName)
-                        .font(.system(.title2, design: .rounded, weight: .bold))
-                        .foregroundStyle(Color.enzoPrimary)
-                        .lineLimit(1)
-                    Text(goalSegment.strikeLabel)
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(readColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(readColor.opacity(0.12), in: Capsule())
-                }
-
+                // Header: segment name + readiness label
                 HStack(alignment: .top) {
-                    // Segment stats
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Segment")
+                        Text("Current target segment")
                             .font(.system(.caption, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
                             .textCase(.uppercase)
-                            .kerning(0.3)
-                        if let dist = goalSegment.distanceMeters {
-                            Text(String(format: "%.1f mi", dist * 0.000621371))
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                        }
-                        Text(goalSegment.prFormatted)
+                            .kerning(0.5)
+                        Text(goal.segmentName)
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .foregroundStyle(Color.enzoPrimary)
+                            .lineLimit(1)
+                        Text(goalSegment.strikeLabel)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.enzoSecondary)
-                        Text(formattedPRDate(goalSegment.prDate))
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.enzoSecondary)
-                        if let elev = goalSegment.elevationDeltaMeters {
-                            Text(String(format: "+%.0f ft", elev * 3.28084))
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                        }
+                            .foregroundStyle(readColor)
                     }
 
                     Spacer()
@@ -139,8 +111,30 @@ struct GoalHeaderView: View {
                             .tracking(0.5)
                     }
                 }
+
+                // Segment stats: one line
+                HStack(spacing: 0) {
+                    Text(formattedPRDate(goalSegment.prDate))
+                    statSeparator
+                    Text(goalSegment.prFormatted)
+                    if let dist = goalSegment.distanceMeters {
+                        statSeparator
+                        Text(String(format: "%.1f mi", dist * 0.000621371))
+                    }
+                    if let elev = goalSegment.elevationDeltaMeters {
+                        statSeparator
+                        Text(String(format: "+%.0f ft", elev * 3.28084))
+                    }
+                }
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
             }
         }
+    }
+
+    private var statSeparator: some View {
+        Text("  ·  ")
+            .foregroundStyle(Color.enzoSecondary.opacity(0.4))
     }
 
     private func formattedPRDate(_ dateString: String) -> String {
