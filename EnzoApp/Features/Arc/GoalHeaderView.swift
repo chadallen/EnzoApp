@@ -46,30 +46,32 @@ struct GoalHeaderView: View {
     }
 
     private var goalContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Line 1: Segment name
-            Text(String(goal.segmentName.prefix(24)) + " PR")
-                .font(.system(.title2, design: .rounded, weight: .bold))
+        VStack(alignment: .leading, spacing: 8) {
+            // Line 1: Current target
+            Text("Current target: \(goal.segmentName).")
+                .font(.system(.headline, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.enzoPrimary)
                 .lineLimit(1)
 
-            // Line 2: Current fitness label + trend arrow
-            Text(context.currentFitnessLabel + " " + trendArrow)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(fitnessLabelColor)
+            // Line 2: Current fitness
+            let currentPct = Int(context.currentFitnessValue * 100)
+            HStack(spacing: 0) {
+                Text("Current fitness: ")
+                    .foregroundStyle(Color.enzoPrimary)
+                Text(context.currentFitnessLabel)
+                    .foregroundStyle(fitnessLabelColor)
+                Text(" | \(currentPct)%")
+                    .foregroundStyle(Color.enzoPrimary)
+            }
+            .font(.system(.subheadline, design: .rounded))
 
-            // Line 3: Required fitness label + optional weeks remaining
-            HStack(spacing: 6) {
-                Text(goal.requiredFitnessLabel + " fitness needed")
+            // Line 3: PR fitness (from goal segment)
+            if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
+                let prLabel = AthleteContext.fitnessLabel(for: goalSegment.fitnessValueAtPR)
+                let prPct = Int(goalSegment.fitnessValueAtPR * 100)
+                Text("PR fitness: \(prLabel) | \(prPct)%")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.enzoSecondary)
-                if let days = goal.daysRemaining {
-                    Text("·")
-                        .foregroundStyle(Color.enzoSecondary.opacity(0.4))
-                    Text(timeRemainingLabel(days: days))
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                }
             }
 
             Button("Change goal") {
@@ -77,16 +79,7 @@ struct GoalHeaderView: View {
             }
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(Color.enzoSecondary)
-            .padding(.top, 4)
-        }
-    }
-
-    private func timeRemainingLabel(days: Int) -> String {
-        switch days {
-        case 0: return "today"
-        case 1: return "1 day to go"
-        case 2...13: return "\(days) days to go"
-        default: return "\(days / 7) weeks to go"
+            .padding(.top, 2)
         }
     }
 
