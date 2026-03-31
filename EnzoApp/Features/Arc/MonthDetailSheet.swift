@@ -75,5 +75,4 @@ struct MonthDetailSheet: View {
 #Preview {
     MonthDetailSheet(snapshot: FitnessSnapshot.previewSnapshots[10])
         .background(Color.enzoBg)
-        .preferredColorScheme(.dark)
 }

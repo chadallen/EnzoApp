@@ -113,5 +113,4 @@ struct GoalHeaderView: View {
         .padding()
         .background(Color.enzoBg)
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }

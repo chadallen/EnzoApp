@@ -56,7 +56,7 @@ struct FitnessChartView: View {
                 )
                 .foregroundStyle(
                     LinearGradient(
-                        colors: [Color.enzoAccent.opacity(0.25), Color.enzoAccent.opacity(0.0)],
+                        colors: [Color.enzoChartPrimary.opacity(0.25), Color.enzoChartPrimary.opacity(0.0)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -70,7 +70,7 @@ struct FitnessChartView: View {
                     x: .value("Month", snap.monthDate),
                     y: .value("Fitness", snap.value)
                 )
-                .foregroundStyle(Color.enzoAccent)
+                .foregroundStyle(Color.enzoChartPrimary)
                 .lineStyle(StrokeStyle(lineWidth: 2))
                 .interpolationMethod(.catmullRom)
             }
@@ -81,7 +81,7 @@ struct FitnessChartView: View {
                     x: .value("Month", current.monthDate),
                     y: .value("Fitness", current.value)
                 )
-                .foregroundStyle(Color.enzoAccent)
+                .foregroundStyle(Color.enzoChartPrimary)
                 .symbolSize(60)
             }
 
@@ -155,5 +155,4 @@ struct FitnessChartView: View {
     )
     .padding()
     .background(Color.enzoBg)
-    .preferredColorScheme(.dark)
 }

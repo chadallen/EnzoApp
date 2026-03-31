@@ -130,5 +130,4 @@ struct SettingsSheet: View {
 #Preview {
     SettingsSheet()
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }

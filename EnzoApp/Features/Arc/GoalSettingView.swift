@@ -257,7 +257,6 @@ struct GoalSettingView: View {
                     displayedComponents: .date
                 )
                 .datePickerStyle(.compact)
-                .colorScheme(.dark)
                 .foregroundStyle(Color.enzoPrimary)
             }
         }
@@ -273,7 +272,7 @@ struct GoalSettingView: View {
             if !reactionText.isEmpty {
                 appState.briefingText = reactionText
             }
-            Task { await appState.generateLookahead() }
+            Task { await appState.generateLookahead(forceRefresh: true) }
             if let onGoalConfirmed {
                 onGoalConfirmed()
             } else {
@@ -319,11 +318,9 @@ struct GoalSettingView: View {
 #Preview("Search state") {
     GoalSettingView()
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }
 
 #Preview("Segment selected — reaction complete") {
     GoalSettingView(previewSegment: SegmentScore.previewSegments[0])
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }
