@@ -38,6 +38,23 @@ enum FitnessCalculator {
         return adjustedDistance / (durationHours * Double(avgHR))
     }
 
+    // MARK: - Percentile helper
+
+    /// Returns the value at the given percentile (0–100) using linear interpolation.
+    ///
+    /// Used for normalization to avoid outlier months (illness, minimal riding) compressing
+    /// the fitness scale. Pass the full set of all-time ride efficiencies.
+    static func percentile(_ p: Int, of values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        guard sorted.count > 1 else { return sorted[0] }
+        let index = Double(p) / 100.0 * Double(sorted.count - 1)
+        let lower = Int(index)
+        let upper = min(lower + 1, sorted.count - 1)
+        let fraction = index - Double(lower)
+        return sorted[lower] + fraction * (sorted[upper] - sorted[lower])
+    }
+
     // MARK: - Fitness value (0.0–1.0, internal only)
 
     /// Normalizes a 2-month rolling average efficiency to a 0.0–1.0 fitness value.
