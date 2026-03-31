@@ -128,6 +128,16 @@ struct FitnessRingView: View {
 
                 Spacer()
             }
+
+            // Segment name below both donuts
+            if let seg = goalSegment, !context.goal.segmentName.isEmpty {
+                Text(seg.name)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.enzoSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding()
         .background(
