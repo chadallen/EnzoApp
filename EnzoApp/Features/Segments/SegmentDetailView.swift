@@ -134,7 +134,6 @@ struct SegmentDetailView: View {
         .navigationTitle(segment.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     private func fitnessBlock(
@@ -159,5 +158,4 @@ struct SegmentDetailView: View {
         SegmentDetailView(segment: SegmentScore.previewSegments[0])
     }
     .environment(AppState())
-    .preferredColorScheme(.dark)
 }

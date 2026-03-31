@@ -232,5 +232,4 @@ struct SyncProgressView: View {
 #Preview {
     SyncProgressView(onComplete: {})
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }

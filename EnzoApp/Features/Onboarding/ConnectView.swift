@@ -61,7 +61,6 @@ struct ConnectView: View {
                 .padding(.bottom, 52)
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private func connect() async {
@@ -80,5 +79,4 @@ struct ConnectView: View {
 #Preview {
     ConnectView()
         .environment(AppState())
-        .preferredColorScheme(.dark)
 }
