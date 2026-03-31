@@ -268,6 +268,12 @@ struct GoalSettingView: View {
     private func confirmButton(_ segment: SegmentScore) -> some View {
         Button {
             appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
+            // Carry the reaction text over to the Arc briefing — it's already Enzo's
+            // take on this goal. Regenerate lookahead for the new goal in the background.
+            if !reactionText.isEmpty {
+                appState.briefingText = reactionText
+            }
+            Task { await appState.generateLookahead() }
             if let onGoalConfirmed {
                 onGoalConfirmed()
             } else {
