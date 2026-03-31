@@ -336,7 +336,7 @@ Constructed fresh at query time from Supabase. Never persisted in this form. All
 **Phase 2 — Segment effort extraction (background, 1 call per activity):**
 
 9. For each cycling activity, fetch `GET /activities/{id}?include_all_efforts=true`
-10. Extract `segment_efforts` array — each effort includes: `segment.id`, `segment.name`, `segment.start_latlng`, `elapsed_time`, `start_date`, and `segment.athlete_pr_effort` containing `pr_elapsed_time`, `pr_date`, `effort_count`
+10. Extract `segment_efforts` array — each effort includes: `segment.id`, `segment.name`, `elapsed_time`, `start_date`, `start_date_local`, and `pr_rank`. **Note:** `segment.athlete_pr_effort` is defined in Strava's schema but not populated in activity detail responses. Use `pr_rank == 1` to identify the athlete's all-time PR on a segment — if `pr_rank` is 1, this effort IS the PR and its `elapsed_time`/`start_date_local` are the PR values.
 11. Build segment score records from this data
 12. Write to `segment_scores` table in Supabase
 13. Discard raw activity data

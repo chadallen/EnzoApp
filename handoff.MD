@@ -74,14 +74,13 @@ if !appState.isAuthenticated {
 ### hasCompletedOnboarding implementation
 
 ```swift
-// In AppState
-var hasCompletedOnboarding: Bool {
-    get { UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") }
-    set { UserDefaults.standard.set(newValue, forKey: "hasCompletedOnboarding") }
+// In AppState — stored property so @Observable tracks it; didSet persists to UserDefaults
+var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+    didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
 }
 ```
 
-Note: `@Observable` tracks computed properties backed by external storage correctly — reads will trigger observation. In `init()`, no explicit restore needed (UserDefaults is read on access).
+**Why stored, not computed:** `@Observable` only tracks stored properties. A computed property backed purely by UserDefaults won't trigger SwiftUI re-renders. The stored property + `didSet` pattern initializes from UserDefaults on launch and persists every change.
 
 Auto-set in `loadContext()`:
 ```swift
