@@ -11,7 +11,10 @@ struct ArcView: View {
     var body: some View {
         ZStack {
             Color.enzoBg.ignoresSafeArea()
-            scrollContent
+            VStack(spacing: 0) {
+                FitnessRingView(context: context, fullWidth: true)
+                scrollContent
+            }
         }
         .safeAreaInset(edge: .bottom) {
             inputArea
@@ -32,9 +35,6 @@ struct ArcView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    FitnessRingView(context: context)
-                        .padding(.top, 12)
-
                     FitnessChartView(
                         snapshots: appState.fitnessSnapshots,
                         goalValue: context.goal.requiredFitnessValue

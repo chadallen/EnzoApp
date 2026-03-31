@@ -3,14 +3,9 @@ import Charts
 
 struct FitnessRingView: View {
     let context: AthleteContext
+    var fullWidth: Bool = false
 
-    private var ringColor: Color {
-        switch context.currentFitnessLabel {
-        case "Epic", "Strong": return .enzoRingHigh
-        case "Building": return .enzoAccent
-        default: return .enzoRingLow
-        }
-    }
+    private var ringColor: Color { .enzoChartPrimary }
 
     private var trendArrow: String {
         switch context.trendDirection {
@@ -73,7 +68,12 @@ struct FitnessRingView: View {
             Spacer()
         }
         .padding()
-        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+        .background(
+            fullWidth ? Color.enzoAccent.opacity(0.08) : Color.enzoCard,
+            in: fullWidth
+                ? AnyShape(UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
+                : AnyShape(RoundedRectangle(cornerRadius: 16))
+        )
     }
 
     private var lastRideText: String {
