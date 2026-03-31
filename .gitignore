@@ -20,3 +20,6 @@ xcuserdata/
 
 # Python venv
 scripts/.venv/
+
+# Real athlete data — never commit
+scripts/data/

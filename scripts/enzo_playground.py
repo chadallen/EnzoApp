@@ -29,6 +29,9 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
+
+DATA_PATH = Path(__file__).parent / "data" / "context.json"
 
 # ---------------------------------------------------------------------------
 # Dependency check
@@ -352,18 +355,26 @@ def main() -> None:
         sys.exit(1)
 
     client = anthropic.Anthropic(api_key=api_key)
-    ctx = build_context(
-        fitness=args.fitness,
-        trend=args.trend,
-        days_since_ride=args.days,
-        goal_segment=args.goal,
-        goal_weeks=args.weeks,
-    )
+
+    # Load real data if available, otherwise fall back to hardcoded preset
+    if DATA_PATH.exists():
+        ctx = json.loads(DATA_PATH.read_text())
+        data_source = f"real data ({DATA_PATH})"
+    else:
+        ctx = build_context(
+            fitness=args.fitness,
+            trend=args.trend,
+            days_since_ride=args.days,
+            goal_segment=args.goal,
+            goal_weeks=args.weeks,
+        )
+        data_source = "hardcoded preset (run fetch_data.py to use real data)"
 
     # Print context summary so you know what state you're testing
     athlete = ctx["athlete"]
     goal = ctx["goal"]
-    print(f"\nContext: {athlete['name']} | {athlete['current_fitness_label']} fitness | "
+    print(f"\nData:    {data_source}")
+    print(f"Context: {athlete['name']} | {athlete['current_fitness_label']} fitness | "
           f"trend {athlete['trend_direction']} | {ctx['days_since_last_ride']}d since ride | "
           f"goal: {goal['segment_name']}")
 

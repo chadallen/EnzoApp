@@ -10,12 +10,26 @@ python3 -m venv scripts/.venv
 scripts/.venv/bin/pip install anthropic
 ```
 
-**Set your API key** (same key as in `Config/Debug.xcconfig`):
+**Set your API keys** in `~/.zshrc` so they persist across sessions:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Add that export to your `~/.zshrc` so you don't have to repeat it.
+Same values as `Config/Debug.xcconfig`. Reload with `source ~/.zshrc`.
+
+---
+
+## Fetch real data (do this first)
+
+Pulls your real fitness history, segments, and goal from Supabase and saves to `scripts/data/context.json`. The playground uses this automatically once it exists.
+
+```bash
+python3 scripts/fetch_data.py
+```
+
+The data file is gitignored — it stays local. Re-run it any time after a sync to refresh.
 
 ---
 
@@ -36,6 +50,8 @@ deactivate
 
 Without arguments you get an interactive mode picker. Pass `--mode` to skip straight to a prompt type.
 
+If `scripts/data/context.json` exists, the playground uses your real data automatically. Otherwise it falls back to hardcoded presets.
+
 ---
 
 ## Modes
@@ -51,7 +67,7 @@ Without arguments you get an interactive mode picker. Pass `--mode` to skip stra
 
 ## Fitness presets
 
-Use `--fitness` to simulate different athlete states:
+Only used when real data isn't available. Use `--fitness` to simulate different athlete states:
 
 | Flag | Label | Value |
 |---|---|---|
@@ -66,20 +82,23 @@ Use `--fitness` to simulate different athlete states:
 ## Examples
 
 ```bash
-# Briefing for someone recovering, trending up
-python3 scripts/enzo_playground.py --mode briefing --fitness recovering --trend up --days 3
+# Fetch real data first
+python3 scripts/fetch_data.py
 
-# Lookahead for someone strong with 6 weeks to goal
-python3 scripts/enzo_playground.py --mode lookahead --fitness strong --trend flat --weeks 6
-
-# Goal reaction for a building athlete
-python3 scripts/enzo_playground.py --mode goal --fitness building --trend up
+# Then run against your real data
+python3 scripts/enzo_playground.py --mode briefing
+python3 scripts/enzo_playground.py --mode lookahead
+python3 scripts/enzo_playground.py --mode goal
+python3 scripts/enzo_playground.py --mode chat
 
 # One-shot chat
 python3 scripts/enzo_playground.py --mode chat --message "Am I close to Hawk Hill?"
 
 # Interactive multi-turn chat
-python3 scripts/enzo_playground.py --mode chat --fitness strong
+python3 scripts/enzo_playground.py --mode chat
+
+# Force hardcoded preset (ignore real data)
+python3 scripts/enzo_playground.py --mode briefing --preset --fitness strong --trend up
 ```
 
 ---
@@ -88,12 +107,14 @@ python3 scripts/enzo_playground.py --mode chat --fitness strong
 
 ```
 --mode        briefing | lookahead | goal | chat
+--message     one-shot chat message (skips interactive loop)
+
+Preset overrides (only used when context.json is absent):
 --fitness     recovering | baseline | building | strong | epic  (default: recovering)
 --trend       up | flat | down  (default: up)
 --days        days since last ride  (default: 3)
 --goal        goal segment name  (default: "Hawk Hill")
 --weeks       weeks remaining to goal date  (omit = no deadline)
---message     one-shot chat message (skips interactive loop)
 ```
 
 ---
@@ -108,7 +129,7 @@ All prompts and the system prompt live at the top of `enzo_playground.py`:
 | Daily briefing prompt | `briefing_prompt()` function |
 | Lookahead suggestion prompt | `lookahead_prompt()` function |
 | Goal reaction prompt | `goal_reaction_prompt()` function |
-| Athlete context shape / fake data | `build_context()` function |
+| Fallback fake data | `build_context()` function |
 
 Once you're happy with changes, paste the refined text back into the Swift source:
 - System prompt → `EnzoApp/Services/ClaudeService.swift` → `systemPrompt`
