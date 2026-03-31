@@ -69,7 +69,7 @@ struct GoalHeaderView: View {
                     // Current fitness column
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Current fitness")
-                            .font(.system(.caption2, design: .rounded))
+                            .font(.system(.caption, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
                             .textCase(.uppercase)
                             .kerning(0.3)
@@ -84,14 +84,14 @@ struct GoalHeaderView: View {
                     // Divider
                     Rectangle()
                         .fill(Color.enzoSecondary.opacity(0.2))
-                        .frame(width: 1, height: 56)
+                        .frame(width: 1, height: 110)
                         .padding(.horizontal, 16)
                         .padding(.top, 2)
 
                     // PR fitness column
                     VStack(alignment: .leading, spacing: 4) {
                         Text("PR fitness")
-                            .font(.system(.caption2, design: .rounded))
+                            .font(.system(.caption, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
                             .textCase(.uppercase)
                             .kerning(0.3)
@@ -107,30 +107,30 @@ struct GoalHeaderView: View {
                     if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
                         Rectangle()
                             .fill(Color.enzoSecondary.opacity(0.2))
-                            .frame(width: 1, height: 56)
+                            .frame(width: 1, height: 110)
                             .padding(.horizontal, 16)
                             .padding(.top, 2)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Segment")
-                                .font(.system(.caption2, design: .rounded))
+                                .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(Color.enzoSecondary)
                                 .textCase(.uppercase)
                                 .kerning(0.3)
                             if let dist = goalSegment.distanceMeters {
                                 Text(String(format: "%.1f mi", dist * 0.000621371))
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
                                     .foregroundStyle(Color.enzoSecondary)
                             }
                             Text(goalSegment.prFormatted)
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
                                 .foregroundStyle(Color.enzoSecondary)
                             Text(formattedPRDate(goalSegment.prDate))
-                                .font(.system(.caption, design: .rounded))
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
                                 .foregroundStyle(Color.enzoSecondary)
                             if let elev = goalSegment.elevationDeltaMeters {
                                 Text(String(format: "+%.0f ft", elev * 3.28084))
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(.system(.subheadline, design: .monospaced, weight: .semibold))
                                     .foregroundStyle(Color.enzoSecondary)
                             }
                         }
