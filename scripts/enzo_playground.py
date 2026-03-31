@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Run with the venv: scripts/.venv/bin/python3 scripts/enzo_playground.py
+# Or: source scripts/.venv/bin/activate && python3 scripts/enzo_playground.py
 """
 Enzo Prompt Playground
 ======================

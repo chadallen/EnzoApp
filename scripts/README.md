@@ -4,9 +4,10 @@ A standalone Python script for iterating on Enzo's prompts, system prompt, and m
 
 ## Setup
 
-**Install the SDK once:**
+**Create a venv and install the SDK (one time):**
 ```bash
-pip3 install anthropic
+python3 -m venv scripts/.venv
+scripts/.venv/bin/pip install anthropic
 ```
 
 **Set your API key** (same key as in `Config/Debug.xcconfig`):
@@ -22,7 +23,15 @@ Add that export to your `~/.zshrc` so you don't have to repeat it.
 
 From the repo root:
 ```bash
+scripts/.venv/bin/python3 scripts/enzo_playground.py
+```
+
+Or activate the venv first for a shorter command:
+```bash
+source scripts/.venv/bin/activate
 python3 scripts/enzo_playground.py
+# when done:
+deactivate
 ```
 
 Without arguments you get an interactive mode picker. Pass `--mode` to skip straight to a prompt type.
