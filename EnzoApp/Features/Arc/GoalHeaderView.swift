@@ -70,60 +70,37 @@ struct GoalHeaderView: View {
                     .lineLimit(1)
             }
 
-            // Stat comparison row
-            let currentPct = Int(context.currentFitnessValue * 100)
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
-                HStack(alignment: .top, spacing: 0) {
-                    // Segment stats column (only when data is available)
-                    if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Segment")
-                                .font(.system(.caption, design: .rounded))
-                                .foregroundStyle(Color.enzoSecondary)
-                                .textCase(.uppercase)
-                                .kerning(0.3)
-                            if let dist = goalSegment.distanceMeters {
-                                Text(String(format: "%.1f mi", dist * 0.000621371))
-                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                    .foregroundStyle(Color.enzoSecondary)
-                            }
-                            Text(goalSegment.prFormatted)
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                            Text(formattedPRDate(goalSegment.prDate))
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(Color.enzoSecondary)
-                            if let elev = goalSegment.elevationDeltaMeters {
-                                Text(String(format: "+%.0f ft", elev * 3.28084))
-                                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                    .foregroundStyle(Color.enzoSecondary)
-                            }
-                        }
-
-                        Rectangle()
-                            .fill(Color.enzoSecondary.opacity(0.2))
-                            .frame(width: 1, height: 110)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 2)
-                    }
-
-                    // Current fitness column
+                let readColor = readinessColor(for: goalSegment.strikeScore)
+                HStack(alignment: .top) {
+                    // Segment stats
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Current fitness")
+                        Text("Segment")
                             .font(.system(.caption, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
                             .textCase(.uppercase)
                             .kerning(0.3)
-                        Text(context.currentFitnessLabel)
+                        if let dist = goalSegment.distanceMeters {
+                            Text(String(format: "%.1f mi", dist * 0.000621371))
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoSecondary)
+                        }
+                        Text(goalSegment.prFormatted)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .foregroundStyle(fitnessLabelColor)
-                        Text("\(currentPct)")
-                            .font(.system(.title2, design: .monospaced))
-                            .foregroundStyle(Color.enzoPrimary)
+                            .foregroundStyle(Color.enzoSecondary)
+                        Text(formattedPRDate(goalSegment.prDate))
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.enzoSecondary)
+                        if let elev = goalSegment.elevationDeltaMeters {
+                            Text(String(format: "+%.0f ft", elev * 3.28084))
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoSecondary)
+                        }
                     }
 
+                    Spacer()
+
                     // Readiness donut
-                    let readColor = readinessColor(for: goalSegment.strikeScore)
                     VStack(spacing: 4) {
                         ZStack {
                             Chart {
@@ -142,10 +119,10 @@ struct GoalHeaderView: View {
                                 .foregroundStyle(readColor.opacity(0.12))
                             }
                             .chartLegend(.hidden)
-                            .frame(width: 80, height: 80)
+                            .frame(width: 90, height: 90)
 
                             Text("\(Int(goalSegment.strikeScore * 100))")
-                                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                                .font(.system(.title3, design: .rounded, weight: .bold))
                                 .foregroundStyle(readColor)
                         }
                         Text("Readiness")
@@ -154,27 +131,8 @@ struct GoalHeaderView: View {
                             .textCase(.uppercase)
                             .tracking(0.5)
                     }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    Spacer(minLength: 0)
-                }
-            } else {
-                // Fallback: no goal segment synced yet — show current fitness only
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current fitness")
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(Color.enzoSecondary)
-                        .textCase(.uppercase)
-                        .kerning(0.3)
-                    Text(context.currentFitnessLabel)
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(fitnessLabelColor)
-                    Text("\(currentPct)")
-                        .font(.system(.title2, design: .monospaced))
-                        .foregroundStyle(Color.enzoPrimary)
                 }
             }
-
         }
     }
 
