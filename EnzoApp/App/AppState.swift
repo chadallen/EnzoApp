@@ -19,6 +19,11 @@ class AppState {
     var stravaAthleteId: Int64? = nil
     var supabaseUserId: UUID? = nil
 
+    // Onboarding state — persisted to UserDefaults
+    var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+        didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
+    }
+
     // Sync state
     var isSyncing: Bool = false
     var isSyncingPhase2: Bool = false
@@ -82,6 +87,12 @@ class AppState {
             athleteContext = context
 
             NSLog("[Context] Loaded: \(snapshots.count) snapshots, fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
+
+            // Auto-complete onboarding for existing users who already have a goal.
+            if activeGoal != nil && !hasCompletedOnboarding {
+                hasCompletedOnboarding = true
+                NSLog("[Onboarding] Existing user — marking onboarding complete")
+            }
 
             // Load real segment scores from Supabase (no-op if table is empty).
             await loadSegments(goalSegmentName: activeGoal?.targetSegmentName)
@@ -238,6 +249,24 @@ class AppState {
     }
 
     // MARK: - Authentication
+
+    func disconnect() {
+        KeychainHelper.delete(for: KeychainHelper.stravaAccessToken)
+        KeychainHelper.delete(for: KeychainHelper.stravaRefreshToken)
+        KeychainHelper.delete(for: KeychainHelper.stravaTokenExpiry)
+        KeychainHelper.delete(for: KeychainHelper.stravaAthleteId)
+        KeychainHelper.delete(for: KeychainHelper.supabaseUserId)
+        UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
+        isAuthenticated = false
+        hasCompletedOnboarding = false
+        stravaAthleteId = nil
+        supabaseUserId = nil
+        athleteContext = .preview
+        fitnessSnapshots = FitnessSnapshot.previewSnapshots
+        segments = SegmentScore.previewSegments
+        NSLog("[Auth] Disconnected — state reset to preview")
+    }
 
     func authenticate(contextProvider: ASWebAuthenticationPresentationContextProviding) async throws {
         let athlete = try await stravaService.authenticate(presentingFrom: contextProvider)
