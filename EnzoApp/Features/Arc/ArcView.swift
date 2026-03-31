@@ -12,7 +12,11 @@ struct ArcView: View {
         ZStack {
             Color.enzoBg.ignoresSafeArea()
             VStack(spacing: 0) {
-                FitnessRingView(context: context, fullWidth: true)
+                FitnessRingView(
+                    context: context,
+                    fullWidth: true,
+                    goalSegment: appState.segments.first { $0.isGoalSegment }
+                )
                 scrollContent
             }
         }
