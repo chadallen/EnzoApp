@@ -71,7 +71,6 @@ struct ConnectView: View {
             try await appState.authenticate(contextProvider: WindowContextProvider())
             Task { await appState.startOnboardingSync() }
         } catch {
-            NSLog("[ConnectView] authenticate error: \(error)")
             errorMessage = "Strava couldn't connect — tap to retry."
             isConnecting = false
         }
