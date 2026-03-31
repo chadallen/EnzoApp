@@ -91,7 +91,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 ├── EnzoApp.xcodeproj/                ← Xcode project (PBXFileSystemSynchronizedRootGroup —
 │                                         new files in EnzoApp/ are auto-included, no manual add)
 ├── EnzoApp/                          ← Xcode source root
-│   ├── EnzoAppApp.swift              ← @main entry point; RootView (auth gate), ConnectPlaceholderView, MainTabView
+│   ├── EnzoAppApp.swift              ← @main entry point; RootView (auth gate), MainTabView
 │   ├── App/
 │   │   └── AppState.swift            ← @Observable @MainActor global state; inject via .environment
 │   │                                     Step 8: loadContext(), generateBriefing(), generateLookahead(),
@@ -99,6 +99,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │                                     Step 9: loadSegments(), syncPhase2(), isSyncingPhase2
 │   │                                     Step 10 Chunk 1: hasCompletedOnboarding, isResolvingOnboarding,
 │   │                                     disconnect(), resetSyncHistory()
+│   │                                     Step 10 Chunk 2a ✓: isOnboardingSyncing, syncedActivityCount,
+│   │                                     startOnboardingSync(), Claude response cache (UserDefaults)
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
 │   │   │   ├── ArcView.swift         ← composes all sections; .task triggers loadContext+generate on launch
@@ -118,7 +120,9 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │   │   ├── SegmentsView.swift    ← full list, goal segment first, sort menu
 │   │   │   └── SegmentDetailView.swift ← PR card, fitness comparison, strike assessment
 │   │   └── Onboarding/               ← Step 10 Chunk 1 ✓
-│   │       └── SettingsSheet.swift   ← Sync now, Reset sync history, Disconnect Strava
+│   │       ├── SettingsSheet.swift   ← Sync now, Reset sync history, Disconnect Strava
+│   │       ├── ConnectView.swift     ← Step 10 Chunk 2b ✓ — hero screen, "Connect Strava" CTA
+│   │       └── SyncProgressView.swift ← Step 10 Chunk 2c — route animation, copy phases, completion
 │   ├── Models/
 │   │   ├── AthleteContext.swift      ← AthleteContext + GoalContext structs; fitnessLabel(for:);
 │   │   │                                 .preview, .previewBriefing, .previewLookahead, .previewChartContext
@@ -199,7 +203,9 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 8: Context payload + Arc content generation (live Enzo)
 - [x] Step 9: Historical sync Phase 2 + segment scoring
 - [x] Step 10: Onboarding flow — Chunk 1 complete (auth gating, SettingsSheet, GoalSettingView Path B)
-- [ ] Step 10: Onboarding flow — Chunk 2 (ConnectView, SyncProgressView, Claude response cache)
+- [x] Step 10: Onboarding flow — Chunk 2a (AppState cache + sync state, SyncService count)
+- [x] Step 10: Onboarding flow — Chunk 2b (ConnectView + EnzoAppApp routing)
+- [ ] Step 10: Onboarding flow — Chunk 2c (SyncProgressView + final gate wiring)
 - [ ] Step 11: Polish pass
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -348,8 +354,8 @@ Real Supabase data shows 97 months almost entirely in "Recovering" or "Baseline"
 **Step 8: recent_weeks is empty in contextPayload**
 `contextPayload()` includes `recent_weeks: []` as a placeholder. Per-activity weekly breakdown is deferred to Step 12 (webhooks), when individual ride data will be available.
 
-**Step 9: Supabase upsert requires on_conflict columns**
-`SupabaseService.upsertFitnessSnapshot` and `upsertSegmentScore` both append `?on_conflict=user_id,month` and `?on_conflict=user_id,strava_segment_id` respectively to the URL. Without this, Supabase returns 409 when `id` is null because it can't determine which unique constraint to use for `merge-duplicates` resolution.
+**Supabase upsert requires on_conflict columns (all tables)**
+Every POST with `Prefer: resolution=merge-duplicates` must include `?on_conflict=<column>` in the URL or Supabase ignores the hint and returns 409. Applied to all three upsert endpoints: `upsertFitnessSnapshot` (`?on_conflict=user_id,month`), `upsertSegmentScore` (`?on_conflict=user_id,strava_segment_id`), and `createUser` (`?on_conflict=strava_athlete_id`). If you add a new upsert, follow this pattern.
 
 **Phase 2 rate limit and incremental sync (updated this session)**
 Strava limits: 200 requests/15 min, 2000/day. Phase 1 uses ~4–5 requests (paginated list). Phase 2 first run uses ~26 requests (1 list page + 25 detail calls). Two full syncs in one 15-minute window exceeded the limit during development.
@@ -372,8 +378,22 @@ Fix: Phase 2 is now **incremental**. After each successful run, a `lastPhase2Syn
 **Step 10 Chunk 1 — complete (this session)**
 Auth gating live. `RootView` in `EnzoAppApp.swift` is the new root — it calls `loadContext()` before the gate resolves and shows: `ConnectPlaceholderView` (unauthenticated) → blank dark hold screen while `isResolvingOnboarding` is true → `GoalSettingView` (authenticated, no goal) → `MainTabView`. `hasCompletedOnboarding` auto-sets in `loadContext()` when `activeGoal != nil`. `disconnect()` wipes all Keychain/UserDefaults auth state and restores preview data. `SettingsSheet` (gear icon in Arc header) exposes Sync now, Reset sync history, Disconnect Strava. `GoalSettingView` now takes `onGoalConfirmed: (() -> Void)?` — used by the onboarding gate to advance without dismiss. Path B "Help me pick one" shows top 3 segments by strike score. On goal confirm, reaction text is copied to `appState.briefingText` and `generateLookahead()` fires for the new goal.
 
-**Step 10 Chunk 2 — next**
-`ConnectView.swift` (hero screen with working "Connect Strava" CTA calling `appState.authenticate(contextProvider:)`), `SyncProgressView.swift` (route-drawing animation + crossfading copy), Claude response cache (briefing/lookahead persisted to UserDefaults).
+**Step 10 Chunk 2 — split into 2a/2b/2c to preserve context**
+
+**Chunk 2a — AppState + SyncService (backend only, no new views)**
+- `AppState.swift`: add `isOnboardingSyncing: Bool`, `syncedActivityCount: Int`, `startOnboardingSync()` async method
+- `AppState.swift`: Claude response cache — persist `briefingText`/`lookaheadText` to UserDefaults after generation; restore on launch if < 24h old; invalidate on sync and on `disconnect()`
+- `SyncService.swift`: change `syncPhase1(userId:)` return type from `Void` to `Int` (total activities fetched); `AppState.syncPhase1()` sets `syncedActivityCount` from this
+
+**Chunk 2b — ConnectView + EnzoAppApp routing**
+- `Features/Onboarding/ConnectView.swift`: hero screen ("Enzo" header, tagline, cycling SF Symbol, "Connect Strava" accent pill); calls `authenticate()` then `startOnboardingSync()`; inline error state
+- `EnzoAppApp.swift`: replace `ConnectPlaceholderView` with `ConnectView`; remove `ConnectPlaceholderView` struct. Note: `isOnboardingSyncing` gate branch deferred to Chunk 2c (added alongside `SyncProgressView` so build always compiles)
+
+**Chunk 2c — SyncProgressView**
+- `Features/Onboarding/SyncProgressView.swift`: bezier-curve route animation (`trim(from:to:)` + repeat); 5 copy phases crossfading (driven by `isSyncing`/`isSyncingPhase2`); activity counter; 60s long-sync message; completion detection → `onComplete` clears `isOnboardingSyncing`
+
+**isOnboardingSyncing flow**
+`ConnectView` auth success → calls `appState.startOnboardingSync()` (sets `isOnboardingSyncing = true`, calls `syncPhase1`) → RootView routes to `SyncProgressView` → sync flags drop to false → SyncProgressView plays final beat → `onComplete: { appState.isOnboardingSyncing = false }` → gate advances to `GoalSettingView`.
 
 **GoalContext.daysRemaining (added this session)**
 `GoalContext` now has `daysRemaining: Int?` alongside `weeksRemaining: Int?`. Both computed from `targetDate` at the same time. `GoalHeaderView` uses `daysRemaining` for the display label: today / 1 day to go / N days to go (2–13) / N weeks to go (14+). `weeksRemaining` is still sent to Claude in the context payload.
@@ -401,6 +421,18 @@ Phase 2 confirmed end-to-end: `[Sync P2] Upserting 109 segment rows`, `[Segments
 
 **Phase 2 PR detection uses pr_rank, not athlete_pr_effort (fixed, commit 93dee1f)**
 `athlete_pr_effort` is defined in Strava's `SummarySegment` schema but is **not populated** in activity detail API responses — it's always nil. The reliable signal is `pr_rank == 1` on `DetailedSegmentEffort`: if this effort is the athlete's all-time PR on this segment, `pr_rank` is 1. `StravaSegmentEffort` now has `prRank: Int?` and `startDateLocal: String`. The loop records a `SegmentScoreRow` only when `effort.prRank == 1`, using `effort.elapsedTime` as `prSeconds` and `effort.startDateLocal` as `prAchievedAt`. `StravaSegmentSummary` no longer has `athletePrEffort` — it only needs `id` and `name`. **Limitation:** only segments with a PR in the fetched activity window are captured. Raise `phase2ActivityLimit` in Step 11 to expand coverage.
+
+**Step 10 Chunk 2a — complete**
+`AppState` now has `isOnboardingSyncing: Bool` (set by `startOnboardingSync()`, cleared by SyncProgressView's `onComplete`), `syncedActivityCount: Int` (set after Phase 1), and `startOnboardingSync()` which sets the flag then calls `syncPhase1()`. Claude response cache: `generateBriefing/Lookahead()` persist to UserDefaults after streaming; `loadContext()` restores if < 24h old via `restoreCachedContent()`; `invalidateCachedContent()` clears on sync completion and disconnect. `SyncService.syncPhase1` now returns `Int` (total activities fetched).
+
+**Step 10 Chunk 2b — complete**
+`ConnectView.swift` is the new unauthenticated hero screen — "Enzo" header, tagline, `figure.outdoor.cycle` SF Symbol, "Connect Strava" accent pill button. On tap: `authenticate()` then `startOnboardingSync()`. Inline amber error state on auth failure. `ConnectPlaceholderView` removed. `EnzoAppApp.swift` now routes to `ConnectView` for unauthenticated state. `isOnboardingSyncing` gate branch (→ `SyncProgressView`) is added in Chunk 2c alongside the view itself.
+
+**Step 10 Chunk 2c — next**
+`SyncProgressView.swift`: bezier-curve route animation, 5 crossfading copy phases driven by `isSyncing`/`isSyncingPhase2`, activity counter (`syncedActivityCount`), 60s long-sync message, completion detection → `onComplete`. `EnzoAppApp.swift`: add `isOnboardingSyncing` gate branch between `isResolvingOnboarding` and `!hasCompletedOnboarding`.
+
+**Brief flash of preview text on relaunch (known, deferred)**
+On relaunch, preview briefing/lookahead text flashes briefly before `restoreCachedContent()` runs in `loadContext()`. This is a sequencing artifact — the `@Observable` default values initialize before the async context load completes. Fix in Step 11 polish pass.
 
 **Swift 6 concurrency warnings**
 Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
