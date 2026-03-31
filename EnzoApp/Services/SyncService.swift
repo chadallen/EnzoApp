@@ -60,7 +60,8 @@ actor SyncService {
 
     /// Fetches all Strava activities, computes monthly fitness snapshots in-memory,
     /// and writes derived rows to Supabase. Raw Strava data is never persisted.
-    func syncPhase1(userId: UUID) async throws {
+    /// Returns the total number of activities fetched (used for SyncProgressView display).
+    func syncPhase1(userId: UUID) async throws -> Int {
         try await stravaService.refreshTokenIfNeeded()
         guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
             throw SyncError.notAuthenticated
@@ -78,6 +79,8 @@ actor SyncService {
         if let mostRecentDate = rides.map({ $0.date }).max() {
             try? await supabaseService.updateLastActivityDate(userId: userId, date: mostRecentDate)
         }
+
+        return activities.count
     }
 
     // MARK: - Static helpers (testable without network)
