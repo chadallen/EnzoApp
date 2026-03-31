@@ -109,11 +109,6 @@ struct ArcView: View {
 
     private var inputArea: some View {
         VStack(spacing: 8) {
-            PromptChipsView(chips: PromptChipsView.defaultChips) { chip in
-                Task {
-                    await appState.sendMessage(chip)
-                }
-            }
             ArcInputBar(text: $inputText, isSending: appState.isStreaming) { text in
                 Task {
                     await appState.sendMessage(text)
