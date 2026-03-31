@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct GoalHeaderView: View {
     let context: AthleteContext
@@ -13,6 +14,14 @@ struct GoalHeaderView: View {
         case "up": return "↑"
         case "down": return "↓"
         default: return "→"
+        }
+    }
+
+    private func readinessColor(for score: Double) -> Color {
+        switch score {
+        case 0.70...: return .enzoGoal
+        case 0.45..<0.70: return .enzoAmber
+        default: return .enzoSecondary
         }
     }
 
@@ -111,6 +120,40 @@ struct GoalHeaderView: View {
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(Color.enzoPrimary)
                     }
+
+                    // Readiness donut
+                    let readColor = readinessColor(for: goalSegment.strikeScore)
+                    VStack(spacing: 4) {
+                        ZStack {
+                            Chart {
+                                SectorMark(
+                                    angle: .value("Readiness", goalSegment.strikeScore),
+                                    innerRadius: .ratio(0.65),
+                                    angularInset: 2
+                                )
+                                .foregroundStyle(readColor)
+
+                                SectorMark(
+                                    angle: .value("Remaining", max(0.001, 1.0 - goalSegment.strikeScore)),
+                                    innerRadius: .ratio(0.65),
+                                    angularInset: 2
+                                )
+                                .foregroundStyle(readColor.opacity(0.12))
+                            }
+                            .chartLegend(.hidden)
+                            .frame(width: 80, height: 80)
+
+                            Text("\(Int(goalSegment.strikeScore * 100))")
+                                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                                .foregroundStyle(readColor)
+                        }
+                        Text("Readiness")
+                            .font(.system(.caption2, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .textCase(.uppercase)
+                            .tracking(0.5)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                     Spacer(minLength: 0)
                 }
