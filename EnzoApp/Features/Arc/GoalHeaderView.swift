@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GoalHeaderView: View {
     let context: AthleteContext
+    var fullWidth: Bool = false
     @Environment(AppState.self) private var appState
     @State private var showingGoalSetting = false
 
@@ -32,7 +33,12 @@ struct GoalHeaderView: View {
             }
         }
         .padding()
-        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+        .background(
+            Color.enzoCard,
+            in: fullWidth
+                ? AnyShape(UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16))
+                : AnyShape(RoundedRectangle(cornerRadius: 16))
+        )
         .sheet(isPresented: $showingGoalSetting) {
             GoalSettingView()
                 .environment(appState)

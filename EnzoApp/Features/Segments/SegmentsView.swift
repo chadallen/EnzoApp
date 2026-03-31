@@ -26,6 +26,9 @@ struct SegmentsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            GoalHeaderView(context: appState.athleteContext, fullWidth: true)
+                .environment(appState)
+
             if !sortedSegments.isEmpty {
                 sortBar
             }
