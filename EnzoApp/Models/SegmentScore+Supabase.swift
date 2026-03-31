@@ -19,6 +19,8 @@ struct SegmentScoreRow: Codable {
     var lastEffortDate: String?
     var strikeScore: Double?
     var strikeLabel: String?
+    var distanceMeters: Double?
+    var elevationDeltaMeters: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -34,6 +36,8 @@ struct SegmentScoreRow: Codable {
         case lastEffortDate = "last_effort_date"
         case strikeScore = "strike_score"
         case strikeLabel = "strike_label"
+        case distanceMeters = "distance_meters"
+        case elevationDeltaMeters = "elevation_delta_meters"
     }
 
     // MARK: - Conversion to domain model
@@ -48,7 +52,9 @@ struct SegmentScoreRow: Codable {
             trendDirection: trendDirection ?? "flat",
             lastEffortSeconds: lastEffortSeconds ?? 0,
             strikeScore: strikeScore ?? 0,
-            strikeLabel: strikeLabel ?? "Not quite ready"
+            strikeLabel: strikeLabel ?? "Not quite ready",
+            distanceMeters: distanceMeters,
+            elevationDeltaMeters: elevationDeltaMeters
         )
     }
 }
