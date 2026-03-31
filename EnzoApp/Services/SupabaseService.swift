@@ -55,7 +55,7 @@ actor SupabaseService {
             let id: UUID
         }
 
-        let urlString = "\(baseURL)/users"
+        let urlString = "\(baseURL)/users?on_conflict=strava_athlete_id"
         var request = try makeRequest(urlString: urlString)
         request.httpMethod = "POST"
         request.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
