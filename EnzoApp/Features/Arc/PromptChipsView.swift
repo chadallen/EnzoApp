@@ -26,10 +26,8 @@ struct PromptChipsView: View {
     }
 
     static let defaultChips = [
-        "Am I on track for Hawk Hill?",
         "What should I do this weekend?",
         "When was I last this fit?",
-        "What if I only have 4 weeks left?",
     ]
 }
 
