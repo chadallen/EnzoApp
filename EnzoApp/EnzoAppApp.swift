@@ -13,9 +13,38 @@ struct EnzoAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environment(appState)
+            if !appState.isAuthenticated {
+                ConnectPlaceholderView()
+                    .environment(appState)
+            } else if !appState.hasCompletedOnboarding {
+                GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })
+                    .environment(appState)
+            } else {
+                MainTabView()
+                    .environment(appState)
+            }
         }
+    }
+}
+
+/// Placeholder for the Connect screen — replaced by ConnectView in Chunk 2.
+struct ConnectPlaceholderView: View {
+    var body: some View {
+        ZStack {
+            Color.enzoBg.ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "figure.outdoor.cycle")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.enzoAccent)
+                Text("Connect Strava")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.enzoPrimary)
+                Text("Coming soon — Chunk 2")
+                    .font(.system(.caption))
+                    .foregroundStyle(Color.enzoSecondary)
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
