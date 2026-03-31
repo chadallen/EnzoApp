@@ -222,10 +222,16 @@ actor SyncService {
     struct StravaSegmentSummary: Decodable {
         let id: Int64
         let name: String
+        let distance: Double
+        let elevationHigh: Double
+        let elevationLow: Double
 
         enum CodingKeys: String, CodingKey {
             case id
             case name
+            case distance
+            case elevationHigh = "elevation_high"
+            case elevationLow  = "elevation_low"
         }
     }
 
@@ -353,7 +359,9 @@ actor SyncService {
                         lastEffortSeconds: effort.elapsedTime,
                         lastEffortDate: effortDateStr,
                         strikeScore: score,
-                        strikeLabel: SegmentScorer.strikeLabel(for: score)
+                        strikeLabel: SegmentScorer.strikeLabel(for: score),
+                        distanceMeters: seg.distance,
+                        elevationDeltaMeters: seg.elevationHigh - seg.elevationLow
                     )
                     segmentMap[segId] = row
                 } else if segmentMap[segId] == nil {
