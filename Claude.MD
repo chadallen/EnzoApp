@@ -205,7 +205,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 10: Onboarding flow — Chunk 1 complete (auth gating, SettingsSheet, GoalSettingView Path B)
 - [x] Step 10: Onboarding flow — Chunk 2a (AppState cache + sync state, SyncService count)
 - [x] Step 10: Onboarding flow — Chunk 2b (ConnectView + EnzoAppApp routing)
-- [ ] Step 10: Onboarding flow — Chunk 2c (SyncProgressView + final gate wiring)
+- [x] Step 10: Onboarding flow — Chunk 2c (SyncProgressView + final gate wiring)
 - [ ] Step 11: Polish pass
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
