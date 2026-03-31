@@ -209,7 +209,7 @@ struct GoalSettingView: View {
                     .foregroundStyle(Color.enzoSecondary)
             }
             Spacer()
-            Button("Change") {
+            Button("Pick different") {
                 streamTask?.cancel()
                 streamTask = nil
                 selectedSegment = nil
