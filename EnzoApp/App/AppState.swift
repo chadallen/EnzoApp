@@ -286,6 +286,12 @@ class AppState {
         await syncPhase2()
     }
 
+    /// Clears the Phase 2 incremental sync timestamp so the next sync re-fetches from scratch.
+    func resetSyncHistory() {
+        UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
+        NSLog("[Sync] Phase 2 history reset — next sync will re-fetch from scratch")
+    }
+
     func syncPhase2() async {
         guard let userId = supabaseUserId else {
             NSLog("[Sync] syncPhase2: no userId — aborting")

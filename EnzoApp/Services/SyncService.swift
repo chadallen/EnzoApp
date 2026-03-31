@@ -184,7 +184,7 @@ actor SyncService {
 
     /// UserDefaults key for the timestamp of the last successful Phase 2 run.
     /// Used to make Phase 2 incremental — only fetches activities newer than this date.
-    private static let lastPhase2SyncKey = "lastPhase2SyncTimestamp"
+    static let lastPhase2SyncKey = "lastPhase2SyncTimestamp"
 
     // Strava full activity response — ephemeral, never persisted.
     struct StravaDetailActivity: Decodable {
@@ -200,40 +200,29 @@ actor SyncService {
     struct StravaSegmentEffort: Decodable {
         let elapsedTime: Int
         let startDate: String
+        let startDateLocal: String
         let segment: StravaSegmentSummary
+        // prRank == 1 means this effort is the athlete's all-time PR on this segment.
+        // athlete_pr_effort is schema-defined on SummarySegment but Strava does not populate
+        // it in activity detail responses — prRank is the reliable signal.
+        let prRank: Int?
 
         enum CodingKeys: String, CodingKey {
-            case elapsedTime = "elapsed_time"
-            case startDate   = "start_date"
+            case elapsedTime    = "elapsed_time"
+            case startDate      = "start_date"
+            case startDateLocal = "start_date_local"
             case segment
+            case prRank         = "pr_rank"
         }
     }
 
     struct StravaSegmentSummary: Decodable {
         let id: Int64
         let name: String
-        let startLatlng: [Double]?
-        let endLatlng: [Double]?
-        let effortCount: Int?
-        let athletePrEffort: StravaAthletePREffort?
 
         enum CodingKeys: String, CodingKey {
             case id
             case name
-            case startLatlng    = "start_latlng"
-            case endLatlng      = "end_latlng"
-            case effortCount    = "effort_count"
-            case athletePrEffort = "athlete_pr_effort"
-        }
-    }
-
-    struct StravaAthletePREffort: Decodable {
-        let prElapsedTime: Int
-        let startDateLocal: String
-
-        enum CodingKeys: String, CodingKey {
-            case prElapsedTime  = "elapsed_time"   // Strava field is "elapsed_time", not "pr_elapsed_time"
-            case startDateLocal = "start_date_local"
         }
     }
 
@@ -308,39 +297,17 @@ actor SyncService {
                 break
             }
 
-            guard let efforts = detail.segmentEfforts else { continue }
+            guard let efforts = detail.segmentEfforts else {
+                NSLog("[Sync P2] Activity \(activity.id): no segment_efforts (nil)")
+                continue
+            }
+
+            let prEfforts = efforts.filter { $0.prRank == 1 }
+            NSLog("[Sync P2] Activity \(activity.id): \(efforts.count) efforts, \(prEfforts.count) with PR")
 
             for effort in efforts {
                 let seg = effort.segment
-                guard let prEffort = seg.athletePrEffort else { continue }
-
                 let segId = seg.id
-
-                // Derive "YYYY-MM" from PR date for snapshot lookup.
-                // PR date from Strava is ISO8601; trim to "YYYY-MM".
-                let prDateISO = prEffort.startDateLocal
-                let prMonthKey = String(prDateISO.prefix(7))
-                let prDateFormatted: String
-                if prDateISO.count >= 10 {
-                    prDateFormatted = String(prDateISO.prefix(10))
-                } else {
-                    prDateFormatted = prDateISO
-                }
-
-                let fitnessAtPR = snapshotByMonth[prMonthKey] ?? 0.0
-
-                // Current fitness = most recent snapshot value (snapshots are ordered asc by month).
-                let currentFitness = snapshotRows.last?.fitnessValue ?? 0.0
-
-                // Trend = most recent snapshot trend.
-                let currentTrend = snapshotRows.last?.trendDirection ?? "flat"
-
-                let score = SegmentScorer.strikeScore(
-                    fitnessValueAtPR: fitnessAtPR,
-                    currentFitnessValue: currentFitness,
-                    trendDirection: currentTrend,
-                    prDate: prDateFormatted
-                )
 
                 // Determine this effort's date (normalized to "YYYY-MM-DD").
                 let effortDateStr: String
@@ -350,17 +317,32 @@ actor SyncService {
                     effortDateStr = String(effort.startDate.prefix(10))
                 }
 
-                // Only write a row the first time we see this segment.
-                // Strava returns activities newest-first, so the first effort seen
-                // is the most recent one — use it for last_effort_* fields.
-                // PR data (athlete_pr_effort) is the same regardless of which activity surfaces it.
-                if segmentMap[segId] == nil {
+                // prRank == 1 means this effort IS the athlete's all-time PR on this segment.
+                // Use it to set/update the PR data. For non-PR efforts, only update
+                // last_effort fields if we already have a row for this segment.
+                if effort.prRank == 1 {
+                    // This effort is the PR — derive PR date from start_date_local.
+                    let prDateISO = effort.startDateLocal
+                    let prMonthKey = String(prDateISO.prefix(7))
+                    let prDateFormatted = prDateISO.count >= 10 ? String(prDateISO.prefix(10)) : prDateISO
+
+                    let fitnessAtPR = snapshotByMonth[prMonthKey] ?? 0.0
+                    let currentFitness = snapshotRows.last?.fitnessValue ?? 0.0
+                    let currentTrend = snapshotRows.last?.trendDirection ?? "flat"
+
+                    let score = SegmentScorer.strikeScore(
+                        fitnessValueAtPR: fitnessAtPR,
+                        currentFitnessValue: currentFitness,
+                        trendDirection: currentTrend,
+                        prDate: prDateFormatted
+                    )
+
                     let row = SegmentScoreRow(
                         id: nil,
                         userId: userId,
                         stravaSegmentId: segId,
                         segmentName: seg.name,
-                        prSeconds: prEffort.prElapsedTime,
+                        prSeconds: effort.elapsedTime,
                         prAchievedAt: prDateFormatted,
                         fitnessValueAtPr: fitnessAtPR,
                         currentFitnessValue: currentFitness,
@@ -371,6 +353,9 @@ actor SyncService {
                         strikeLabel: SegmentScorer.strikeLabel(for: score)
                     )
                     segmentMap[segId] = row
+                } else if segmentMap[segId] == nil {
+                    // Non-PR effort on a segment we haven't seen yet — skip.
+                    // We only record segments where we can establish PR data.
                 }
             }
         }
