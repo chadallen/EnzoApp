@@ -3,6 +3,7 @@ import UIKit
 
 /// Provides the key window as the presentation anchor for ASWebAuthenticationSession.
 /// Used by AppState.authenticate(contextProvider:) to present the Strava OAuth sheet.
+@MainActor
 final class WindowContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes
