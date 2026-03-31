@@ -8,16 +8,7 @@ struct FitnessRingView: View {
 
     private var ringColor: Color { .enzoChartPrimary }
 
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let period: String
-        switch hour {
-        case 5..<12: period = "morning"
-        case 12..<17: period = "afternoon"
-        default: period = "evening"
-        }
-        return "Good \(period), \(context.name)."
-    }
+    private var greeting: String { context.name }
 
     private var trendArrow: String {
         switch context.trendDirection {
