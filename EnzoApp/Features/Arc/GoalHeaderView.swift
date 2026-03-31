@@ -139,6 +139,7 @@ struct GoalHeaderView: View {
                             .tracking(0.5)
                     }
                 }
+            }
         }
     }
 
