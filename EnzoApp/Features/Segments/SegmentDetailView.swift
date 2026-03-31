@@ -57,27 +57,27 @@ struct SegmentDetailView: View {
                             .foregroundStyle(Color.enzoPrimary)
                     }
 
-                    // PR card
-                    HStack(spacing: 0) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(segment.prFormatted)
-                                .font(.system(.title, design: .monospaced, weight: .bold))
-                                .foregroundStyle(Color.enzoAccent)
-                            Text("Current PR")
-                                .font(.system(.caption, design: .rounded))
-                                .foregroundStyle(Color.enzoSecondary)
+                    // Segment stats card
+                    VStack(spacing: 12) {
+                        HStack(spacing: 0) {
+                            statBlock(value: segment.prFormatted, label: "Current PR", mono: true, color: Color.enzoAccent)
+                            statBlock(value: formattedPRDate(segment.prDate), label: "Date set")
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(segment.prDate)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(Color.enzoPrimary)
-                            Text("Date set")
-                                .font(.system(.caption, design: .rounded))
-                                .foregroundStyle(Color.enzoSecondary)
+                        if segment.distanceMeters != nil || segment.elevationDeltaMeters != nil {
+                            Rectangle()
+                                .fill(Color.enzoSecondary.opacity(0.12))
+                                .frame(height: 1)
+
+                            HStack(spacing: 0) {
+                                if let dist = segment.distanceMeters {
+                                    statBlock(value: String(format: "%.1f mi", dist * 0.000621371), label: "Distance")
+                                }
+                                if let elev = segment.elevationDeltaMeters {
+                                    statBlock(value: String(format: "+%.0f ft", elev * 3.28084), label: "Elevation gain")
+                                }
+                            }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding()
                     .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
@@ -93,6 +93,7 @@ struct SegmentDetailView: View {
                         HStack(spacing: 0) {
                             fitnessBlock(
                                 label: AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR),
+                                pct: Int(segment.fitnessValueAtPR * 100),
                                 sublabel: "When PR set"
                             )
 
@@ -101,6 +102,7 @@ struct SegmentDetailView: View {
 
                             fitnessBlock(
                                 label: AthleteContext.fitnessLabel(for: segment.currentFitnessValue),
+                                pct: Int(segment.currentFitnessValue * 100),
                                 sublabel: "Today",
                                 labelColor: segment.fitnessDelta >= 0 ? Color.enzoGoal : Color.enzoPrimary
                             )
@@ -114,8 +116,14 @@ struct SegmentDetailView: View {
                     .padding()
                     .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
 
-                    // Strike assessment
-                    VStack(alignment: .leading, spacing: 10) {
+                    // Readiness assessment
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Readiness score")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .textCase(.uppercase)
+                            .tracking(1)
+
                         HStack {
                             Text(segment.strikeLabel)
                                 .font(.system(.title3, design: .rounded, weight: .bold))
@@ -196,18 +204,46 @@ struct SegmentDetailView: View {
 
     private func fitnessBlock(
         label: String,
+        pct: Int,
         sublabel: String,
         labelColor: Color = Color.enzoPrimary
     ) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             Text(label)
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(labelColor)
+            Text("\(pct)%")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.enzoSecondary)
             Text(sublabel)
                 .font(.system(.caption2, design: .rounded))
                 .foregroundStyle(Color.enzoSecondary.opacity(0.7))
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func statBlock(value: String, label: String, mono: Bool = false, color: Color = Color.enzoPrimary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(mono ? .system(.title2, design: .monospaced, weight: .bold) : .system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func formattedPRDate(_ dateString: String) -> String {
+        let input = DateFormatter()
+        input.dateFormat = "yyyy-MM-dd"
+        input.timeZone = TimeZone(identifier: "UTC")
+        guard let date = input.date(from: dateString) else { return dateString }
+        let output = DateFormatter()
+        output.dateStyle = .medium
+        output.timeStyle = .none
+        return output.string(from: date)
     }
 }
 
