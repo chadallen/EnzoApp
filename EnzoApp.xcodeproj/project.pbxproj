@@ -64,6 +64,15 @@
 			);
 			sourceTree = "<group>";
 		};
+		9ABC62992F7866DE00159191 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9ABC62982F7866DE00159191 /* EnzoApp.app */,
+				ENZO20012F786600002A0001 /* EnzoAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		ENZO10032F786600001A0003 /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -72,15 +81,6 @@
 			);
 			name = Config;
 			path = EnzoApp/Config;
-			sourceTree = "<group>";
-		};
-		9ABC62992F7866DE00159191 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				9ABC62982F7866DE00159191 /* EnzoApp.app */,
-				ENZO20012F786600002A0001 /* EnzoAppTests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -332,6 +332,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SDWTXTZJ3F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -360,6 +361,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SDWTXTZJ3F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;

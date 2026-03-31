@@ -64,8 +64,9 @@ Follow this sequence. Each step produces something visible or testable before mo
 - Before marking any step complete, run tests and confirm they pass.
 
 ### UI & Tone
-- Dark mode first. Background `#0A0A0F`, card surfaces `#141420`.
-- Brand accent `#4FC3F7` (blue). Goal accent `#81C784` (green). Amber `#FFB74D` sparingly.
+- Light mode. Background `#FAFAFA`, card surfaces `#F7F7FA`. Primary text `#000000`, secondary `#666666`.
+- Brand accent `#FC5201` (orange-red). Goal accent `#81C784` (green). Amber `#FFB74D` sparingly.
+- Chart colors: `#1E88E5` (primary line), `#90CAF9` (fill/secondary). All defined as `enzoChartPrimary`/`enzoChartSecondary`.
 - SF Pro Rounded Bold for headers. SF Pro Text for body. SF Pro Mono for data labels.
 - No red states for inactivity or missed rides. Amber at most, always with a constructive Enzo line.
 - No streaks. No missed workout tracking. No guilt mechanics of any kind.
@@ -101,6 +102,7 @@ EnzoApp/                              ← repo root / VS Code workspace
 │   │                                     disconnect(), resetSyncHistory()
 │   │                                     Step 10 Chunk 2a ✓: isOnboardingSyncing, syncedActivityCount,
 │   │                                     startOnboardingSync(), Claude response cache (UserDefaults)
+│   │                                     Step 11: syncErrorMessage, lastSyncedAt (UserDefaults-persisted)
 │   ├── Features/
 │   │   ├── Arc/                      ← main experience
 │   │   │   ├── ArcView.swift         ← composes all sections; .task triggers loadContext+generate on launch
@@ -206,7 +208,9 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 10: Onboarding flow — Chunk 2a (AppState cache + sync state, SyncService count)
 - [x] Step 10: Onboarding flow — Chunk 2b (ConnectView + EnzoAppApp routing)
 - [x] Step 10: Onboarding flow — Chunk 2c (SyncProgressView + final gate wiring)
-- [ ] Step 11: Polish pass
+- [x] Step 11: Polish pass — core items complete (see build notes for what was deferred)
+- [x] UI Refactor session: light mode color scheme, top-tab navigation (Today/Targets), tab caching fix
+- [ ] Step 11b: Enzo voice/prompt tuning pass (dedicated session — deferred from Step 11)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
 ---
@@ -304,7 +308,7 @@ Lives in `Features/Arc/` for Steps 4–9. In Step 10 (Onboarding), it needs to b
 `FitnessSnapshotRow`, `SegmentScoreRow`, `GoalRow` live in `Models/+Supabase.swift` files alongside their domain model counterparts. These are wire-format DTOs, not domain models — they map to DB column names (snake_case) via `CodingKeys`. `FitnessSnapshot.month` ("YYYY-MM") is stored as "YYYY-MM-01" (PostgreSQL `date` type); `toSnapshot()` trims the suffix back. `SegmentScoreRow.stravaSegmentId` is non-optional (required by DB) — SyncService provides it from Strava in Step 9.
 
 **Supabase RLS**
-All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added through Step 10 — defer to Step 11 or before App Store submission.
+All 7 tables were created with RLS disabled (dev-only). The anon key can read/write freely. RLS policies were not added through Step 11 — defer to before App Store submission.
 
 **Integration test env var**
 The Supabase round-trip test in `SupabaseServiceTests.swift` is gated on `SUPABASE_INTEGRATION_TESTS=1`. To run it: `export SUPABASE_INTEGRATION_TESTS=1` in Terminal, then run xcodebuild. The `VAR=value xcodebuild` prefix syntax does NOT reach the simulator process — the var must be exported first. `-testenv` is not a valid xcodebuild flag on this Xcode version.
@@ -346,7 +350,7 @@ After running it, trigger a sync from the app. `SyncService.syncPhase1()` will n
 `FitnessCalculator.trendThreshold` changed from 0.05 to 0.008. Calibrated against real Supabase data (efficiency range ~0.10–0.28). The 97 existing rows in `fitness_snapshots` were computed with the old threshold — re-running sync will rewrite them with corrected trend directions (upsert overwrites).
 
 **Step 8: loadContext() + generateBriefing/Lookahead pattern**
-`AppState.loadContext()` fetches snapshots, user profile, and active goal concurrently from Supabase, then calls `AthleteContext.build()`. `generateBriefing()` and `generateLookahead()` stream Claude responses into `briefingText`/`lookaheadText`. All three are triggered by `.task` in `ArcView` on every launch. Falls back to `AthleteContext.previewBriefing/previewLookahead` until authenticated. Caching (daily refresh, UserDefaults) is Step 11 polish.
+`AppState.loadContext()` fetches snapshots, user profile, and active goal concurrently from Supabase, then calls `AthleteContext.build()`. `generateBriefing()` and `generateLookahead()` stream Claude responses into `briefingText`/`lookaheadText`. All three are triggered by `.task` in `ArcView` on every launch. Falls back to empty string (placeholder copy in view) until authenticated. Caching (daily refresh, UserDefaults) is complete — added Step 11.
 
 **Step 8: fitness data is mostly Baseline/Recovering**
 Real Supabase data shows 97 months almost entirely in "Recovering" or "Baseline" with one "Building" month. This is the actual fitness state vs. the illustrative hardcoded preview. Enzo will narrate the real state. The fitness model normalization (all-time min/max) may need tuning in Step 9 once segment data gives more context.
@@ -362,7 +366,7 @@ Strava limits: 200 requests/15 min, 2000/day. Phase 1 uses ~4–5 requests (pagi
 
 Fix: Phase 2 is now **incremental**. After each successful run, a `lastPhase2SyncTimestamp` is saved to `UserDefaults`. The next run passes `after=<unix timestamp>` to the Strava activities API, fetching only activities newer than that date. If no new activities → Phase 2 logs "No new activities — skipping" and returns immediately without any Strava API calls.
 
-`phase2ActivityLimit = 25` (was 100). This is a tunable constant — raise toward 200 once smoke tests consistently pass. Production full-history import will need batch pausing (200 req/15 min), deferred to Step 11.
+`phase2ActivityLimit = 25`. This is a tunable constant — raise toward 200 once smoke tests consistently pass. Production full-history import will need batch pausing (200 req/15 min). Deliberately held at 25 through Step 11 at Chad's request — do not raise without explicit instruction.
 
 **To reset Phase 2 and re-fetch from scratch:** call `appState.resetSyncHistory()` — this is wired to a "Reset sync history" button in `SettingsSheet` (built in Step 10 Chunk 1). It clears `lastPhase2SyncTimestamp` from UserDefaults. `SyncService.lastPhase2SyncKey` is `static` (not private) so AppState can reference it. Do not add temp reset code — use the SettingsSheet button.
 
@@ -434,11 +438,50 @@ Phase 2 confirmed end-to-end: `[Sync P2] Upserting 109 segment rows`, `[Segments
 **Partial auth guard (Step 10 fix)**
 If `exchangeCode` succeeds but `createUser` (or `fetchAthlete`) fails, `stravaAthleteId` lands in Keychain without `supabaseUserId`. On relaunch `AppState.init()` would set `isAuthenticated = true` and `isResolvingOnboarding = true`, but `loadContext()` returned early (no `supabaseUserId`) without clearing `isResolvingOnboarding` — app stuck on blank screen forever. Two fixes applied: (1) `AppState.init()` requires both `stravaAthleteId` AND `supabaseUserId` in Keychain to set `isAuthenticated = true` — partial state is treated as unauthenticated. (2) `loadContext()` always sets `isResolvingOnboarding = false` even on early return.
 
-**Brief flash of preview text on relaunch (known, deferred)**
-On relaunch, preview briefing/lookahead text flashes briefly before `restoreCachedContent()` runs in `loadContext()`. This is a sequencing artifact — the `@Observable` default values initialize before the async context load completes. Fix in Step 11 polish pass.
+**Preview text flash on relaunch (fixed Step 11)**
+`briefingText` and `lookaheadText` now initialize to `""` in `AppState` instead of the preview strings. Both `ArcBriefingView` and `LookaheadSuggestionView` already had `isEmpty` checks showing placeholder copy — the fix was purely the initial value. No flash on relaunch.
 
-**ConnectView NSLog (dev-only, remove in Step 11)**
-`ConnectView.connect()` has `NSLog("[ConnectView] authenticate error: \(error)")` added in Step 10 for debugging. Remove before App Store / Step 11 polish. It is safe to leave in for beta — just noisy.
+**ConnectView NSLog removed (Step 11)**
+The dev-only `NSLog("[ConnectView] authenticate error: \(error)")` has been removed.
 
-**Swift 6 concurrency warnings**
-Several warnings of the form `main actor-isolated ... cannot be used in actor-isolated context` exist in `StravaService.swift` and pre-existing in `SupabaseService.swift`. Root cause: `Config` computed vars access `Bundle.main` (a `@MainActor` API), making them `@MainActor`-isolated; `KeychainHelper` static methods are similarly inferred as `@MainActor`. All are warnings only — build succeeds. Fix in a Swift 6 cleanup pass, not in feature steps.
+**Swift 6 concurrency warnings (fixed Step 11)**
+`Config` computed vars changed to `nonisolated(unsafe) static let` stored properties — values cached at startup, no longer `@MainActor`-inferred. `WindowContextProvider` marked `@MainActor` — also fixes the Main Thread Checker warning (`isKeyWindow` called off main thread). Remaining warnings in `StravaService`/`SupabaseService` are minor and build succeeds.
+
+**syncErrorMessage in AppState (added Step 11)**
+`AppState.syncErrorMessage: String?` is set in `syncPhase1()` on failure and cleared on sync start. `StravaError.notAuthenticated` and `.tokenExchangeFailed` → "Strava needs you to reconnect — takes 10 seconds." Generic errors → "Sync didn't complete — tap to try again." Displayed as an amber inline banner in `ArcView` between the goal header divider and scroll content, with a "Retry" button that re-runs `syncPhase1()`.
+
+**lastSyncedAt in AppState (added Step 11)**
+`AppState.lastSyncedAt: Date?` is set after a successful Phase 1 sync and persisted to `UserDefaults` under key `"lastSyncedAt"`. Restored on launch. Cleared on `disconnect()`. Displayed in `SettingsSheet` as a sublabel on the "Sync now" row: "Last synced [date, time]". During active sync shows "Fetching rides..." / "Scoring segments..." instead.
+
+**Empty states (added Step 11)**
+`SegmentsView` shows `figure.outdoor.cycle` + "No segments yet" + Enzo copy when `sortedSegments` is empty. `PROpportunitiesCard` shows Enzo copy when `segments` is empty (no broken "See all" link). `ArcBriefingView` and `LookaheadSuggestionView` already handled `isEmpty` — no changes needed there.
+
+**No brainer pill pulse (added Step 11)**
+`SegmentOpportunityRow` (in `PROpportunitiesCard`) and `SegmentStrikeRow` (in `SegmentsView`) both animate the strike pill with a 1.06× scale, 1.4s `easeInOut` repeating animation when `strikeLabel == "No brainer"`. The animation only activates on `onAppear` when the condition is true — other labels are unaffected.
+
+**SettingsSheet sync status copy (fixed Step 11)**
+`syncStatusText` previously exposed "Phase 1 running..." / "Phase 2 running..." to users. Changed to "Fetching rides..." / "Scoring segments..." — user-facing language that matches Enzo's voice.
+
+**Enzo prompt/voice tuning deferred**
+The system prompt in `ClaudeService`, and the `briefingPrompt`, `lookaheadPrompt`, and `goalReactionPrompt` in `AppState` were not reviewed or changed in Step 11. Chad wants a dedicated session focused entirely on Enzo's generated voice — prompts, output quality, and tuning against real ride data. This is Step 11b.
+
+**phase2ActivityLimit still at 25**
+Deliberately not raised during Step 11 at Chad's request. Raise to 100+ in Step 11b or Step 12 once smoke tests confirm no rate limit issues.
+
+**Color scheme changed to light mode (UI Refactor session)**
+All semantic color constants updated in `Color+Enzo.swift`: `enzoBg` → `#FAFAFA`, `enzoCard` → `#F7F7FA`, `enzoAccent` → `#FC5201` (orange-red), `enzoPrimary` → `#000000`, `enzoSecondary` → `#666666`. Added `enzoChartPrimary` (`#1E88E5`) and `enzoChartSecondary` (`#90CAF9`) for chart-specific colors. All `.preferredColorScheme(.dark)`, `.colorScheme(.dark)`, and `.toolbarColorScheme(.dark)` removed from all view files. `FitnessChartView` now uses `enzoChartPrimary` for line/dot/area fill.
+
+**Navigation structure changed to top tabs (UI Refactor session)**
+`MainTabView` now uses a custom top bar ("Enzo" left + gear right → SettingsSheet) and a tab picker row ("Today" / "Targets") with `enzoAccent` underline on active tab. Wraps everything in a `NavigationStack`. Content uses a `ZStack` with opacity toggle + `allowsHitTesting` to keep both views alive (avoids re-running `.task` on tab switch). Tab names: "Today" (was "Arc"), "Targets" (was "Segments"). When drilling into a segment from Targets, the full screen pushes (custom top bar disappears, system nav bar with back button appears) — identical to Strava behavior.
+
+**ArcView no longer has a sticky header (UI Refactor session)**
+`ArcView` header ("Enzo" + gear) and sticky `GoalHeaderView` removed. Both now live in `MainTabView` (gear) and `ArcView`'s scroll content `LazyVStack` (GoalHeaderView as first item). Sync error banner also moved into scroll content, styled as a card with `RoundedRectangle` background. `showSettings` state removed from `ArcView`.
+
+**SegmentsView NavigationStack removed (UI Refactor session)**
+`SegmentsView` no longer wraps itself in a `NavigationStack`. Push navigation to `SegmentDetailView` is handled by the outer `NavigationStack` in `MainTabView`. `navigationDestination(for: SegmentScore.self)` stays on `SegmentsView`'s content — this works from any view inside a `NavigationStack` ancestor. Sort button moved from toolbar to an inline bar above the list.
+
+**generateBriefing/Lookahead caching guard (UI Refactor session)**
+`generateBriefing(forceRefresh: Bool = false)` and `generateLookahead(forceRefresh: Bool = false)` skip generation if content already exists unless `forceRefresh: true`. Prevents regeneration when switching back to the Today tab. The `.task` in `ArcView` uses default `false`. The briefing refresh button and goal-confirm path pass `forceRefresh: true`.
+
+**enzo-voice.MD has stale fitness labels**
+The system prompt copy in `skills/enzo-voice.MD` still uses old fitness label names (`Peak shape, Strong base, Building, Coming back`) instead of current labels (`Epic, Strong, Building, Baseline, Recovering`). The actual implementation in `ClaudeService.swift` is correct. Fix `enzo-voice.MD` before doing any prompt work in Step 11b.
