@@ -210,8 +210,20 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 10: Onboarding flow — Chunk 2c (SyncProgressView + final gate wiring)
 - [x] Step 11: Polish pass — core items complete (see build notes for what was deferred)
 - [x] UI Refactor session: light mode color scheme, top-tab navigation (Today/Targets), tab caching fix
+- [x] Today tab UI session: FitnessRingView (donut), chart at top, GoalHeader/PROpportunities removed from Today, timeframe picker on chart, dynamic Y scale
 - [ ] Step 11b: Enzo voice/prompt tuning pass (dedicated session — deferred from Step 11)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
+
+---
+
+## Deferred Items
+
+Small things noted during sessions but not worth stopping for. Pick these up in a future polish pass.
+
+- **Sync progress indicator during manual sync** — when sync is triggered from SettingsSheet and the sheet is dismissed, there's no visible indicator in the main UI. Could be a subtle activity indicator in the top bar while `isSyncingPhase2` is true.
+- **FitnessChartView axis polish** — x-axis label overlap at some timeframes, Y-axis labels hidden. Attempted in the Today tab UI session, reverted due to alignment issues on device. Needs dedicated time.
+- **`phase2ActivityLimit` still at 25** — raise to 100+ once smoke tests on distance/elevation data look clean.
+- **`enzo-voice.MD` has stale fitness labels** — still uses old names (`Peak shape, Strong base, Building, Coming back`). Fix before any prompt work in Step 11b.
 
 ---
 
@@ -485,3 +497,15 @@ All semantic color constants updated in `Color+Enzo.swift`: `enzoBg` → `#FAFAF
 
 **enzo-voice.MD has stale fitness labels**
 The system prompt copy in `skills/enzo-voice.MD` still uses old fitness label names (`Peak shape, Strong base, Building, Coming back`) instead of current labels (`Epic, Strong, Building, Baseline, Recovering`). The actual implementation in `ClaudeService.swift` is correct. Fix `enzo-voice.MD` before doing any prompt work in Step 11b.
+
+**Today tab restructured (Today tab UI session)**
+`ArcView` no longer shows `GoalHeaderView` or `PROpportunitiesCard`. New layout: `FitnessRingView` (top), `FitnessChartView`, sync error banner, `ArcBriefingView`, `LookaheadSuggestionView`, message thread. Both removed components still exist in the codebase — they'll be reconsidered for the Targets tab.
+
+**FitnessRingView — donut fitness score card (Today tab UI session)**
+New file at `Features/Arc/FitnessRingView.swift`. Uses `SectorMark` (iOS 17+). Ring color: `enzoRingHigh` (#27AE60) for Epic/Strong, `enzoAccent` for Building, `enzoRingLow` (#E67E22) for Baseline/Recovering. Center shows `Int(currentFitnessValue × 100)%`. Right side shows STATUS (label + trend arrow) and LAST RIDE. New color constants `enzoRingHigh` and `enzoRingLow` added to `Color+Enzo.swift`.
+
+**FitnessChartView timeframe picker + dynamic Y scale (Today tab UI session)**
+`ChartTimeframe` enum (YTD / 1Y / 5Y / All) lives in `FitnessChartView.swift`. `filteredSnapshots` computed property filters the snapshot array per selection. `yDomain` is dynamic: fits to visible data min/max + 30% padding (minimum range 0.05). X-axis uses `@AxisContentBuilder` switching: YTD + 1Y → monthly abbreviations, 5Y + All → abbreviated years (`'24`). `contextText` parameter removed from this view.
+
+**PromptChipsView trimmed (Today tab UI session)**
+Removed "Am I on track for Hawk Hill?" (goal-specific hardcoded) and "What if I only have 4 weeks left?" (date-specific). Remaining chips: "What should I do this weekend?" and "When was I last this fit?"
