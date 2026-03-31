@@ -46,32 +46,80 @@ struct GoalHeaderView: View {
     }
 
     private var goalContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Line 1: Current target
-            Text("Current target: \(goal.segmentName)")
-                .font(.system(.headline, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.enzoPrimary)
-                .lineLimit(1)
-
-            // Line 2: Current fitness
-            let currentPct = Int(context.currentFitnessValue * 100)
-            HStack(spacing: 0) {
-                Text("Current fitness: ")
+        VStack(alignment: .leading, spacing: 12) {
+            // Header: label + segment name
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Current target segment")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(Color.enzoSecondary)
+                    .textCase(.uppercase)
+                    .kerning(0.5)
+                Text(goal.segmentName)
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundStyle(Color.enzoPrimary)
-                Text(context.currentFitnessLabel)
-                    .foregroundStyle(fitnessLabelColor)
-                Text(" | \(currentPct)%")
-                    .foregroundStyle(Color.enzoPrimary)
+                    .lineLimit(1)
             }
-            .font(.system(.subheadline, design: .rounded))
 
-            // Line 3: PR fitness (from goal segment)
+            // Stat comparison row
+            let currentPct = Int(context.currentFitnessValue * 100)
             if let goalSegment = appState.segments.first(where: { $0.isGoalSegment }) {
                 let prLabel = AthleteContext.fitnessLabel(for: goalSegment.fitnessValueAtPR)
                 let prPct = Int(goalSegment.fitnessValueAtPR * 100)
-                Text("PR fitness: \(prLabel) | \(prPct)%")
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(Color.enzoSecondary)
+                HStack(alignment: .top, spacing: 0) {
+                    // Current fitness column
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Current fitness")
+                            .font(.system(.caption2, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .textCase(.uppercase)
+                            .kerning(0.3)
+                        Text(context.currentFitnessLabel)
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(fitnessLabelColor)
+                        Text("\(currentPct)%")
+                            .font(.system(.title2, design: .monospaced))
+                            .foregroundStyle(Color.enzoPrimary)
+                    }
+
+                    // Divider
+                    Rectangle()
+                        .fill(Color.enzoSecondary.opacity(0.2))
+                        .frame(width: 1, height: 56)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 2)
+
+                    // PR fitness column
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("PR fitness")
+                            .font(.system(.caption2, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .textCase(.uppercase)
+                            .kerning(0.3)
+                        Text(prLabel)
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.enzoSecondary)
+                        Text("\(prPct)%")
+                            .font(.system(.title2, design: .monospaced))
+                            .foregroundStyle(Color.enzoSecondary)
+                    }
+
+                    Spacer()
+                }
+            } else {
+                // Fallback: no goal segment synced yet — show current fitness only
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current fitness")
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .textCase(.uppercase)
+                        .kerning(0.3)
+                    Text(context.currentFitnessLabel)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(fitnessLabelColor)
+                    Text("\(currentPct)%")
+                        .font(.system(.title2, design: .monospaced))
+                        .foregroundStyle(Color.enzoPrimary)
+                }
             }
 
             Button("Change goal") {
@@ -79,7 +127,6 @@ struct GoalHeaderView: View {
             }
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(Color.enzoSecondary)
-            .padding(.top, 2)
         }
     }
 
