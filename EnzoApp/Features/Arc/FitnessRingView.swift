@@ -94,11 +94,11 @@ struct FitnessRingView: View {
                                 .font(.system(.title3, design: .rounded, weight: .bold))
                                 .foregroundStyle(readColor)
                         }
-                        Text(seg.name)
+                        Text("Readiness")
                             .font(.system(.caption2, design: .rounded))
                             .foregroundStyle(Color.enzoSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                            .textCase(.uppercase)
+                            .tracking(0.5)
                     }
                 }
 
