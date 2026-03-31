@@ -66,6 +66,7 @@ struct SegmentsView: View {
 
 struct SegmentStrikeRow: View {
     let segment: SegmentScore
+    @State private var isPulsing = false
 
     private var pillColor: Color {
         switch segment.strikeScore {
@@ -109,6 +110,14 @@ struct SegmentStrikeRow: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(pillColor.opacity(0.15), in: Capsule())
+                .scaleEffect(isPulsing ? 1.06 : 1.0)
+                .animation(
+                    segment.strikeLabel == "No brainer"
+                        ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                        : .default,
+                    value: isPulsing
+                )
+                .onAppear { isPulsing = segment.strikeLabel == "No brainer" }
         }
         .padding(.vertical, 6)
     }
