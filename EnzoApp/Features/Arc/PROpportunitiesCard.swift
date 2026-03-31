@@ -24,25 +24,32 @@ struct PROpportunitiesCard: View {
                 Spacer()
             }
 
-            VStack(spacing: 0) {
-                ForEach(Array(displaySegments.enumerated()), id: \.element.id) { index, segment in
-                    if index > 0 {
-                        Divider()
-                            .background(Color.enzoSecondary.opacity(0.15))
-                            .padding(.vertical, 2)
+            if segments.isEmpty {
+                Text("Enzo will find your best opportunities once your rides sync.")
+                    .font(.system(.body))
+                    .foregroundStyle(Color.enzoSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(displaySegments.enumerated()), id: \.element.id) { index, segment in
+                        if index > 0 {
+                            Divider()
+                                .background(Color.enzoSecondary.opacity(0.15))
+                                .padding(.vertical, 2)
+                        }
+                        SegmentOpportunityRow(segment: segment, rank: index + 1)
                     }
-                    SegmentOpportunityRow(segment: segment, rank: index + 1)
                 }
-            }
 
-            NavigationLink(destination: Text("Segments")) {
-                HStack(spacing: 4) {
-                    Text("See all opportunities")
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(Color.enzoAccent)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.enzoAccent)
+                NavigationLink(destination: Text("Segments")) {
+                    HStack(spacing: 4) {
+                        Text("See all opportunities")
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(Color.enzoAccent)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.enzoAccent)
+                    }
                 }
             }
         }
