@@ -13,16 +13,33 @@ struct EnzoAppApp: App {
 
     var body: some Scene {
         WindowGroup {
+            RootView()
+                .environment(appState)
+        }
+    }
+}
+
+struct RootView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Group {
             if !appState.isAuthenticated {
                 ConnectPlaceholderView()
-                    .environment(appState)
+            } else if appState.isResolvingOnboarding {
+                // loadContext() is running — hold here to avoid flashing GoalSettingView
+                // for existing users whose hasCompletedOnboarding hasn't been set yet.
+                Color.enzoBg.ignoresSafeArea()
             } else if !appState.hasCompletedOnboarding {
                 GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })
-                    .environment(appState)
             } else {
                 MainTabView()
-                    .environment(appState)
             }
+        }
+        .task {
+            // Runs loadContext() before the gate resolves, so existing users with
+            // a goal auto-set hasCompletedOnboarding and land in MainTabView.
+            await appState.loadContext()
         }
     }
 }

@@ -23,6 +23,9 @@ class AppState {
     var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
         didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
     }
+    // True while loadContext() is running to resolve whether onboarding is needed.
+    // Prevents the gate from flashing GoalSettingView for existing users on first launch.
+    var isResolvingOnboarding: Bool = false
 
     // Sync state
     var isSyncing: Bool = false
@@ -56,6 +59,12 @@ class AppState {
         if let uuidString = KeychainHelper.load(for: KeychainHelper.supabaseUserId),
            let uuid = UUID(uuidString: uuidString) {
             supabaseUserId = uuid
+        }
+
+        // If authenticated but onboarding not yet confirmed, flag for resolution
+        // so the gate waits for loadContext() before deciding which screen to show.
+        if isAuthenticated && !hasCompletedOnboarding {
+            isResolvingOnboarding = true
         }
     }
 
@@ -99,6 +108,7 @@ class AppState {
         } catch {
             NSLog("[Context] loadContext error: \(error)")
         }
+        isResolvingOnboarding = false
     }
 
     /// Fetches segment scores from Supabase and populates appState.segments.
@@ -260,6 +270,7 @@ class AppState {
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
         isAuthenticated = false
         hasCompletedOnboarding = false
+        isResolvingOnboarding = false
         stravaAthleteId = nil
         supabaseUserId = nil
         athleteContext = .preview
