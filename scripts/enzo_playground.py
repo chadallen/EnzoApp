@@ -31,7 +31,10 @@ import os
 import sys
 from pathlib import Path
 
+import xcconfig
+
 DATA_PATH = Path(__file__).parent / "data" / "context.json"
+_cfg = xcconfig.load()
 
 # ---------------------------------------------------------------------------
 # Dependency check
@@ -348,10 +351,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = _cfg.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("Error: ANTHROPIC_API_KEY not set.")
-        print("  export ANTHROPIC_API_KEY=sk-ant-...")
+        print("Error: could not load Claude API key.")
+        print("  Expected: EnzoApp/Config/Debug.xcconfig with CLAUDE_API_KEY")
+        print("  Or set env var: export ANTHROPIC_API_KEY=sk-ant-...")
         sys.exit(1)
 
     client = anthropic.Anthropic(api_key=api_key)
