@@ -57,10 +57,10 @@ struct GoalHeaderView: View {
                 Text(goal.requiredFitnessLabel + " fitness needed")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.enzoSecondary)
-                if let weeks = goal.weeksRemaining {
+                if let days = goal.daysRemaining {
                     Text("·")
                         .foregroundStyle(Color.enzoSecondary.opacity(0.4))
-                    Text(weeks == 1 ? "1 week to go" : "\(weeks) weeks to go")
+                    Text(timeRemainingLabel(days: days))
                         .font(.system(.subheadline, design: .rounded))
                         .foregroundStyle(Color.enzoSecondary)
                 }
@@ -72,6 +72,16 @@ struct GoalHeaderView: View {
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(Color.enzoSecondary)
             .padding(.top, 4)
+        }
+    }
+
+    private func timeRemainingLabel(days: Int) -> String {
+        switch days {
+        case 0: return "today"
+        case 1: return "1 day to go"
+        case 2...6: return "\(days) days to go"
+        case 7...13: return "1 week to go"
+        default: return "\(days / 7) weeks to go"
         }
     }
 

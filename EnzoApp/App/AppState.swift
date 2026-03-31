@@ -189,10 +189,10 @@ class AppState {
     // MARK: - Goal setting
 
     func setGoal(_ segment: SegmentScore, targetDate: Date?) {
-        let weeksRemaining: Int? = targetDate.map { date in
-            let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
-            return max(0, days / 7)
+        let daysRemaining: Int? = targetDate.map { date in
+            max(0, Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0)
         }
+        let weeksRemaining: Int? = daysRemaining.map { $0 / 7 }
 
         let requiredValue = segment.fitnessValueAtPR
         let requiredLabel = SegmentScorer.requiredFitnessLabel(fitnessValueAtPR: requiredValue)
@@ -201,7 +201,8 @@ class AppState {
             requiredFitnessLabel: requiredLabel,
             requiredFitnessValue: requiredValue,
             targetDate: targetDate,
-            weeksRemaining: weeksRemaining
+            weeksRemaining: weeksRemaining,
+            daysRemaining: daysRemaining
         )
 
         athleteContext = AthleteContext(
