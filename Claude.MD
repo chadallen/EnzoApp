@@ -213,6 +213,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Today tab UI session: FitnessRingView (donut), chart at top, GoalHeader/PROpportunities removed from Today, timeframe picker on chart, dynamic Y scale
 - [x] Targets tab UI session: GoalHeaderView pinned full-width header with accent tint; segment name hero + fitness comparison + segment stats columns; distance/elevation wired through Strava API → SegmentScore → UI; SegmentDetailView consolidated as single goal-setting entry point; alternating row shading; "Explore more segments" section header
 - [x] Today tab header session: FitnessRingView pinned as accent-tint full-width header; ring color → chart blue; athlete name greeting; goal progress bar (current vs PR fitness)
+- [x] Score cleanup session: % symbols removed from all score displays; percentile-based (5th/95th) fitness normalization; recency discount removed from strike score formula
+- [ ] Score UI cleanup session: remove PR-fitness display from SegmentDetailView + GoalHeaderView; add readiness donut to Today tab header; see handoff.MD for full plan
 - [ ] Step 11b: Enzo voice/prompt tuning pass (dedicated session — deferred from Step 11)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -227,6 +229,8 @@ Small things noted during sessions but not worth stopping for. Pick these up in 
 - **FitnessChartView axis polish** — x-axis label overlap at some timeframes, Y-axis labels hidden. Attempted in the Today tab UI session, reverted due to alignment issues on device. Needs dedicated time.
 - **`phase2ActivityLimit` still at 25** — raise to 100+ once smoke tests on distance/elevation data look clean.
 - **`enzo-voice.MD` has stale fitness labels** — still uses old names (`Peak shape, Strong base, Building, Coming back`). Fix before any prompt work in Step 11b.
+- **Re-sync needed after score cleanup session** — fitness normalization (percentile-based) and recency discount removal both affect stored values. Chad needs Settings → Reset sync history → Sync now to rewrite Supabase data with corrected scores.
+- **`prDate` parameter in `SegmentScorer.strikeScore`** — kept for call-site compatibility after recency discount removal. Can be removed in a future cleanup pass along with any dead `prDate` usage in `SyncService`.
 
 ---
 
@@ -545,3 +549,18 @@ Removed "Am I on track for Hawk Hill?" (goal-specific hardcoded) and "What if I 
 
 **FitnessRingView pinned as Today tab header (Targets/Today session)**
 `FitnessRingView` is no longer inside `ArcView`'s `ScrollView`. It's pinned above the scroll content as a full-width header (`fullWidth: true`) matching the Targets tab header style. Ring color changed from tier-based (green/orange/amber) to always `enzoChartPrimary` (#1E88E5 blue) for contrast against the orange tint background. Added: athlete name greeting above the ring row; goal progress bar below the ring row (shows current fitness fill vs PR fitness tick marker, "You · X%" / "PR · Y%" labels). Progress bar only renders when a goal segment exists. `enzoRingHigh` and `enzoRingLow` color constants remain in `Color+Enzo.swift` but are no longer used by `FitnessRingView`.
+
+**% symbols removed from score displays (score cleanup session)**
+All fitness and readiness score displays no longer show `%`. Scores are 0–100 values, not percentages of something. Changed in `SegmentDetailView`, `GoalHeaderView`, `FitnessRingView` (donut center, progress bar labels).
+
+**Percentile-based fitness normalization (score cleanup session)**
+`FitnessCalculator.percentile(_:of:)` added as a pure static helper using linear interpolation. `SyncService.computeSnapshots` now uses 5th/95th percentile instead of absolute min/max for normalization. Prevents outlier months (illness, minimal riding) from compressing all normal months into a narrow 35–45 band. After re-sync, fitness values spread meaningfully across the 0–100 range. **Re-sync required** to see the effect: Settings → Reset sync history → Sync now.
+
+**Recency discount removed from strike score (score cleanup session)**
+`SegmentScorer.strikeScore` no longer applies a ×0.85 discount when the PR was set within 30 days. The hidden penalty created confusing contradictions (same fitness as PR day → still "not quite ready" with no explanation). The `prDate` parameter is kept in the function signature for call-site compatibility — can be removed in a future cleanup. Strike score is now purely: fitness delta × 0.8 + trend bonus (±0.05).
+
+**SegmentScorerTests was missing `import Foundation` (score cleanup session)**
+Pre-existing bug causing build failures when running any test suite. Fixed by adding `import Foundation` to `SegmentScorerTests.swift`.
+
+**Score UI cleanup — planned for next session (not yet implemented)**
+See `handoff.MD` for the full plan. Summary: remove PR-fitness display from `SegmentDetailView` (delete "FITNESS COMPARISON" card) and `GoalHeaderView` (remove PR fitness column). Add a second donut to `FitnessRingView` showing goal segment readiness score, replacing the goal progress bar. The `fitnessValueAtPR` field stays in the data model — only its display is removed.
