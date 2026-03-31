@@ -55,9 +55,12 @@ class AppState {
         supabaseService = supabase
         syncService    = SyncService(stravaService: strava, supabaseService: supabase)
 
-        // Restore auth state from Keychain on launch
+        // Restore auth state from Keychain on launch.
+        // Require both stravaAthleteId AND supabaseUserId — if only one is present,
+        // the previous auth attempt was incomplete and we treat it as unauthenticated.
         if let idString = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
-           let id = Int64(idString) {
+           let id = Int64(idString),
+           KeychainHelper.load(for: KeychainHelper.supabaseUserId) != nil {
             isAuthenticated = true
             stravaAthleteId = id
         }
@@ -78,7 +81,10 @@ class AppState {
     /// Fetches fitness snapshots, user profile, and active goal from Supabase,
     /// then builds a live AthleteContext. No-ops gracefully if not authenticated.
     func loadContext() async {
-        guard let userId = supabaseUserId else { return }
+        guard let userId = supabaseUserId else {
+            isResolvingOnboarding = false
+            return
+        }
 
         do {
             async let snapshotRows = supabaseService.fetchFitnessSnapshots(userId: userId)
