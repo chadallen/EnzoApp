@@ -109,7 +109,7 @@ struct GoalHeaderView: View {
                         Text(context.currentFitnessLabel)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
                             .foregroundStyle(fitnessLabelColor)
-                        Text("\(currentPct)%")
+                        Text("\(currentPct)")
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(Color.enzoPrimary)
                     }
@@ -131,7 +131,7 @@ struct GoalHeaderView: View {
                         Text(prLabel)
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
                             .foregroundStyle(Color.enzoSecondary)
-                        Text("\(prPct)%")
+                        Text("\(prPct)")
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(Color.enzoSecondary)
                     }
@@ -149,7 +149,7 @@ struct GoalHeaderView: View {
                     Text(context.currentFitnessLabel)
                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(fitnessLabelColor)
-                    Text("\(currentPct)%")
+                    Text("\(currentPct)")
                         .font(.system(.title2, design: .monospaced))
                         .foregroundStyle(Color.enzoPrimary)
                 }

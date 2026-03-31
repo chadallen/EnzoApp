@@ -129,7 +129,7 @@ struct SegmentDetailView: View {
                                 .font(.system(.title3, design: .rounded, weight: .bold))
                                 .foregroundStyle(pillColor)
                             Spacer()
-                            Text(String(format: "%.0f%%", segment.strikeScore * 100))
+                            Text(String(format: "%.0f", segment.strikeScore * 100))
                                 .font(.system(.title3, design: .monospaced, weight: .bold))
                                 .foregroundStyle(pillColor)
                         }
@@ -212,7 +212,7 @@ struct SegmentDetailView: View {
             Text(label)
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(labelColor)
-            Text("\(pct)%")
+            Text("\(pct)")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(Color.enzoSecondary)
             Text(sublabel)
