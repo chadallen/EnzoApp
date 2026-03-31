@@ -30,6 +30,8 @@ struct RootView: View {
                 // loadContext() is running — hold here to avoid flashing GoalSettingView
                 // for existing users whose hasCompletedOnboarding hasn't been set yet.
                 Color.enzoBg.ignoresSafeArea()
+            } else if appState.isOnboardingSyncing {
+                SyncProgressView(onComplete: { appState.isOnboardingSyncing = false })
             } else if !appState.hasCompletedOnboarding {
                 GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })
             } else {
