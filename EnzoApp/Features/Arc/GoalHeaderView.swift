@@ -52,10 +52,19 @@ struct GoalHeaderView: View {
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(fitnessLabelColor)
 
-            // Line 3: Required fitness label
-            Text(goal.requiredFitnessLabel + " fitness needed")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(Color.enzoSecondary)
+            // Line 3: Required fitness label + optional weeks remaining
+            HStack(spacing: 6) {
+                Text(goal.requiredFitnessLabel + " fitness needed")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.enzoSecondary)
+                if let weeks = goal.weeksRemaining {
+                    Text("·")
+                        .foregroundStyle(Color.enzoSecondary.opacity(0.4))
+                    Text(weeks == 1 ? "1 week to go" : "\(weeks) weeks to go")
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary)
+                }
+            }
 
             Button("Change goal") {
                 showingGoalSetting = true
