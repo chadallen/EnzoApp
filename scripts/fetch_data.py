@@ -23,13 +23,16 @@ import urllib.parse
 from datetime import date, datetime
 from pathlib import Path
 
+import xcconfig
+
 # ---------------------------------------------------------------------------
-# Config
+# Config — read from Debug.xcconfig, env vars override if set
 # ---------------------------------------------------------------------------
 
-SUPABASE_URL     = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-OUTPUT_PATH      = Path(__file__).parent / "data" / "context.json"
+_cfg = xcconfig.load()
+SUPABASE_URL      = _cfg.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_ANON_KEY = _cfg.get("SUPABASE_ANON_KEY", "")
+OUTPUT_PATH       = Path(__file__).parent / "data" / "context.json"
 
 
 def headers() -> dict:
@@ -89,9 +92,9 @@ def days_since(date_str: str | None) -> int:
 
 def main():
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        print("Error: SUPABASE_URL and SUPABASE_ANON_KEY must be set.")
-        print("  export SUPABASE_URL=https://your-project.supabase.co")
-        print("  export SUPABASE_ANON_KEY=your-anon-key")
+        print("Error: could not load Supabase credentials.")
+        print("  Expected: EnzoApp/Config/Debug.xcconfig with SUPABASE_URL and SUPABASE_ANON_KEY")
+        print("  Or set env vars: export SUPABASE_URL=... SUPABASE_ANON_KEY=...")
         sys.exit(1)
 
     print("Fetching user...")
