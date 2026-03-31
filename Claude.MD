@@ -211,6 +211,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Step 11: Polish pass — core items complete (see build notes for what was deferred)
 - [x] UI Refactor session: light mode color scheme, top-tab navigation (Today/Targets), tab caching fix
 - [x] Today tab UI session: FitnessRingView (donut), chart at top, GoalHeader/PROpportunities removed from Today, timeframe picker on chart, dynamic Y scale
+- [x] Targets tab UI session: GoalHeaderView pinned full-width header with accent tint; segment name hero + fitness comparison + segment stats columns; distance/elevation wired through Strava API → SegmentScore → UI; SegmentDetailView consolidated as single goal-setting entry point; alternating row shading; "Explore more segments" section header
+- [x] Today tab header session: FitnessRingView pinned as accent-tint full-width header; ring color → chart blue; athlete name greeting; goal progress bar (current vs PR fitness)
 - [ ] Step 11b: Enzo voice/prompt tuning pass (dedicated session — deferred from Step 11)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -510,3 +512,18 @@ New file at `Features/Arc/FitnessRingView.swift`. Uses `SectorMark` (iOS 17+). R
 
 **PromptChipsView trimmed (Today tab UI session)**
 Removed "Am I on track for Hawk Hill?" (goal-specific hardcoded) and "What if I only have 4 weeks left?" (date-specific). Remaining chips: "What should I do this weekend?" and "When was I last this fit?"
+
+**PromptChipsView removed from Today tab (Targets/Today session)**
+`PromptChipsView` is no longer rendered in `ArcView`. The file still exists — not deleted. Input area is now just `ArcInputBar`.
+
+**GoalHeaderView on Targets tab (Targets/Today session)**
+`GoalHeaderView` is now pinned above the segment list in `SegmentsView` as a full-width header with `enzoAccent.opacity(0.08)` background and `UnevenRoundedRectangle` (flat top, rounded bottom). Layout: "CURRENT TARGET SEGMENT" caption → segment name (title2 bold) → three columns: Segment stats (distance, PR time, PR date, elevation) | Current fitness (label + %) | PR fitness (label + %). The "Change goal" button was removed from the header — goal changes happen via `SegmentDetailView`. `GoalHeaderView` still has `emptyGoalState` with "Set a goal" button.
+
+**Distance and elevation in SegmentScore (Targets/Today session)**
+`SegmentScore` has two new optional fields: `distanceMeters: Double? = nil` and `elevationDeltaMeters: Double? = nil`. `SegmentScoreRow` has matching `distanceMeters`/`elevationDeltaMeters` Codable fields mapped to `distance_meters`/`elevation_delta_meters` DB columns. `StravaSegmentSummary` now decodes `distance`, `elevationHigh`, `elevationLow`. `SyncService.syncPhase2` passes these through when writing PR rows. **Supabase migration already applied:** `alter table segment_scores add column distance_meters float8; alter table segment_scores add column elevation_delta_meters float8;` Existing rows have nulls until re-sync. To populate: Settings → Reset sync history → Sync.
+
+**SegmentDetailView is now the single goal-setting entry point (Targets/Today session)**
+`SegmentDetailView` now has `@Environment(AppState.self)`, target date state, and a goal card at the bottom. Non-goal segments show: target date toggle + date picker + "Set this goal" accent button. Goal segments show: "This is your current goal" accent tint badge. Setting goal fires `generateBriefing(forceRefresh: true)` + `generateLookahead(forceRefresh: true)` in background. `GoalSettingView` is still used for onboarding only. `SegmentDetailView` also gained: expanded stats card (PR time, formatted date, distance, elevation), fitness percentages in comparison blocks, "READINESS SCORE" section header distinguishing readiness from fitness scores.
+
+**FitnessRingView pinned as Today tab header (Targets/Today session)**
+`FitnessRingView` is no longer inside `ArcView`'s `ScrollView`. It's pinned above the scroll content as a full-width header (`fullWidth: true`) matching the Targets tab header style. Ring color changed from tier-based (green/orange/amber) to always `enzoChartPrimary` (#1E88E5 blue) for contrast against the orange tint background. Added: athlete name greeting above the ring row; goal progress bar below the ring row (shows current fitness fill vs PR fitness tick marker, "You · X%" / "PR · Y%" labels). Progress bar only renders when a goal segment exists. `enzoRingHigh` and `enzoRingLow` color constants remain in `Color+Enzo.swift` but are no longer used by `FitnessRingView`.
