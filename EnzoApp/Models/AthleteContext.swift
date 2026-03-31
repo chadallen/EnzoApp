@@ -6,6 +6,7 @@ struct GoalContext {
     let requiredFitnessValue: Double   // 0.0–1.0 internal
     let targetDate: Date?
     let weeksRemaining: Int?
+    let daysRemaining: Int?
 }
 
 struct AthleteContext {
@@ -88,21 +89,24 @@ struct AthleteContext {
                     requiredFitnessLabel: currentLabel,
                     requiredFitnessValue: currentValue,
                     targetDate: nil,
-                    weeksRemaining: nil
+                    weeksRemaining: nil,
+                    daysRemaining: nil
                 )
             }
             let requiredValue = row.requiredFitnessValue ?? currentValue
             let requiredLabel = row.requiredFitnessLabel ?? fitnessLabel(for: requiredValue)
             var targetDate: Date? = nil
             var weeksRemaining: Int? = nil
+            var daysRemaining: Int? = nil
             if let dateStr = row.targetDate {
                 let f = DateFormatter()
                 f.dateFormat = "yyyy-MM-dd"
                 f.timeZone = TimeZone(identifier: "UTC")
                 targetDate = f.date(from: dateStr)
                 if let td = targetDate {
-                    let days = Calendar.current.dateComponents([.day], from: Date(), to: td).day ?? 0
-                    weeksRemaining = max(0, days / 7)
+                    let days = max(0, Calendar.current.dateComponents([.day], from: Date(), to: td).day ?? 0)
+                    daysRemaining = days
+                    weeksRemaining = days / 7
                 }
             }
             return GoalContext(
@@ -110,7 +114,8 @@ struct AthleteContext {
                 requiredFitnessLabel: requiredLabel,
                 requiredFitnessValue: requiredValue,
                 targetDate: targetDate,
-                weeksRemaining: weeksRemaining
+                weeksRemaining: weeksRemaining,
+                daysRemaining: daysRemaining
             )
         }()
 
@@ -145,7 +150,8 @@ struct AthleteContext {
             requiredFitnessLabel: "Strong",
             requiredFitnessValue: 0.70,
             targetDate: nil,
-            weeksRemaining: nil
+            weeksRemaining: nil,
+            daysRemaining: nil
         )
     )
 
