@@ -15,13 +15,6 @@ enum SegmentScorer {
     /// Strike score threshold for "Worth a shot" label (lower bound).
     static let worthAShotThreshold: Double = 0.45
 
-    /// Multiplier applied when the PR was set within the last 30 days.
-    /// A brand-new PR is harder to immediately beat.
-    static let recencyDiscount: Double = 0.85
-
-    /// Days within which a PR is considered "recent."
-    static let recencyWindowDays: Int = 30
-
     // MARK: - Strike score (0.0–1.0)
 
     /// Computes how ready the athlete is to beat their PR on a given segment.
@@ -32,13 +25,12 @@ enum SegmentScorer {
     ///    — well above PR fitness → approaches 1.0
     ///    — well below PR fitness → approaches 0.0
     /// 2. trendBonus: +0.05 for "up", -0.05 for "down"
-    /// 3. recency discount ×0.85 if PR set within 30 days
     ///
     /// - Parameters:
     ///   - fitnessValueAtPR: Athlete's fitness (0.0–1.0) when PR was set.
     ///   - currentFitnessValue: Athlete's current fitness (0.0–1.0).
     ///   - trendDirection: "up", "flat", or "down".
-    ///   - prDate: Date string ("YYYY-MM-DD") when PR was set. Used for recency check.
+    ///   - prDate: Unused — kept for call-site compatibility during transition.
     /// - Returns: Strike score clamped to 0.0–1.0.
     static func strikeScore(
         fitnessValueAtPR: Double,
@@ -53,12 +45,6 @@ enum SegmentScorer {
         case "up":   score += 0.05
         case "down": score -= 0.05
         default:     break
-        }
-
-        score = min(max(score, 0), 1)
-
-        if isRecent(prDate: prDate) {
-            score *= recencyDiscount
         }
 
         return min(max(score, 0), 1)
@@ -92,18 +78,4 @@ enum SegmentScorer {
         }
     }
 
-    // MARK: - Private
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone(identifier: "UTC")
-        return f
-    }()
-
-    private static func isRecent(prDate: String) -> Bool {
-        guard let date = dateFormatter.date(from: prDate) else { return false }
-        let daysSince = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? Int.max
-        return daysSince < recencyWindowDays
-    }
 }

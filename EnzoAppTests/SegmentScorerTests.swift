@@ -89,45 +89,6 @@ struct SegmentScorerTests {
         #expect(down < flat)
     }
 
-    // MARK: - Recency discount
-
-    @Test("Recent PR (yesterday) receives recency discount")
-    func recentPRDiscounted() {
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let recentDate = formatter.string(from: yesterday)
-
-        let discounted = SegmentScorer.strikeScore(
-            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: recentDate
-        )
-        let old = SegmentScorer.strikeScore(
-            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: "2020-01-01"
-        )
-        #expect(discounted < old)
-        #expect(discounted == old * SegmentScorer.recencyDiscount)
-    }
-
-    @Test("PR exactly 30 days ago is not discounted")
-    func prAtBoundaryNotDiscounted() {
-        let boundary = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let boundaryDate = formatter.string(from: boundary)
-
-        let score = SegmentScorer.strikeScore(
-            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: boundaryDate
-        )
-        let old = SegmentScorer.strikeScore(
-            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: "2020-01-01"
-        )
-        #expect(score == old)
-    }
-
     // MARK: - Strike label
 
     @Test("No brainer label for score >= 0.70")
