@@ -103,6 +103,39 @@ struct GoalHeaderView: View {
                             .foregroundStyle(Color.enzoSecondary)
                     }
 
+                    // Segment stats column (only when data is available)
+                    if goalSegment.distanceMeters != nil || goalSegment.elevationDeltaMeters != nil {
+                        Rectangle()
+                            .fill(Color.enzoSecondary.opacity(0.2))
+                            .frame(width: 1, height: 56)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 2)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Segment")
+                                .font(.system(.caption2, design: .rounded))
+                                .foregroundStyle(Color.enzoSecondary)
+                                .textCase(.uppercase)
+                                .kerning(0.3)
+                            if let dist = goalSegment.distanceMeters {
+                                Text(String(format: "%.1f mi", dist * 0.000621371))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(Color.enzoSecondary)
+                            }
+                            Text(goalSegment.prFormatted)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(Color.enzoSecondary)
+                            Text(formattedPRDate(goalSegment.prDate))
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(Color.enzoSecondary)
+                            if let elev = goalSegment.elevationDeltaMeters {
+                                Text(String(format: "+%.0f ft", elev * 3.28084))
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(Color.enzoSecondary)
+                            }
+                        }
+                    }
+
                     Spacer()
                 }
             } else {
@@ -128,6 +161,16 @@ struct GoalHeaderView: View {
             .font(.system(.caption, design: .rounded))
             .foregroundStyle(Color.enzoSecondary)
         }
+    }
+
+    private func formattedPRDate(_ dateString: String) -> String {
+        let input = DateFormatter()
+        input.dateFormat = "yyyy-MM-dd"
+        input.timeZone = TimeZone(identifier: "UTC")
+        guard let date = input.date(from: dateString) else { return dateString }
+        let output = DateFormatter()
+        output.dateFormat = "MMM yyyy"
+        return output.string(from: date)
     }
 
     private var emptyGoalState: some View {
