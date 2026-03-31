@@ -64,6 +64,12 @@ struct SettingsSheet: View {
     private var syncStatusText: String {
         if appState.isSyncing { return "Fetching rides..." }
         if appState.isSyncingPhase2 { return "Scoring segments..." }
+        if let date = appState.lastSyncedAt {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            return "Last synced \(formatter.string(from: date))"
+        }
         return ""
     }
 
