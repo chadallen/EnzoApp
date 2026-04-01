@@ -17,7 +17,17 @@ struct FitnessRingView: View {
         }
     }
 
-    private var greeting: String { context.name }
+    private var greeting: String {
+        let firstName = context.name.components(separatedBy: " ").first ?? context.name
+        let hour = Calendar.current.component(.hour, from: Date())
+        let timeOfDay: String
+        switch hour {
+        case 0..<12:  timeOfDay = "Good morning"
+        case 12..<17: timeOfDay = "Good afternoon"
+        default:      timeOfDay = "Good evening"
+        }
+        return "\(timeOfDay), \(firstName)"
+    }
 
     private var trendArrow: String {
         switch context.trendDirection {
@@ -29,6 +39,11 @@ struct FitnessRingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Greeting
+            Text(greeting)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.enzoSecondary)
+
             // Ring + stats row
             HStack(spacing: 20) {
                 // Fitness donut
