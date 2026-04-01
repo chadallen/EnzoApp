@@ -102,19 +102,12 @@ struct SegmentStrikeRow: View {
     let segment: SegmentScore
     @State private var isPulsing = false
 
-    private var pillColor: Color {
-        switch segment.strikeScore {
+    private func readinessColor(for score: Double) -> Color {
+        switch score {
         case 0.80...:       return .enzoGoal
         case 0.65..<0.80:   return .enzoChartPrimary
         case 0.45..<0.65:   return .enzoAmber
         default:            return .enzoSecondary
-        }
-    }
-
-    private var pillOpacity: Double {
-        switch segment.strikeScore {
-        case 0.45...: return 0.15
-        default:      return 0.10
         }
     }
 
@@ -164,20 +157,38 @@ struct SegmentStrikeRow: View {
 
             Spacer()
 
-            Text(segment.strikeLabel)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(pillColor)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(pillColor.opacity(pillOpacity), in: Capsule())
-                .scaleEffect(isPulsing ? 1.06 : 1.0)
-                .animation(
-                    segment.strikeLabel == "No brainer"
-                        ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
-                        : .default,
-                    value: isPulsing
-                )
-                .onAppear { isPulsing = segment.strikeLabel == "No brainer" }
+            let readColor = readinessColor(for: segment.strikeScore)
+            ZStack {
+                Chart {
+                    SectorMark(
+                        angle: .value("Readiness", segment.strikeScore),
+                        innerRadius: .ratio(0.62),
+                        angularInset: 2
+                    )
+                    .foregroundStyle(readColor)
+
+                    SectorMark(
+                        angle: .value("Remaining", max(0.001, 1.0 - segment.strikeScore)),
+                        innerRadius: .ratio(0.62),
+                        angularInset: 2
+                    )
+                    .foregroundStyle(readColor.opacity(0.12))
+                }
+                .chartLegend(.hidden)
+                .frame(width: 44, height: 44)
+
+                Text("\(Int(segment.strikeScore * 100))")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(readColor)
+            }
+            .scaleEffect(isPulsing ? 1.06 : 1.0)
+            .animation(
+                segment.strikeLabel == "Strike now"
+                    ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                    : .default,
+                value: isPulsing
+            )
+            .onAppear { isPulsing = segment.strikeLabel == "Strike now" }
         }
         .padding(.vertical, 6)
     }
