@@ -15,6 +15,7 @@ struct EnzoAppApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .preferredColorScheme(.light)
         }
     }
 }
@@ -36,7 +37,6 @@ struct RootView: View {
                 MainTabView()
             }
         }
-        .preferredColorScheme(.light)
         .task {
             await appState.loadContext()
         }
