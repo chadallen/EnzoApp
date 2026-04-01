@@ -36,6 +36,7 @@ struct RootView: View {
                 MainTabView()
             }
         }
+        .preferredColorScheme(.light)
         .task {
             await appState.loadContext()
         }
