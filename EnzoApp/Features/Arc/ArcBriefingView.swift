@@ -14,7 +14,7 @@ struct ArcBriefingView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Today")
+                    Text("What to do next")
                         .font(.system(.caption, design: .rounded, weight: .semibold))
                         .foregroundStyle(Color.enzoSecondary)
                         .textCase(.uppercase)

@@ -27,9 +27,7 @@ struct ArcView: View {
             // loadContext() is called from RootView.task and completes before MainTabView appears.
             // Calling it here would re-trigger on every NavigationStack pop and overwrite
             // manually-set goals with stale Supabase data before saveGoal() finishes.
-            async let briefing: Void = appState.generateBriefing()
-            async let lookahead: Void = appState.generateLookahead()
-            _ = await (briefing, lookahead)
+            await appState.generateLookahead()
         }
     }
 
@@ -64,16 +62,11 @@ struct ArcView: View {
                     }
 
                     ArcBriefingView(
-                        text: appState.briefingText,
-                        isLoading: appState.isGeneratingBriefing
-                    ) {
-                        Task { await appState.generateBriefing(forceRefresh: true) }
-                    }
-
-                    LookaheadSuggestionView(
                         text: appState.lookaheadText,
                         isLoading: appState.isGeneratingLookahead
-                    )
+                    ) {
+                        Task { await appState.generateLookahead(forceRefresh: true) }
+                    }
 
                     if showThread {
                         messageThread
