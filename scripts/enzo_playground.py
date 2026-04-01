@@ -212,26 +212,67 @@ def build_context(
 
 
 # ---------------------------------------------------------------------------
-# ── API CALL ──────────────────────────────────────────────────────────────
+# ── MODEL SELECTION ───────────────────────────────────────────────────────
 # ---------------------------------------------------------------------------
 
-MODEL = "claude-sonnet-4-6"   # ← change to test other models
 MAX_TOKENS = 1024
 
+# Family sort order — most capable first
+_MODEL_FAMILIES = ("claude-opus", "claude-sonnet", "claude-haiku")
+# App's production model — marked as default in the picker
+_DEFAULT_MODEL = "claude-sonnet-4-6"
 
-def stream_response(client: anthropic.Anthropic, user_message: str, context: dict) -> None:
+
+def fetch_models(client: anthropic.Anthropic) -> list[str]:
+    """Fetch available models from the API, filtered to relevant Claude families."""
+    try:
+        all_models = [m.id for m in client.models.list()]
+        relevant = [m for m in all_models if any(m.startswith(p) for p in _MODEL_FAMILIES)]
+        # Sort: opus → sonnet → haiku; newest first within each family (reverse-lex on version)
+        def sort_key(m: str) -> tuple:
+            family = next((i for i, p in enumerate(_MODEL_FAMILIES) if m.startswith(p)), 99)
+            return (family, m[::-1])  # reverse string = newest versions sort first
+        relevant.sort(key=sort_key)
+        return relevant
+    except Exception:
+        return ["claude-opus-4-6", _DEFAULT_MODEL, "claude-haiku-4-5-20251001"]
+
+
+def pick_model(client: anthropic.Anthropic, preselected: str | None = None) -> str:
+    """Interactively pick a model, or return preselected if provided."""
+    if preselected:
+        return preselected
+
+    models = fetch_models(client)
+
+    print("\nModels:")
+    for i, m in enumerate(models, 1):
+        tag = "  ← app default" if m == _DEFAULT_MODEL else ""
+        print(f"  {i}) {m}{tag}")
+
+    choice = input("\nPick a model (default: 1): ").strip()
+    if not choice:
+        return models[0]
+    try:
+        idx = int(choice) - 1
+        return models[idx] if 0 <= idx < len(models) else models[0]
+    except ValueError:
+        return models[0]
+
+
+def stream_response(client: anthropic.Anthropic, user_message: str, context: dict, model: str) -> None:
     """Stream Enzo's response to stdout, token by token."""
     context_str = json.dumps(context, indent=2)
     full_message = f"Athlete context:\n{context_str}\n\nUser: {user_message}"
 
     print(f"\n{'─'*60}")
-    print(f"MODEL : {MODEL}")
+    print(f"MODEL : {model}")
     print(f"{'─'*60}")
     print(f"PROMPT: {user_message[:120]}{'…' if len(user_message) > 120 else ''}")
     print(f"{'─'*60}\n")
 
     with client.messages.stream(
-        model=MODEL,
+        model=model,
         max_tokens=MAX_TOKENS,
         system=_system_prompt(),
         messages=[{"role": "user", "content": full_message}],
@@ -245,7 +286,7 @@ def stream_response(client: anthropic.Anthropic, user_message: str, context: dic
 # ── INTERACTIVE CHAT ──────────────────────────────────────────────────────
 # ---------------------------------------------------------------------------
 
-def interactive_chat(client: anthropic.Anthropic, ctx: dict) -> None:
+def interactive_chat(client: anthropic.Anthropic, ctx: dict, model: str) -> None:
     """Multi-turn chat loop. Type 'quit' or Ctrl+C to exit."""
     print("\nEntering Enzo chat mode. Type 'quit' to exit, Ctrl+C to abort.\n")
     while True:
@@ -256,7 +297,7 @@ def interactive_chat(client: anthropic.Anthropic, ctx: dict) -> None:
             break
         if not msg or msg.lower() in {"quit", "exit", "q"}:
             break
-        stream_response(client, msg, ctx)
+        stream_response(client, msg, ctx, model)
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +345,11 @@ def main() -> None:
         default=None,
         help="Message for --mode chat (skips interactive prompt)",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model ID to use (omit to pick interactively)",
+    )
     args = parser.parse_args()
 
     api_key = _cfg.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
@@ -339,7 +385,7 @@ def main() -> None:
 
     mode = args.mode
 
-    # Interactive mode picker if --mode not supplied
+    # Interactive pickers if flags not supplied
     if not mode:
         print("\nModes:")
         print("  1) briefing      — daily Arc briefing")
@@ -350,17 +396,20 @@ def main() -> None:
         mode_map = {"1": "briefing", "2": "lookahead", "3": "goal", "4": "chat"}
         mode = mode_map.get(choice, "chat")
 
+    model = pick_model(client, preselected=args.model)
+    print(f"Model:   {model}\n")
+
     if mode == "briefing":
-        stream_response(client, briefing_prompt(ctx), ctx)
+        stream_response(client, briefing_prompt(ctx), ctx, model)
     elif mode == "lookahead":
-        stream_response(client, lookahead_prompt(ctx), ctx)
+        stream_response(client, lookahead_prompt(ctx), ctx, model)
     elif mode == "goal":
-        stream_response(client, goal_reaction_prompt(ctx), ctx)
+        stream_response(client, goal_reaction_prompt(ctx), ctx, model)
     elif mode == "chat":
         if args.message:
-            stream_response(client, args.message, ctx)
+            stream_response(client, args.message, ctx, model)
         else:
-            interactive_chat(client, ctx)
+            interactive_chat(client, ctx, model)
 
 
 if __name__ == "__main__":
