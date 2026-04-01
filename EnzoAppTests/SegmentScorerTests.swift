@@ -7,13 +7,26 @@ struct SegmentScorerTests {
 
     // MARK: - Strike score edge cases
 
+    // Shared helper: parity score with a known-old PR date and at-PR-pace last effort.
+    // prDate "2020-01-01" is 5+ years old → full +0.15 age bonus. lastEffortSeconds == prSeconds → 0 gap modifier.
+    private func parityScore(atPRFitness: Double = 0.50, currentFitness: Double = 0.50) -> Double {
+        SegmentScorer.strikeScore(
+            fitnessValueAtPR: atPRFitness,
+            currentFitnessValue: currentFitness,
+            prDate: "2020-01-01",
+            lastEffortSeconds: 300,
+            prSeconds: 300
+        )
+    }
+
     @Test("Score near 1.0 when current fitness far exceeds PR fitness")
     func highScoreWhenFitterThanPR() {
         let score = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.20,
             currentFitnessValue: 0.90,
-            trendDirection: "flat",
-            prDate: "2020-01-01"
+            prDate: "2020-01-01",
+            lastEffortSeconds: 300,
+            prSeconds: 300
         )
         #expect(score >= 0.90)
     }
@@ -23,70 +36,106 @@ struct SegmentScorerTests {
         let score = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.95,
             currentFitnessValue: 0.10,
-            trendDirection: "flat",
-            prDate: "2020-01-01"
+            prDate: "2024-01-01",
+            lastEffortSeconds: 300,
+            prSeconds: 300
         )
         #expect(score <= 0.10)
     }
 
-    @Test("Score is 0.75 at exact fitness parity with flat trend")
-    func parityScoreIsSeventyFive() {
+    @Test("Score is 0.75 at exact fitness parity with same-day PR and at-pace last effort")
+    func parityBaselineIsSameDay() {
+        // Same-day PR (age bonus ≈ 0), last effort at PR pace (gap modifier = 0) → exactly 0.75
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
         let score = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50,
             currentFitnessValue: 0.50,
-            trendDirection: "flat",
-            prDate: "2020-01-01"
+            prDate: today,
+            lastEffortSeconds: 300,
+            prSeconds: 300
         )
-        #expect(score == 0.75)
+        #expect(score >= 0.74 && score <= 0.76)
     }
 
     @Test("Score is always in 0.0–1.0 range")
     func scoreAlwaysInRange() {
-        let cases: [(Double, Double, String)] = [
-            (0.0, 0.0, "flat"),
-            (1.0, 1.0, "up"),
-            (0.0, 1.0, "up"),
-            (1.0, 0.0, "down"),
-            (0.5, 0.5, "flat"),
+        let cases: [(Double, Double)] = [
+            (0.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (1.0, 0.0),
+            (0.5, 0.5),
         ]
-        for (atPR, current, trend) in cases {
+        for (atPR, current) in cases {
             let score = SegmentScorer.strikeScore(
                 fitnessValueAtPR: atPR,
                 currentFitnessValue: current,
-                trendDirection: trend,
-                prDate: "2020-01-01"
+                prDate: "2020-01-01",
+                lastEffortSeconds: 300,
+                prSeconds: 300
             )
             #expect(score >= 0.0)
             #expect(score <= 1.0)
         }
     }
 
-    // MARK: - Trend modifier
+    // MARK: - PR age bonus
 
-    @Test("Upward trend increases score vs flat")
-    func upTrendIncreasesScore() {
-        let flat = SegmentScorer.strikeScore(
+    @Test("Old PR scores higher than recent PR at same fitness")
+    func oldPRScoresHigher() {
+        let old = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: "2020-01-01"
+            prDate: "2020-01-01", lastEffortSeconds: 300, prSeconds: 300
         )
-        let up = SegmentScorer.strikeScore(
+        let recent = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "up", prDate: "2020-01-01"
+            prDate: "2025-01-01", lastEffortSeconds: 300, prSeconds: 300
         )
-        #expect(up > flat)
+        #expect(old > recent)
     }
 
-    @Test("Downward trend decreases score vs flat")
-    func downTrendDecreasesScore() {
-        let flat = SegmentScorer.strikeScore(
+    @Test("PR age bonus caps at +0.15 for 3+ year old PRs")
+    func prAgeBonusCaps() {
+        let threeYears = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "flat", prDate: "2020-01-01"
+            prDate: "2022-01-01", lastEffortSeconds: 300, prSeconds: 300
         )
-        let down = SegmentScorer.strikeScore(
+        let fiveYears = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
-            trendDirection: "down", prDate: "2020-01-01"
+            prDate: "2020-01-01", lastEffortSeconds: 300, prSeconds: 300
         )
-        #expect(down < flat)
+        // Both should be at or near the cap — difference should be tiny
+        #expect(abs(threeYears - fiveYears) < 0.02)
+    }
+
+    // MARK: - Effort gap modifier
+
+    @Test("Slower last effort reduces score")
+    func slowerEffortReducesScore() {
+        let atPace = SegmentScorer.strikeScore(
+            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
+            prDate: "2020-01-01", lastEffortSeconds: 300, prSeconds: 300
+        )
+        let slower = SegmentScorer.strikeScore(
+            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
+            prDate: "2020-01-01", lastEffortSeconds: 360, prSeconds: 300  // 20% slower
+        )
+        #expect(slower < atPace)
+    }
+
+    @Test("Effort gap modifier caps at -0.20 for very slow efforts")
+    func effortGapCapNegative() {
+        let verySlow = SegmentScorer.strikeScore(
+            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
+            prDate: "2020-01-01", lastEffortSeconds: 900, prSeconds: 300  // 3× slower
+        )
+        let extremelySlow = SegmentScorer.strikeScore(
+            fitnessValueAtPR: 0.50, currentFitnessValue: 0.50,
+            prDate: "2020-01-01", lastEffortSeconds: 1500, prSeconds: 300  // 5× slower
+        )
+        #expect(abs(verySlow - extremelySlow) < 0.02)
     }
 
     // MARK: - Strike label
