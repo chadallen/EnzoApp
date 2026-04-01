@@ -1,104 +1,85 @@
 # Enzo Prompt Playground
 
-A standalone Python script for iterating on Enzo's prompts, system prompt, and model behavior — no app build required.
+Iterate on Enzo's prompts and test different models — no app build required. Responses stream to terminal in ~2 seconds.
 
-## Setup
+---
 
-**Create a venv and install the SDK (one time):**
+## Setup (one time)
+
 ```bash
 python3 -m venv scripts/.venv
 scripts/.venv/bin/pip install anthropic
 ```
 
-**Set your API keys** in `~/.zshrc` so they persist across sessions:
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export SUPABASE_URL=https://your-project.supabase.co
-export SUPABASE_ANON_KEY=your-anon-key
-```
-
-Same values as `Config/Debug.xcconfig`. Reload with `source ~/.zshrc`.
+Credentials are read automatically from `Config/Debug.xcconfig` — no env vars needed.
 
 ---
 
-## Fetch real data (do this first)
+## Typical session
 
-Pulls your real fitness history, segments, and goal from Supabase and saves to `scripts/data/context.json`. The playground uses this automatically once it exists.
-
+**1. Fetch your real data from Supabase:**
 ```bash
 python3 scripts/fetch_data.py
 ```
+Saves to `scripts/data/context.json` (gitignored). Re-run any time after a sync to refresh.
 
-The data file is gitignored — it stays local. Re-run it any time after a sync to refresh.
-
----
-
-## Running it
-
-From the repo root:
+**2. Run the playground:**
 ```bash
-scripts/.venv/bin/python3 scripts/enzo_playground.py
-```
-
-Or activate the venv first for a shorter command:
-```bash
-source scripts/.venv/bin/activate
 python3 scripts/enzo_playground.py
-# when done:
-deactivate
 ```
 
-Without arguments you get an interactive mode picker. Pass `--mode` to skip straight to a prompt type.
+It asks two questions then streams a response:
+```
+Pick a mode (1-4):
+  1) briefing   2) lookahead   3) goal   4) chat
 
-If `scripts/data/context.json` exists, the playground uses your real data automatically. Otherwise it falls back to hardcoded presets.
+Models:
+  1) claude-opus-4-6
+  2) claude-sonnet-4-6  ← app default
+  3) claude-haiku-4-5-20251001
+  ...
+Pick a model (default: 1):
+```
+
+Models are fetched live from the API — you'll always see what's actually available.
 
 ---
 
-## Modes
+## Iterating on prompts
 
-| Mode | What it tests |
+Edit the `.md` files in `scripts/prompts/` — no Python to touch:
+
+| File | What it controls |
 |---|---|
-| `briefing` | Daily Arc briefing (2-3 sentences) |
-| `lookahead` | 5-7 day suggestion |
-| `goal` | Goal reaction when user picks a segment |
-| `chat` | Free conversation — interactive or one-shot |
+| `prompts/system.md` | Enzo's personality, rules, and format constraints |
+| `prompts/briefing.md` | Daily Arc briefing |
+| `prompts/lookahead.md` | 5-7 day suggestion |
+| `prompts/goal_reaction.md` | Reaction when a goal segment is picked |
+
+Edit → save → re-run. That's the loop.
+
+When you're happy with a change, paste the refined text back into the Swift source:
+- System prompt → `EnzoApp/Services/ClaudeService.swift` → `systemPrompt`
+- Other prompts → `EnzoApp/App/AppState.swift` → static prompt functions
 
 ---
 
-## Fitness presets
+## Skipping the menus
 
-Only used when real data isn't available. Use `--fitness` to simulate different athlete states:
-
-| Flag | Label | Value |
-|---|---|---|
-| `recovering` | Recovering | 0.15 |
-| `baseline` | Baseline | 0.35 |
-| `building` | Building | 0.55 |
-| `strong` | Strong | 0.72 |
-| `epic` | Epic | 0.90 |
-
----
-
-## Examples
+Pass flags to go straight to a response:
 
 ```bash
-# Fetch real data first
-python3 scripts/fetch_data.py
-
-# Then run against your real data
+# Specific mode, pick model interactively
 python3 scripts/enzo_playground.py --mode briefing
-python3 scripts/enzo_playground.py --mode lookahead
-python3 scripts/enzo_playground.py --mode goal
-python3 scripts/enzo_playground.py --mode chat
+
+# Specific mode and model — no prompts at all
+python3 scripts/enzo_playground.py --mode briefing --model claude-haiku-4-5-20251001
 
 # One-shot chat
-python3 scripts/enzo_playground.py --mode chat --message "Am I close to Hawk Hill?"
+python3 scripts/enzo_playground.py --mode chat --message "Am I close to my goal?"
 
 # Interactive multi-turn chat
 python3 scripts/enzo_playground.py --mode chat
-
-# Force hardcoded preset (ignore real data)
-python3 scripts/enzo_playground.py --mode briefing --preset --fitness strong --trend up
 ```
 
 ---
@@ -106,43 +87,14 @@ python3 scripts/enzo_playground.py --mode briefing --preset --fitness strong --t
 ## All flags
 
 ```
---mode        briefing | lookahead | goal | chat
---message     one-shot chat message (skips interactive loop)
+--mode      briefing | lookahead | goal | chat
+--model     any model ID (omit to pick from live list)
+--message   one-shot chat message, skips the interactive loop
 
 Preset overrides (only used when context.json is absent):
---fitness     recovering | baseline | building | strong | epic  (default: recovering)
---trend       up | flat | down  (default: up)
---days        days since last ride  (default: 3)
---goal        goal segment name  (default: "Hawk Hill")
---weeks       weeks remaining to goal date  (omit = no deadline)
+--fitness   recovering | baseline | building | strong | epic
+--trend     up | flat | down
+--days      days since last ride
+--goal      goal segment name
+--weeks     weeks remaining to goal date
 ```
-
----
-
-## Iterating on prompts
-
-All prompts and the system prompt live at the top of `enzo_playground.py`:
-
-| What to edit | Where in the file |
-|---|---|
-| Enzo's personality, rules, format | `SYSTEM_PROMPT` constant |
-| Daily briefing prompt | `briefing_prompt()` function |
-| Lookahead suggestion prompt | `lookahead_prompt()` function |
-| Goal reaction prompt | `goal_reaction_prompt()` function |
-| Fallback fake data | `build_context()` function |
-
-Once you're happy with changes, paste the refined text back into the Swift source:
-- System prompt → `EnzoApp/Services/ClaudeService.swift` → `systemPrompt`
-- Briefing/lookahead/goal prompts → `EnzoApp/App/AppState.swift` → static prompt functions
-
----
-
-## Changing the model
-
-Edit the `MODEL` constant near the top of `enzo_playground.py`:
-
-```python
-MODEL = "claude-sonnet-4-6"   # change to test other models
-```
-
-Available models: `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5-20251001`
