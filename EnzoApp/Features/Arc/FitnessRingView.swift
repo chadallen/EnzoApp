@@ -29,11 +29,6 @@ struct FitnessRingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Greeting
-            Text(greeting)
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(Color.enzoSecondary)
-
             // Ring + stats row
             HStack(spacing: 20) {
                 // Fitness donut
