@@ -157,7 +157,6 @@ struct SegmentStrikeRow: View {
 
             Spacer()
 
-            let readColor = readinessColor(for: segment.strikeScore)
             ZStack {
                 Chart {
                     SectorMark(
@@ -165,21 +164,21 @@ struct SegmentStrikeRow: View {
                         innerRadius: .ratio(0.62),
                         angularInset: 2
                     )
-                    .foregroundStyle(readColor)
+                    .foregroundStyle(readinessColor(for: segment.strikeScore))
 
                     SectorMark(
                         angle: .value("Remaining", max(0.001, 1.0 - segment.strikeScore)),
                         innerRadius: .ratio(0.62),
                         angularInset: 2
                     )
-                    .foregroundStyle(readColor.opacity(0.12))
+                    .foregroundStyle(readinessColor(for: segment.strikeScore).opacity(0.12))
                 }
                 .chartLegend(.hidden)
                 .frame(width: 44, height: 44)
 
                 Text("\(Int(segment.strikeScore * 100))")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(readColor)
+                    .foregroundStyle(readinessColor(for: segment.strikeScore))
             }
             .scaleEffect(isPulsing ? 1.06 : 1.0)
             .animation(
