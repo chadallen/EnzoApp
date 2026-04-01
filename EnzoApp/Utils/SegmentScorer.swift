@@ -19,34 +19,53 @@ enum SegmentScorer {
     /// Computes how ready the athlete is to beat their PR on a given segment.
     ///
     /// Formula:
-    /// 1. base = clamp(0.75 + fitnessDelta × 1.0, 0, 1)
-    ///    — at parity (delta=0) → 0.75 "Almost there"
+    /// 1. base = clamp(0.75 + fitnessDelta, 0, 1)
+    ///    — at parity (delta=0) → 0.75 baseline
     ///    — well above PR fitness → approaches 1.0
     ///    — well below PR fitness → approaches 0.0
-    /// 2. trendBonus: +0.05 for "up", -0.05 for "down"
+    /// 2. prAgeBonus: up to +0.15 for PRs set 3+ years ago (linear, fully continuous)
+    /// 3. effortGapModifier: −0.20 to +0.10 based on how close last effort was to PR pace
     ///
     /// - Parameters:
     ///   - fitnessValueAtPR: Athlete's fitness (0.0–1.0) when PR was set.
     ///   - currentFitnessValue: Athlete's current fitness (0.0–1.0).
-    ///   - trendDirection: "up", "flat", or "down".
-    ///   - prDate: Unused — kept for call-site compatibility during transition.
+    ///   - prDate: Date PR was set ("yyyy-MM-dd") — used for age bonus.
+    ///   - lastEffortSeconds: Most recent elapsed time on this segment.
+    ///   - prSeconds: PR elapsed time on this segment.
     /// - Returns: Strike score clamped to 0.0–1.0.
     static func strikeScore(
         fitnessValueAtPR: Double,
         currentFitnessValue: Double,
-        trendDirection: String,
-        prDate: String
+        prDate: String,
+        lastEffortSeconds: Int,
+        prSeconds: Int
     ) -> Double {
         let delta = currentFitnessValue - fitnessValueAtPR
-        var score = min(max(0.75 + delta * 1.0, 0), 1)
+        let base = min(max(0.75 + delta, 0), 1)
 
-        switch trendDirection {
-        case "up":   score += 0.05
-        case "down": score -= 0.05
-        default:     break
+        // Option B: PR age bonus — older PRs are more beatable as fitness evolves.
+        // Scales linearly from 0 (set today) to +0.15 (set 3+ years ago).
+        let prAgeBonus: Double
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        if let prParsedDate = formatter.date(from: prDate) {
+            let daysSincePR = Calendar.current.dateComponents([.day], from: prParsedDate, to: Date()).day ?? 0
+            prAgeBonus = min(Double(max(daysSincePR, 0)) / 1095.0, 1.0) * 0.15
+        } else {
+            prAgeBonus = 0
         }
 
-        return min(max(score, 0), 1)
+        // Option C: effort gap modifier — how close to PR pace on most recent ride.
+        // Negative ratio (slower than PR) reduces score; positive (faster) adds up to +0.10.
+        let effortGapModifier: Double
+        if prSeconds > 0 {
+            let gapRatio = Double(lastEffortSeconds - prSeconds) / Double(prSeconds)
+            effortGapModifier = min(max(-gapRatio * 0.5, -0.20), 0.10)
+        } else {
+            effortGapModifier = 0
+        }
+
+        return min(max(base + prAgeBonus + effortGapModifier, 0), 1)
     }
 
     // MARK: - Strike label
