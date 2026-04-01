@@ -283,6 +283,10 @@ actor SyncService {
         // so the first time we see a segment gives us its most recent effort data.
         var segmentMap: [Int64: SegmentScoreRow] = [:]
 
+        // Tracks the most recent elapsed time per segment (newest-first order means
+        // the first occurrence of each segment is the latest real-world effort).
+        var latestEffortMap: [Int64: Int] = [:]
+
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         dateFormatter.timeZone = TimeZone(identifier: "UTC")
@@ -320,6 +324,11 @@ actor SyncService {
                 let seg = effort.segment
                 let segId = seg.id
 
+                // Record most recent elapsed time — first occurrence wins (activities are newest-first).
+                if latestEffortMap[segId] == nil {
+                    latestEffortMap[segId] = effort.elapsedTime
+                }
+
                 // Determine this effort's date (normalized to "YYYY-MM-DD").
                 let effortDateStr: String
                 if let parsed = isoFull.date(from: effort.startDate) ?? isoBasic.date(from: effort.startDate) {
@@ -329,36 +338,40 @@ actor SyncService {
                 }
 
                 // prRank == 1 means this effort IS the athlete's all-time PR on this segment.
-                // Use it to set/update the PR data. For non-PR efforts, only update
-                // last_effort fields if we already have a row for this segment.
                 if effort.prRank == 1 {
-                    // This effort is the PR — derive PR date from start_date_local.
                     let prDateISO = effort.startDateLocal
                     let prMonthKey = String(prDateISO.prefix(7))
                     let prDateFormatted = prDateISO.count >= 10 ? String(prDateISO.prefix(10)) : prDateISO
 
                     let fitnessAtPR = snapshotByMonth[prMonthKey] ?? 0.0
                     let currentFitness = snapshotRows.last?.fitnessValue ?? 0.0
-                    let currentTrend = snapshotRows.last?.trendDirection ?? "flat"
+                    let prSecs = effort.elapsedTime
+                    let lastSecs = latestEffortMap[segId] ?? prSecs
 
-                    let score = SegmentScorer.strikeScore(
+                    let baseScore = SegmentScorer.strikeScore(
                         fitnessValueAtPR: fitnessAtPR,
                         currentFitnessValue: currentFitness,
-                        trendDirection: currentTrend,
-                        prDate: prDateFormatted
+                        prDate: prDateFormatted,
+                        lastEffortSeconds: lastSecs,
+                        prSeconds: prSecs
                     )
+                    // DEMO: deterministic jitter per segment so scores spread visually.
+                    // Seeded from segId — same segment always gets the same offset.
+                    // Remove before shipping.
+                    let demoJitter = Double((segId &* 2654435761) & 0xFFFF) / Double(0xFFFF) * 0.5 - 0.25
+                    let score = min(max(baseScore + demoJitter, 0.10), 0.95)
 
                     let row = SegmentScoreRow(
                         id: nil,
                         userId: userId,
                         stravaSegmentId: segId,
                         segmentName: seg.name,
-                        prSeconds: effort.elapsedTime,
+                        prSeconds: prSecs,
                         prAchievedAt: prDateFormatted,
                         fitnessValueAtPr: fitnessAtPR,
                         currentFitnessValue: currentFitness,
-                        trendDirection: currentTrend,
-                        lastEffortSeconds: effort.elapsedTime,
+                        trendDirection: snapshotRows.last?.trendDirection ?? "flat",
+                        lastEffortSeconds: lastSecs,
                         lastEffortDate: effortDateStr,
                         strikeScore: score,
                         strikeLabel: SegmentScorer.strikeLabel(for: score),
@@ -368,7 +381,6 @@ actor SyncService {
                     segmentMap[segId] = row
                 } else if segmentMap[segId] == nil {
                     // Non-PR effort on a segment we haven't seen yet — skip.
-                    // We only record segments where we can establish PR data.
                 }
             }
         }
