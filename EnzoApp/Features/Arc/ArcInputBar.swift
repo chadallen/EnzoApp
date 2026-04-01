@@ -9,7 +9,10 @@ struct ArcInputBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            TextField("Ask Enzo anything...", text: $text, axis: .vertical)
+            TextField(text: $text, axis: .vertical) {
+                    Text("Ask Enzo anything...")
+                        .foregroundStyle(Color.enzoSecondary)
+                }
                 .font(.system(.body))
                 .foregroundStyle(Color.enzoPrimary)
                 .tint(Color.enzoAccent)
