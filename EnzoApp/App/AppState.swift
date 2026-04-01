@@ -204,12 +204,10 @@ class AppState {
 
     /// Pure function — builds the lookahead generation prompt. Extracted for testability.
     static func lookaheadPrompt(context: AthleteContext) -> String {
-        "Look at this athlete's current fitness (\(context.currentFitnessLabel)), " +
-        "trend (\(context.trendDirection)), days since last ride (\(context.daysSinceLastRide)), " +
-        "and their goal segment (\(context.goal.segmentName)). " +
-        "What's the one most useful thing they could do in the next week? " +
-        "Be specific to their situation — reference the goal, the trend, or the time off the bike if relevant. " +
-        "Speak directly to them, not about them. 2-3 sentences. No markdown."
+        "Generate a 5-7 day lookahead suggestion. What should this athlete do in the next week? " +
+        "Keep it loose — not a rigid plan. Be specific to their current fitness (\(context.currentFitnessLabel)), " +
+        "trend (\(context.trendDirection)), and days since last ride (\(context.daysSinceLastRide)). " +
+        "2-3 sentences max. Do not include any headers or labels — just the suggestion."
     }
 
     // MARK: - Goal setting
