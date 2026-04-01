@@ -104,9 +104,17 @@ struct SegmentStrikeRow: View {
 
     private var pillColor: Color {
         switch segment.strikeScore {
-        case 0.70...: return .enzoGoal
-        case 0.45..<0.70: return .enzoAmber
-        default: return .enzoSecondary
+        case 0.80...:       return .enzoGoal
+        case 0.65..<0.80:   return .enzoChartPrimary
+        case 0.45..<0.65:   return .enzoAmber
+        default:            return .enzoSecondary
+        }
+    }
+
+    private var pillOpacity: Double {
+        switch segment.strikeScore {
+        case 0.45...: return 0.15
+        default:      return 0.10
         }
     }
 
@@ -161,7 +169,7 @@ struct SegmentStrikeRow: View {
                 .foregroundStyle(pillColor)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(pillColor.opacity(0.18), in: Capsule())
+                .background(pillColor.opacity(pillOpacity), in: Capsule())
                 .scaleEffect(isPulsing ? 1.06 : 1.0)
                 .animation(
                     segment.strikeLabel == "No brainer"
