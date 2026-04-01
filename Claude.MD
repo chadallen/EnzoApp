@@ -214,7 +214,8 @@ EnzoApp/                              ← repo root / VS Code workspace
 - [x] Targets tab UI session: GoalHeaderView pinned full-width header with accent tint; segment name hero + fitness comparison + segment stats columns; distance/elevation wired through Strava API → SegmentScore → UI; SegmentDetailView consolidated as single goal-setting entry point; alternating row shading; "Explore more segments" section header
 - [x] Today tab header session: FitnessRingView pinned as accent-tint full-width header; ring color → chart blue; athlete name greeting; goal progress bar (current vs PR fitness)
 - [x] Score cleanup session: % symbols removed from all score displays; percentile-based (5th/95th) fitness normalization; recency discount removed from strike score formula
-- [ ] Score UI cleanup session: remove PR-fitness display from SegmentDetailView + GoalHeaderView; add readiness donut to Today tab header; see handoff.MD for full plan
+- [x] Score UI cleanup + polish session: fitness comparison card removed; readiness donuts on both Today and Targets headers; 5-tier readiness labels; formula rebased to 0.75 at parity; goal overwrite bug fixed; Today tab single Enzo card (lookahead); greeting with time-of-day; input contrast; chip sizing
+- [ ] Readiness score differentiation session: all segments show similar scores — explore per-segment signals; see handoff.MD
 - [ ] Step 11b: Enzo voice/prompt tuning pass (dedicated session — deferred from Step 11)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -562,5 +563,26 @@ All fitness and readiness score displays no longer show `%`. Scores are 0–100 
 **SegmentScorerTests was missing `import Foundation` (score cleanup session)**
 Pre-existing bug causing build failures when running any test suite. Fixed by adding `import Foundation` to `SegmentScorerTests.swift`.
 
-**Score UI cleanup — planned for next session (not yet implemented)**
-See `handoff.MD` for the full plan. Summary: remove PR-fitness display from `SegmentDetailView` (delete "FITNESS COMPARISON" card) and `GoalHeaderView` (remove PR fitness column). Add a second donut to `FitnessRingView` showing goal segment readiness score, replacing the goal progress bar. The `fitnessValueAtPR` field stays in the data model — only its display is removed.
+**Score UI cleanup — complete (this session)**
+Fitness comparison card removed from `SegmentDetailView`. `GoalHeaderView` simplified to segment name + strike label + readiness donut + single-line segment stats. `FitnessRingView` now has two donuts: fitness (blue) and readiness (green/blue/amber/grey by tier). Goal progress bar removed. `fitnessValueAtPR` stays in data model (used internally by `SegmentScorer`).
+
+**5-tier readiness labels (this session)**
+Expanded from 3 tiers to 5. Thresholds: ≥0.80 "Strike now", 0.65–0.80 "Almost there", 0.45–0.65 "Worth a shot", 0.25–0.45 "Getting there", <0.25 "Build first". Colors: green/blue/amber/grey/grey. `strikeLabel` is stored in Supabase — re-sync required after this change.
+
+**Strike score parity baseline changed to 0.75 (this session)**
+Formula: `clamp(0.75 + (currentFitness - fitnessAtPR) × 1.0, 0, 1)`. At parity (same fitness as PR day), score = 0.75 → "Almost there". Previously 0.50 → "Worth a shot". Re-sync required.
+
+**Goal overwrite bug fixed (this session)**
+`ArcView.task` was calling `loadContext()` on every NavigationStack pop, overwriting in-memory goal state before `saveGoal()` finished. Fix: `loadContext()` removed from `ArcView.task`. It only runs from `RootView.task` (once per launch). `generateLookahead()` remains in `ArcView.task` (safe — guarded, no-ops if content exists).
+
+**Today tab consolidated to single Enzo card (this session)**
+`ArcBriefingView` now shows lookahead content ("WHAT TO DO NEXT") with the orange left accent bar. `LookaheadSuggestionView` no longer rendered. `generateBriefing()` no longer called from `ArcView.task`. `briefingText` / `isGeneratingBriefing` still exist on `AppState` and are used in the goal-confirm flow.
+
+**GoalSettingView.strikeLabelColor() is stale**
+`GoalSettingView` has a private `strikeLabelColor()` helper that maps old 3-tier labels ("No brainer", "Worth a shot") to colors. All new 5-tier labels fall through to `.enzoAmber`. Fix in a future session alongside GoalSettingView work.
+
+**Greeting with time-of-day (this session)**
+`FitnessRingView.greeting` now returns "Good morning/afternoon/evening, [first name]" based on device hour. Last name stripped by splitting on space and taking first component.
+
+**All segments show similar readiness scores (known issue, next session)**
+Not a bug — structural issue with the formula. `currentFitness` is global (same for all segments). If PRs were set during a similar training period, `fitnessAtPR` values cluster → deltas cluster → scores cluster. Next session will explore per-segment signals to differentiate scores. See `handoff.MD`.
