@@ -157,11 +157,11 @@ struct SegmentStrikeRow: View {
             Spacer()
 
             Text(segment.strikeLabel)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(pillColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(pillColor.opacity(0.15), in: Capsule())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(pillColor.opacity(0.18), in: Capsule())
                 .scaleEffect(isPulsing ? 1.06 : 1.0)
                 .animation(
                     segment.strikeLabel == "No brainer"
