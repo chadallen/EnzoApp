@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
