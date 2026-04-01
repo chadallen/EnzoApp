@@ -112,6 +112,7 @@ struct ArcView: View {
                 }
             }
         }
+        .colorScheme(.light)
         .background(
             Color.enzoBg
                 .shadow(color: .black.opacity(0.08), radius: 12, y: -4)
