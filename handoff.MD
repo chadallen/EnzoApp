@@ -1,26 +1,17 @@
-# Session Handoff — Readiness Score Differentiation (ready to plan)
+# Session Handoff — Enzo Voice / Prompt Tuning (next session)
 
-## What was completed this session (Score UI Cleanup + UI Polish)
+## What was completed this session (Readiness Score Differentiation)
 
 | Change | Files touched | Commit |
 |---|---|---|
-| Remove fitness comparison card from SegmentDetailView, rewrite strikeLine | `SegmentDetailView.swift` | 47ea493 |
-| GoalHeaderView: remove PR fitness column, two-column layout | `GoalHeaderView.swift` | c2c236c |
-| FitnessRingView: add readiness donut, remove goal progress bar | `FitnessRingView.swift` | 1ae2d67 |
-| FitnessRingView: 'Readiness' label under readiness donut | `FitnessRingView.swift` | f5414a5 |
-| FitnessRingView: add goal segment name below donuts | `FitnessRingView.swift` | 0c759c2 |
-| GoalHeaderView: add readiness donut to Targets header | `GoalHeaderView.swift` | 5310923 |
-| SegmentScorer: expand to 5 readiness tiers (Strike now / Almost there / Worth a shot / Getting there / Build first) | `SegmentScorer.swift`, `SegmentScorerTests.swift`, `FitnessRingView.swift`, `GoalHeaderView.swift` | 66ccf8d |
-| SegmentScorer: rebase strike score to 0.75 at parity (was 0.50) | `SegmentScorer.swift`, `SegmentScorerTests.swift` | 778c794 |
-| GoalHeaderView: segment stats + readiness donut fill header | `GoalHeaderView.swift` | 67638fe |
-| GoalHeaderView: iterative header layout work (label as hero, then pill, then final) | `GoalHeaderView.swift` | b35a42a, 354bddb, 419e663, 63c1999, 3d86064 |
-| ArcView: fix goal overwrite on nav-pop (remove loadContext from ArcView.task) | `ArcView.swift` | 3903bad |
-| FitnessRingView: 'Target:' prefix, match status font size | `FitnessRingView.swift` | 07e30a1 |
-| Today tab: consolidate to single Enzo card (lookahead only, accent bar) | `ArcView.swift`, `ArcBriefingView.swift` | 12f7bb2 |
-| ArcInputBar: increase placeholder text contrast | `ArcInputBar.swift` | 9ae31f3 |
-| FitnessRingView: remove athlete name greeting | `FitnessRingView.swift` | 817c7ba |
-| SegmentsView: larger, higher contrast readiness chips | `SegmentsView.swift` | 5e864eb |
-| FitnessRingView: restore greeting with time-of-day and first name only | `FitnessRingView.swift` | 77958e8 |
+| SegmentScorer: replace trend modifier with PR age bonus + effort gap | `SegmentScorer.swift`, `SegmentScorerTests.swift` | 35e1e71 |
+| SyncService: track latest effort per segment + demo score jitter | `SyncService.swift` | 99e4e7a |
+| EnzoAppApp: force light mode at WindowGroup level | `EnzoAppApp.swift` | 2cbca98 |
+| ArcView: force .colorScheme(.light) on inputArea (dark mode fix) | `ArcView.swift` | 7aff4d6 |
+| SegmentsView: update readiness chip colors to 5-tier thresholds | `SegmentsView.swift` | 0d26506 |
+| Enzo prompt: Italian coach character, updated labels, no markdown | `ClaudeService.swift`, `AppState.swift` | bf0c303 |
+| enzo-voice.MD: sync with updated system prompt | `skills/enzo-voice.MD` | 4fe5816 |
+| REVERTED: Enzo prompt changes (Chad found responses worse) | `ClaudeService.swift`, `AppState.swift`, `skills/enzo-voice.MD` | 4599be2, e72229b |
 
 ---
 
@@ -28,113 +19,89 @@
 
 All changes committed and pushed. Working tree is clean. Branch: `main`.
 
-**Important — Chad must re-sync to pick up the updated strike score formula:**
-**Settings → Reset sync history → Sync now**
-This rewrites `strikeScore` and `strikeLabel` stored in Supabase with the new 0.75 parity baseline and 5-tier labels.
+**Important — Chad must re-sync to see updated scores:**
+Settings → Reset sync history → Sync now
+
+This rewrites `strikeScore` and `strikeLabel` in Supabase with the new formula (PR age bonus + effort gap modifier) and demo jitter.
 
 ---
 
-## Current Targets tab header layout
+## What the readiness score formula looks like now
 
 ```
-Current target segment
-Hawk Hill          [readiness donut]
-Almost there
-─────────────────────────────────────
-Mar 2024  ·  4:32  ·  2.8 mi  ·  +1,234 ft
+score = clamp(0.75 + fitnessDelta + prAgeBonus + effortGapModifier, 0, 1)
 ```
 
-Segment name (subheadline), strike label below it (larger, colored), readiness donut top-right, single-line segment stats at the bottom.
+- `fitnessDelta` = `currentFitnessValue − fitnessValueAtPR` (primary signal)
+- `prAgeBonus` = `min(daysSincePR / 1095, 1.0) × 0.15` (linear, 0→+0.15 over 3 years)
+- `effortGapModifier` = `clamp(−gapRatio × 0.5, −0.20, +0.10)` where `gapRatio = (lastEffortSeconds − prSeconds) / prSeconds`
+- **Demo jitter**: `±0.25` deterministic noise seeded from `segId` — makes scores look meaningfully spread for demos. **Must be removed before shipping.**
+- Trend modifier removed entirely (was ±0.05, global signal, same for all segments)
 
-## Current Today tab header layout
-
-```
-Good afternoon, Chad
-[fitness donut]  [readiness donut]  STATUS  LAST RIDE
-                                    Building ↑  Yesterday
-FITNESS          READINESS
-Target: Hawk Hill
-```
-
-Two donuts side by side, status/last ride stats to the right, segment name below.
+`lastEffortSeconds` is now correctly populated as the actual most recent elapsed time (previously always equalled `prSeconds`).
 
 ---
 
-## Next session: Readiness Score Differentiation
+## Dark mode fix (complete)
+
+App was rendering black text on dark backgrounds when the device was in dark mode. Fixed with:
+1. `preferredColorScheme(.light)` on `WindowGroup` in `EnzoAppApp.swift`
+2. `.colorScheme(.light)` directly on `inputArea` in `ArcView.swift` (safeAreaInset doesn't inherit window-level preference reliably)
+
+---
+
+## Enzo prompt: reverted
+
+Attempted to add Italian coach character (piano piano, Dai, Coraggio etc.) and updated labels/no-markdown rules. Chad found the responses worse. Both commits were reverted cleanly. The system prompt is back to the pre-session state.
+
+**Known issues still in system prompt (not fixed this session):**
+- Readiness labels still say "No brainer, Worth a shot, Not quite ready" — stale (5-tier labels not reflected)
+- Fitness labels in `enzo-voice.MD` system prompt section still say "Peak shape, Strong base, Building, Coming back" — stale
+
+These should be fixed in the next prompt tuning session, carefully, with playground testing before touching the live app.
+
+---
+
+## Next session: Enzo Voice / Prompt Tuning
 
 ### The problem
 
-All segments currently show the same (or very similar) readiness scores. This is not a bug — it's a structural issue with the formula:
+The Enzo prompt is hard to tune directly in the app — there's no fast feedback loop. Responses take a full sync + app launch cycle to evaluate. The playground script (`scripts/enzo_playground.py`) exists for exactly this, but hasn't been used for tuning yet.
 
-`score = clamp(0.75 + (currentFitness - fitnessAtPR) × 1.0, 0, 1)`
+### Recommended approach
 
-`currentFitness` is the same for every segment (it's the athlete's global fitness). `fitnessAtPR` varies per segment, but if most PRs were set during a similar period (which is common), the deltas are all similar and scores cluster together.
+1. **Use the playground first.** Run `python3 scripts/enzo_playground.py --mode chat --message "What should I do this week?"` and iterate on the system prompt there. Fast feedback, no build required.
+2. **Fix stale labels in system prompt.** Update readiness labels (5-tier) and fitness labels before any other tuning.
+3. **Suppress markdown.** Add explicit no-markdown instruction. Test that it actually works in playground before committing.
+4. **Italian character — optional.** Chad liked the idea but the implementation made responses worse. If retrying: use the playground to find the right balance before touching ClaudeService.swift.
+5. **Lookahead prompt.** The improved version (goal-aware, direct address) was part of the reverted commit. Consider re-applying just the lookahead prompt change — it was directionally correct and simpler than the system prompt changes.
 
-### The goal
+### Other things to look at this session
 
-Make readiness scores meaningfully different across segments. A segment where you set your PR at peak fitness should score lower than one where you set it while recovering. The score should reflect how realistic a PR attempt is *for that specific segment* given your current state.
+- **GoalSettingView.strikeLabelColor()** maps old 3-tier labels — falls through to amber for all new 5-tier labels. Simple fix.
+- **Demo jitter in SyncService** — remove before any real user testing or App Store submission.
+- **`enzo-voice.MD` stale labels** — fix alongside any prompt work.
 
-### Ideas to explore (present these to Chad and get his input before writing anything)
+### Working rules
 
-**Option A — Factor in segment-specific trend**
-`SegmentScore` already stores `trendDirection` per segment. This could be used as a stronger signal than the global trend. A segment where your recent efforts are improving should score higher.
-
-**Option B — Factor in time since PR**
-Segments with older PRs are more likely to be beatable as training evolves. A PR set 3 years ago during a peak is a different target than one set last month. Could add a small recency bonus (opposite of the removed discount — not a penalty for recent PRs, but a bonus for old ones).
-
-**Option C — Factor in number of attempts**
-Segments you've ridden many times are more predictable. If `lastEffortSeconds` is close to `prSeconds`, that's a different signal than being 2 minutes off pace.
-
-**Option D — Relative difficulty signal**
-Use distance and elevation together to estimate segment difficulty, then weight the score by how well your current fitness matches that difficulty profile.
-
-**Recommended starting point:** Discuss options with Chad. Start with Option A (segment-specific trend as a stronger weight) and Option B (time-since-PR bonus) as they require no new data. Options C and D need additional Strava data that may not be synced yet.
-
-### Data available in SegmentScore today
-- `strikeScore: Double` — current readiness (0–1)
-- `strikeLabel: String` — stored label
-- `fitnessValueAtPR: Double` — athlete fitness when PR was set
-- `currentFitnessValue: Double` — athlete's current global fitness
-- `trendDirection: String` — "up" / "flat" / "down" (per segment? or global? — verify)
-- `prDate: String` — date PR was set ("yyyy-MM-dd")
-- `lastEffortSeconds: Int?` — time of most recent effort on this segment
-- `prSeconds: Int` — PR time
-
----
-
-## Working rules for next session
-
-- Read CLAUDE.md, handoff.MD before doing anything. Do NOT read scratch.md or UI-punch-list.md.
+- Read CLAUDE.md and handoff.MD before doing anything.
+- Do NOT read scratch.md or UI-punch-list.md.
 - Do not write a single line of code without presenting the plan and getting explicit approval from Chad.
-- Make frequent, small commits — one change per commit, descriptive message, so individual changes can be reverted.
-- When Chad needs to test on device or perform a manual action (re-sync, Supabase migration, etc.), stop and prompt him explicitly before continuing.
+- Make frequent, small commits — one change per commit, descriptive message.
+- When Chad needs to test on device or perform a manual action (re-sync, playground run, etc.), stop and prompt him explicitly before continuing.
 
 ---
 
 ## Build notes from this session
 
-**Strike score parity baseline changed to 0.75**
-Formula is now `clamp(0.75 + delta × 1.0, 0, 1)`. At parity (same fitness as when PR was set), score = 0.75 → "Almost there". Previously 0.50 ("Worth a shot"). Re-sync required to update stored values.
+**Demo jitter in SyncService — remove before shipping**
+`SyncService.syncPhase2` applies a deterministic ±0.25 jitter to each segment's strike score, seeded from `segId` using a Knuth multiplicative hash. This makes scores look meaningfully spread during demos. The comment in code says "DEMO" and "Remove before shipping." Do not raise `phase2ActivityLimit` or run production syncs while this is active.
 
-**5-tier readiness labels**
-| Score | Label |
-|---|---|
-| ≥ 0.80 | Strike now |
-| 0.65–0.80 | Almost there |
-| 0.45–0.65 | Worth a shot |
-| 0.25–0.45 | Getting there |
-| < 0.25 | Build first |
+**latestEffortMap is populated correctly now**
+Previously `lastEffortSeconds` always equalled `prSeconds` because it was only set inside the `prRank == 1` branch. Now a `latestEffortMap: [Int64: Int]` is populated on the first occurrence of each segment in the activity loop (activities are newest-first, so first = most recent). `lastEffortSeconds` in the PR row now uses `latestEffortMap[segId] ?? prSecs`.
 
-Colors: green (`enzoGoal`) / blue (`enzoChartPrimary`) / amber (`enzoAmber`) / grey / grey.
+**Prompt revert lesson**
+Prompt changes are hard to evaluate without a fast feedback loop. Always use `scripts/enzo_playground.py` to test before touching `ClaudeService.swift` or `AppState.swift`. The playground streams responses in ~2 seconds — much faster than the app's cache + sync cycle.
 
-**Goal overwrite bug fixed**
-`ArcView.task` was calling `loadContext()` on every NavigationStack pop, which re-fetched from Supabase before `saveGoal()` finished writing — wiping the newly set goal. Fix: `loadContext()` removed from `ArcView.task`. It only runs from `RootView.task` (once per launch). `generateLookahead()` remains in `ArcView.task` (safe — guarded, no-ops if content exists).
-
-**Today tab consolidated to single Enzo card**
-`ArcBriefingView` now shows the lookahead response only ("WHAT TO DO NEXT"). `LookaheadSuggestionView` is no longer rendered in `ArcView`. `generateBriefing()` no longer called from `ArcView.task`. `briefingText` / `isGeneratingBriefing` still exist on `AppState` (used in goal-confirm flow) — not removed.
-
-**Targets header final layout**
-Segment name (subheadline) → strike label (larger, colored, no pill) → HStack with segment stats left + readiness donut right → single-line stats row (date · PR time · distance · elevation).
-
-**strikeLabelColor in GoalSettingView is stale**
-`GoalSettingView.strikeLabelColor()` still maps old labels ("No brainer", "Worth a shot") to colors. After the 5-tier label rename, the color logic will fall through to `.enzoAmber` for all new labels. Fix in next session alongside any GoalSettingView work.
+**safeAreaInset dark mode**
+`preferredColorScheme(.light)` on `WindowGroup` is not sufficient for `safeAreaInset` content — it needs an explicit `.colorScheme(.light)` on the view itself. Both are now in place.
