@@ -3,9 +3,32 @@ import Observation
 import AuthenticationServices
 import SwiftData
 
+// MARK: - Persistence overview
+//
+// AppState is the single source of truth for all in-memory app state.
+// It reads from and writes to three persistence layers:
+//
+//   SwiftData (ModelContext)
+//     FitnessSnapshotModel  — monthly fitness history, written by Phase 1 sync
+//     SegmentScoreModel     — segment PRs + strike scores, written by Phase 2 sync
+//     GoalModel             — active/historical goals, written by setGoal()
+//
+//   Keychain
+//     Strava OAuth tokens (access, refresh, expiry) and athlete ID
+//
+//   UserDefaults
+//     Onboarding flag, last sync timestamps, athlete display name,
+//     last activity date, Claude response cache (briefing + lookahead)
+//
+// Raw Strava activity data is NEVER persisted — only derived outputs reach storage.
+
 @Observable
 @MainActor
 class AppState {
+    // MARK: - Published state
+
+    // In-memory context built from SwiftData on each launch.
+    // Preview values are shown until loadContext() completes.
     var athleteContext: AthleteContext = .preview
     var fitnessSnapshots: [FitnessSnapshot] = FitnessSnapshot.previewSnapshots
     var segments: [SegmentScore] = SegmentScore.previewSegments
@@ -15,7 +38,7 @@ class AppState {
     var isStreaming = false
     var streamingText = ""
 
-    // Auth state — populated after successful OAuth flow
+    // Auth state — populated after successful OAuth flow or Keychain restore on launch
     var isAuthenticated: Bool = false
     var stravaAthleteId: Int64? = nil
 
@@ -46,19 +69,31 @@ class AppState {
     var isGeneratingBriefing: Bool = false
     var isGeneratingLookahead: Bool = false
 
+    // MARK: - Services
+
     private let claudeService: ClaudeService
     private let stravaService: StravaService
     private let syncService: SyncService
+
+    // SwiftData context for all local persistence reads/writes.
+    // Uses mainContext (main actor) because AppState itself is @MainActor.
+    // `let` (not `lazy var`) is required — lazy var is incompatible with @Observable.
     let modelContext: ModelContext
+
+    // MARK: - Init
 
     init() {
         let strava = StravaService()
         claudeService = ClaudeService()
         stravaService = strava
         syncService   = SyncService(stravaService: strava)
+        // Pull the main context from the shared singleton container.
+        // All SwiftData reads/writes in AppState go through this context.
         modelContext  = ModelContainer.enzo.mainContext
 
         // Restore auth state from Keychain on launch.
+        // stravaAthleteId is the only identity token needed — there is no
+        // supabaseUserId anymore. If the Strava token is absent, treat as unauthenticated.
         if let idString = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
            let id = Int64(idString) {
             isAuthenticated = true
@@ -416,6 +451,10 @@ class AppState {
 
     // MARK: - Private: SwiftData write helpers
 
+    /// Insert-or-update for a fitness snapshot row, keyed on month Date.
+    /// SwiftData doesn't have native upsert semantics, so we fetch first.
+    /// The @Attribute(.unique) on FitnessSnapshotModel.month prevents duplicates
+    /// but doesn't auto-merge — we handle that here manually.
     private func upsertSnapshot(_ row: FitnessSnapshotRow) {
         let monthDate = row.monthDate
         var descriptor = FetchDescriptor<FitnessSnapshotModel>(
@@ -423,6 +462,7 @@ class AppState {
         )
         descriptor.fetchLimit = 1
         if let existing = (try? modelContext.fetch(descriptor))?.first {
+            // Update all mutable fields — month (the unique key) stays unchanged.
             existing.fitnessValue    = row.fitnessValue
             existing.fitnessLabel   = row.fitnessLabel
             existing.trendDirection = row.trendDirection
@@ -435,6 +475,8 @@ class AppState {
         try? modelContext.save()
     }
 
+    /// Insert-or-update for a segment score row, keyed on Strava segment ID.
+    /// Same fetch-first pattern as upsertSnapshot — keyed on stravaSegmentId.
     private func upsertSegmentScore(_ row: SegmentScoreRow) {
         let segId = Int(row.stravaSegmentId)
         var descriptor = FetchDescriptor<SegmentScoreModel>(
@@ -442,6 +484,7 @@ class AppState {
         )
         descriptor.fetchLimit = 1
         if let existing = (try? modelContext.fetch(descriptor))?.first {
+            // Update all mutable fields — stravaSegmentId (the unique key) stays unchanged.
             existing.segmentName          = row.segmentName ?? ""
             existing.prSeconds            = row.prSeconds ?? 0
             existing.prAchievedAt         = row.prAchievedAt ?? ""
