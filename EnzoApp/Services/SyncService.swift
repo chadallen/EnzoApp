@@ -49,19 +49,17 @@ actor SyncService {
     }
 
     private let stravaService: StravaService
-    private let supabaseService: SupabaseService
 
-    init(stravaService: StravaService, supabaseService: SupabaseService) {
+    init(stravaService: StravaService) {
         self.stravaService = stravaService
-        self.supabaseService = supabaseService
     }
 
     // MARK: - Phase 1 sync
 
     /// Fetches all Strava activities, computes monthly fitness snapshots in-memory,
-    /// and writes derived rows to Supabase. Raw Strava data is never persisted.
-    /// Returns the total number of activities fetched (used for SyncProgressView display).
-    func syncPhase1(userId: UUID) async throws -> Int {
+    /// and returns them for the caller to persist. Raw Strava data is never persisted.
+    /// Returns activity count, computed snapshot rows, and the most recent qualifying ride date.
+    func syncPhase1() async throws -> (activityCount: Int, snapshots: [FitnessSnapshotRow], lastActivityDate: Date?) {
         try await stravaService.refreshTokenIfNeeded()
         guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
             throw SyncError.notAuthenticated
@@ -69,18 +67,10 @@ actor SyncService {
 
         let activities = try await fetchAllActivities(accessToken: accessToken)
         let rides = filterAndComputeRides(activities)
-        let snapshots = Self.computeSnapshots(from: rides, userId: userId)
+        let snapshots = Self.computeSnapshots(from: rides)
+        let lastActivityDate = rides.map({ $0.date }).max()
 
-        for snapshot in snapshots {
-            _ = try await supabaseService.upsertFitnessSnapshot(snapshot)
-        }
-
-        // Track most recent qualifying ride date for days_since_last_ride computation.
-        if let mostRecentDate = rides.map({ $0.date }).max() {
-            try? await supabaseService.updateLastActivityDate(userId: userId, date: mostRecentDate)
-        }
-
-        return activities.count
+        return (activityCount: activities.count, snapshots: snapshots, lastActivityDate: lastActivityDate)
     }
 
     // MARK: - Static helpers (testable without network)
@@ -100,7 +90,7 @@ actor SyncService {
     /// - A 2-month rolling window for the fitness value (normalized against all-time min/max)
     /// - A 4-week vs prior-4-week comparison for trend direction
     /// - That specific month's hours and activity count for summary stats
-    static func computeSnapshots(from rides: [RideData], userId: UUID) -> [FitnessSnapshotRow] {
+    static func computeSnapshots(from rides: [RideData]) -> [FitnessSnapshotRow] {
         guard !rides.isEmpty else { return [] }
 
         var calendar = Calendar(identifier: .gregorian)
@@ -174,7 +164,7 @@ actor SyncService {
                 rides: thisMonthRides.count,
                 trend: trend
             )
-            var row = FitnessSnapshotRow(snapshot: snapshot, userId: userId)
+            var row = FitnessSnapshotRow(snapshot: snapshot)
             row.avgEfficiency = avgEfficiency
             return row
         }
@@ -237,25 +227,24 @@ actor SyncService {
         }
     }
 
-    /// Fetches the 100 most recent cycling activities in detail, extracts segment efforts,
-    /// computes strike scores, and upserts to the segment_scores table.
+    /// Fetches recent cycling activities in detail, extracts segment efforts,
+    /// computes strike scores, and returns rows for the caller to persist.
     /// Raw Strava data is never persisted.
-    func syncPhase2(userId: UUID) async throws {
+    func syncPhase2(fitnessSnapshots: [FitnessSnapshot]) async throws -> [SegmentScoreRow] {
         try await stravaService.refreshTokenIfNeeded()
         guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
             throw SyncError.notAuthenticated
         }
 
-        // Fetch fitness snapshots once — used as a lookup for fitness_value_at_pr.
-        let snapshotRows = try await supabaseService.fetchFitnessSnapshots(userId: userId)
-        // month is stored as "YYYY-MM-01"; normalize to "YYYY-MM" for lookup.
+        // Build fitness lookup from the locally stored snapshots.
+        // FitnessSnapshot.month is already "YYYY-MM" format.
+        let sortedSnapshots = fitnessSnapshots.sorted { $0.month < $1.month }
         let snapshotByMonth: [String: Double] = Dictionary(
-            snapshotRows.map { row -> (String, Double) in
-                let key = String(row.month.prefix(7))
-                return (key, row.fitnessValue)
-            },
+            sortedSnapshots.map { ($0.month, $0.value) },
             uniquingKeysWith: { first, _ in first }
         )
+        let currentFitness = sortedSnapshots.last?.value ?? 0.0
+        let currentTrend = sortedSnapshots.last?.trend ?? "flat"
 
         // Incremental: only fetch activities newer than the last Phase 2 run.
         // On first run, lastSync is nil → fetches the most recent N activities.
@@ -274,7 +263,7 @@ actor SyncService {
 
         guard !recentActivities.isEmpty else {
             NSLog("[Sync P2] No new activities since last sync — skipping")
-            return
+            return []
         }
 
         NSLog("[Sync P2] Processing \(recentActivities.count) activities")
@@ -344,7 +333,6 @@ actor SyncService {
                     let prDateFormatted = prDateISO.count >= 10 ? String(prDateISO.prefix(10)) : prDateISO
 
                     let fitnessAtPR = snapshotByMonth[prMonthKey] ?? 0.0
-                    let currentFitness = snapshotRows.last?.fitnessValue ?? 0.0
                     let prSecs = effort.elapsedTime
                     let lastSecs = latestEffortMap[segId] ?? prSecs
 
@@ -363,14 +351,14 @@ actor SyncService {
 
                     let row = SegmentScoreRow(
                         id: nil,
-                        userId: userId,
+                        userId: nil,
                         stravaSegmentId: segId,
                         segmentName: seg.name,
                         prSeconds: prSecs,
                         prAchievedAt: prDateFormatted,
                         fitnessValueAtPr: fitnessAtPR,
                         currentFitnessValue: currentFitness,
-                        trendDirection: snapshotRows.last?.trendDirection ?? "flat",
+                        trendDirection: currentTrend,
                         lastEffortSeconds: lastSecs,
                         lastEffortDate: effortDateStr,
                         strikeScore: score,
@@ -385,14 +373,13 @@ actor SyncService {
             }
         }
 
-        NSLog("[Sync P2] Upserting \(segmentMap.count) segment rows")
-        for row in segmentMap.values {
-            _ = try await supabaseService.upsertSegmentScore(row)
-        }
+        NSLog("[Sync P2] Computed \(segmentMap.count) segment rows")
 
         // Mark this run's timestamp so the next sync only fetches new activities.
         UserDefaults.standard.set(Date(), forKey: Self.lastPhase2SyncKey)
         NSLog("[Sync P2] Phase 2 complete")
+
+        return Array(segmentMap.values)
     }
 
     // MARK: - Private: Phase 2 fetch helpers

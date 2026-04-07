@@ -26,7 +26,7 @@ struct ArcView: View {
         .task {
             // loadContext() is called from RootView.task and completes before MainTabView appears.
             // Calling it here would re-trigger on every NavigationStack pop and overwrite
-            // manually-set goals with stale Supabase data before saveGoal() finishes.
+            // manually-set goals before the local store write completes.
             await appState.generateLookahead()
         }
     }

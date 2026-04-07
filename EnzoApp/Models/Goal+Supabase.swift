@@ -1,7 +1,7 @@
 import Foundation
 
-/// Codable DTO for the `goals` Supabase table.
-/// `GoalContext` is the lean in-memory domain struct; `GoalRow` is the full DB representation.
+/// Codable DTO for goal data.
+/// `GoalContext` is the lean in-memory domain struct; `GoalRow` is the full persistence representation.
 struct GoalRow: Codable {
     var id: UUID?
     var userId: UUID?

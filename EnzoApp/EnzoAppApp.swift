@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct EnzoAppApp: App {
@@ -17,6 +18,7 @@ struct EnzoAppApp: App {
                 .environment(appState)
                 .preferredColorScheme(.light)
         }
+        .modelContainer(ModelContainer.enzo)
     }
 }
 

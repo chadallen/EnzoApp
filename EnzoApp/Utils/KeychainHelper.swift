@@ -62,5 +62,4 @@ extension KeychainHelper {
     static let stravaRefreshToken = "strava_refresh_token"
     static let stravaTokenExpiry = "strava_token_expiry"
     static let stravaAthleteId = "strava_athlete_id"
-    static let supabaseUserId = "supabase_user_id"
 }

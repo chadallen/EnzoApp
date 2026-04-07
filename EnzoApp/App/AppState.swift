@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AuthenticationServices
+import SwiftData
 
 @Observable
 @MainActor
@@ -17,7 +18,6 @@ class AppState {
     // Auth state — populated after successful OAuth flow
     var isAuthenticated: Bool = false
     var stravaAthleteId: Int64? = nil
-    var supabaseUserId: UUID? = nil
 
     // Onboarding state — persisted to UserDefaults
     var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
@@ -48,29 +48,21 @@ class AppState {
 
     private let claudeService: ClaudeService
     private let stravaService: StravaService
-    private let supabaseService: SupabaseService
     private let syncService: SyncService
+    let modelContext: ModelContext
 
     init() {
-        let strava   = StravaService()
-        let supabase = SupabaseService()
-        claudeService  = ClaudeService()
-        stravaService  = strava
-        supabaseService = supabase
-        syncService    = SyncService(stravaService: strava, supabaseService: supabase)
+        let strava = StravaService()
+        claudeService = ClaudeService()
+        stravaService = strava
+        syncService   = SyncService(stravaService: strava)
+        modelContext  = ModelContainer.enzo.mainContext
 
         // Restore auth state from Keychain on launch.
-        // Require both stravaAthleteId AND supabaseUserId — if only one is present,
-        // the previous auth attempt was incomplete and we treat it as unauthenticated.
         if let idString = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
-           let id = Int64(idString),
-           KeychainHelper.load(for: KeychainHelper.supabaseUserId) != nil {
+           let id = Int64(idString) {
             isAuthenticated = true
             stravaAthleteId = id
-        }
-        if let uuidString = KeychainHelper.load(for: KeychainHelper.supabaseUserId),
-           let uuid = UUID(uuidString: uuidString) {
-            supabaseUserId = uuid
         }
 
         // If authenticated but onboarding not yet confirmed, flag for resolution
@@ -82,29 +74,33 @@ class AppState {
 
     // MARK: - Context loading
 
-    /// Fetches fitness snapshots, user profile, and active goal from Supabase,
+    /// Fetches fitness snapshots, user profile, and active goal from local SwiftData store,
     /// then builds a live AthleteContext. No-ops gracefully if not authenticated.
     func loadContext() async {
-        guard let userId = supabaseUserId else {
+        guard isAuthenticated else {
             isResolvingOnboarding = false
             return
         }
 
         do {
-            async let snapshotRows = supabaseService.fetchFitnessSnapshots(userId: userId)
-            async let profile = supabaseService.fetchUserProfile(userId: userId)
-            async let goalRow = supabaseService.fetchActiveGoal(userId: userId)
+            let snapshotModels = try modelContext.fetch(
+                FetchDescriptor<FitnessSnapshotModel>(sortBy: [SortDescriptor(\.month)])
+            )
+            let snapshots = snapshotModels.map { $0.toSnapshot() }
 
-            let (rows, userProfile, activeGoal) = try await (snapshotRows, profile, goalRow)
+            let goalModels = try modelContext.fetch(
+                FetchDescriptor<GoalModel>(predicate: #Predicate { $0.isActive })
+            )
+            let activeGoalRow = goalModels.first?.toGoalRow()
 
-            let snapshots = rows.map { $0.toSnapshot() }
-                .sorted { $0.month < $1.month }
+            let displayName = UserDefaults.standard.string(forKey: "athleteDisplayName") ?? "Athlete"
+            let lastActivityDate = UserDefaults.standard.object(forKey: "lastActivityDate") as? Date
 
             let context = AthleteContext.build(
-                name: userProfile.displayName,
+                name: displayName,
                 snapshots: snapshots,
-                goalRow: activeGoal,
-                lastActivityDate: userProfile.lastActivityDate
+                goalRow: activeGoalRow,
+                lastActivityDate: lastActivityDate
             )
 
             fitnessSnapshots = snapshots
@@ -113,13 +109,13 @@ class AppState {
             NSLog("[Context] Loaded: \(snapshots.count) snapshots, fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
 
             // Auto-complete onboarding for existing users who already have a goal.
-            if activeGoal != nil && !hasCompletedOnboarding {
+            if activeGoalRow != nil && !hasCompletedOnboarding {
                 hasCompletedOnboarding = true
                 NSLog("[Onboarding] Existing user — marking onboarding complete")
             }
 
-            // Load real segment scores from Supabase (no-op if table is empty).
-            await loadSegments(goalSegmentName: activeGoal?.targetSegmentName)
+            // Load real segment scores from local store (no-op if store is empty).
+            await loadSegments(goalSegmentName: activeGoalRow?.targetSegmentName)
 
             // Restore cached Claude responses if < 24h old — avoids blank Arc on relaunch.
             restoreCachedContent()
@@ -129,23 +125,23 @@ class AppState {
         isResolvingOnboarding = false
     }
 
-    /// Fetches segment scores from Supabase and populates appState.segments.
+    /// Fetches segment scores from the local SwiftData store and populates appState.segments.
     /// Marks the goal segment if a goal is active.
     func loadSegments(goalSegmentName: String? = nil) async {
-        guard let userId = supabaseUserId else { return }
+        guard isAuthenticated else { return }
         do {
-            let rows = try await supabaseService.fetchSegmentScores(userId: userId)
-            guard !rows.isEmpty else {
-                NSLog("[Segments] No segment rows in Supabase yet — keeping preview data")
+            let models = try modelContext.fetch(FetchDescriptor<SegmentScoreModel>())
+            guard !models.isEmpty else {
+                NSLog("[Segments] No segment rows in local store yet — keeping preview data")
                 return
             }
-            let loaded = rows.map { row -> SegmentScore in
-                var score = row.toSegmentScore()
+            let loaded = models.map { model -> SegmentScore in
+                var score = model.toSegmentScore()
                 score.isGoalSegment = score.name == goalSegmentName
                 return score
             }
             segments = loaded.sorted { $0.strikeScore > $1.strikeScore }
-            NSLog("[Segments] Loaded \(loaded.count) segments from Supabase")
+            NSLog("[Segments] Loaded \(loaded.count) segments from local store")
         } catch {
             NSLog("[Segments] loadSegments error: \(error)")
         }
@@ -154,7 +150,7 @@ class AppState {
     /// Generates today's Arc briefing by calling Claude with the current context.
     /// Streams tokens into briefingText so the card updates progressively.
     func generateBriefing(forceRefresh: Bool = false) async {
-        guard supabaseUserId != nil else { return }
+        guard isAuthenticated else { return }
         guard briefingText.isEmpty || forceRefresh else { return }
         isGeneratingBriefing = true
         briefingText = ""
@@ -175,7 +171,7 @@ class AppState {
 
     /// Generates the "what to do next" lookahead by calling Claude with the current context.
     func generateLookahead(forceRefresh: Bool = false) async {
-        guard supabaseUserId != nil else { return }
+        guard isAuthenticated else { return }
         guard lookaheadText.isEmpty || forceRefresh else { return }
         isGeneratingLookahead = true
         lookaheadText = ""
@@ -248,21 +244,26 @@ class AppState {
             return updated
         }
 
-        // Persist to Supabase in the background — in-memory state is already set above.
-        guard let userId = supabaseUserId else { return }
-        Task {
-            do {
-                try await supabaseService.saveGoal(
-                    userId: userId,
-                    segmentName: segment.name,
-                    targetDate: targetDate,
-                    requiredFitnessLabel: requiredLabel,
-                    requiredFitnessValue: requiredValue
-                )
-                NSLog("[Goal] Saved goal '\(segment.name)' to Supabase")
-            } catch {
-                NSLog("[Goal] Failed to save goal: \(error)")
-            }
+        // Deactivate all existing active goals, then insert the new one.
+        do {
+            let activeGoals = try modelContext.fetch(
+                FetchDescriptor<GoalModel>(predicate: #Predicate { $0.isActive })
+            )
+            activeGoals.forEach { $0.isActive = false }
+            let goal = GoalModel(
+                rawDescription: segment.name,
+                goalType: "segment_pr",
+                targetSegmentName: segment.name,
+                targetDate: targetDate,
+                requiredFitnessLabel: requiredLabel,
+                requiredFitnessValue: requiredValue,
+                isActive: true
+            )
+            modelContext.insert(goal)
+            try modelContext.save()
+            NSLog("[Goal] Saved goal '\(segment.name)' to local store")
+        } catch {
+            NSLog("[Goal] Failed to save goal: \(error)")
         }
     }
 
@@ -290,17 +291,28 @@ class AppState {
         KeychainHelper.delete(for: KeychainHelper.stravaRefreshToken)
         KeychainHelper.delete(for: KeychainHelper.stravaTokenExpiry)
         KeychainHelper.delete(for: KeychainHelper.stravaAthleteId)
-        KeychainHelper.delete(for: KeychainHelper.supabaseUserId)
         UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.removeObject(forKey: "athleteDisplayName")
+        UserDefaults.standard.removeObject(forKey: "lastActivityDate")
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
         UserDefaults.standard.removeObject(forKey: "lastSyncedAt")
         lastSyncedAt = nil
         invalidateCachedContent()
+
+        // Wipe local SwiftData store so next auth gets a clean slate.
+        do {
+            try modelContext.delete(model: FitnessSnapshotModel.self)
+            try modelContext.delete(model: SegmentScoreModel.self)
+            try modelContext.delete(model: GoalModel.self)
+            try modelContext.save()
+        } catch {
+            NSLog("[Auth] Failed to wipe local store on disconnect: \(error)")
+        }
+
         isAuthenticated = false
         hasCompletedOnboarding = false
         isResolvingOnboarding = false
         stravaAthleteId = nil
-        supabaseUserId = nil
         athleteContext = .preview
         fitnessSnapshots = FitnessSnapshot.previewSnapshots
         segments = SegmentScore.previewSegments
@@ -317,46 +329,34 @@ class AppState {
 
     func authenticate(contextProvider: ASWebAuthenticationPresentationContextProviding) async throws {
         let athlete = try await stravaService.authenticate(presentingFrom: contextProvider)
-        let userId = try await supabaseService.createUser(
-            stravaAthleteId: athlete.id,
-            displayName: athlete.displayName
-        )
         isAuthenticated = true
         stravaAthleteId = athlete.id
-        supabaseUserId = userId
-        KeychainHelper.save(userId.uuidString, for: KeychainHelper.supabaseUserId)
+        UserDefaults.standard.set(athlete.displayName, forKey: "athleteDisplayName")
     }
 
     // MARK: - Sync
 
     func syncPhase1() async {
-        var userId = supabaseUserId
-
-        // Fallback: look up UUID from Supabase if not cached in Keychain (e.g. authenticated pre-Step 7)
-        if userId == nil, let athleteId = stravaAthleteId {
-            NSLog("[Sync] supabaseUserId missing — looking up from Supabase for athleteId \(athleteId)")
-            userId = try? await supabaseService.fetchUserId(stravaAthleteId: athleteId)
-            if let resolved = userId {
-                supabaseUserId = resolved
-                KeychainHelper.save(resolved.uuidString, for: KeychainHelper.supabaseUserId)
-                NSLog("[Sync] resolved userId: \(resolved)")
-            }
-        }
-
-        guard let userId else {
-            NSLog("[Sync] no userId — aborting (not authenticated?)")
-            return
-        }
-
-        NSLog("[Sync] starting Phase 1 for userId \(userId)")
+        NSLog("[Sync] starting Phase 1")
         isSyncing = true
         syncErrorMessage = nil
         do {
-            let count = try await syncService.syncPhase1(userId: userId)
+            let (count, snapshotRows, lastActivityDate) = try await syncService.syncPhase1()
+
+            for row in snapshotRows {
+                upsertSnapshot(row)
+            }
+            if let date = lastActivityDate {
+                UserDefaults.standard.set(date, forKey: "lastActivityDate")
+            }
+
+            // Reload context from newly written snapshots.
+            await loadContext()
+
             syncedActivityCount = count
             lastSyncedAt = Date()
             UserDefaults.standard.set(lastSyncedAt, forKey: "lastSyncedAt")
-            NSLog("[Sync] Phase 1 complete — \(count) activities fetched")
+            NSLog("[Sync] Phase 1 complete — \(count) activities fetched, \(snapshotRows.count) snapshots written")
         } catch let error as StravaError {
             NSLog("[Sync] Phase 1 Strava error: \(error)")
             switch error {
@@ -380,28 +380,84 @@ class AppState {
         invalidateCachedContent()
     }
 
-    /// Clears the Phase 2 incremental sync timestamp so the next sync re-fetches from scratch.
+    /// Clears sync history and wipes the local SwiftData store so the next sync re-fetches from scratch.
     func resetSyncHistory() {
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
-        NSLog("[Sync] Phase 2 history reset — next sync will re-fetch from scratch")
+        do {
+            try modelContext.delete(model: FitnessSnapshotModel.self)
+            try modelContext.delete(model: SegmentScoreModel.self)
+            try modelContext.save()
+        } catch {
+            NSLog("[Sync] Failed to wipe local store on reset: \(error)")
+        }
+        NSLog("[Sync] History reset — local store wiped, next sync will re-fetch from scratch")
     }
 
     func syncPhase2() async {
-        guard let userId = supabaseUserId else {
-            NSLog("[Sync] syncPhase2: no userId — aborting")
+        guard isAuthenticated else {
+            NSLog("[Sync] syncPhase2: not authenticated — aborting")
             return
         }
 
-        NSLog("[Sync] starting Phase 2 for userId \(userId)")
+        NSLog("[Sync] starting Phase 2")
         isSyncingPhase2 = true
         do {
-            try await syncService.syncPhase2(userId: userId)
-            NSLog("[Sync] Phase 2 complete — reloading segments")
+            let segmentRows = try await syncService.syncPhase2(fitnessSnapshots: fitnessSnapshots)
+            for row in segmentRows {
+                upsertSegmentScore(row)
+            }
+            NSLog("[Sync] Phase 2 complete — \(segmentRows.count) segment rows written")
             await loadSegments(goalSegmentName: athleteContext.goal.segmentName)
         } catch {
             NSLog("[Sync] Phase 2 error: \(error)")
         }
         isSyncingPhase2 = false
+    }
+
+    // MARK: - Private: SwiftData write helpers
+
+    private func upsertSnapshot(_ row: FitnessSnapshotRow) {
+        let monthDate = row.monthDate
+        var descriptor = FetchDescriptor<FitnessSnapshotModel>(
+            predicate: #Predicate { $0.month == monthDate }
+        )
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.fitnessValue    = row.fitnessValue
+            existing.fitnessLabel   = row.fitnessLabel
+            existing.trendDirection = row.trendDirection
+            existing.hoursRidden    = row.hoursRidden ?? 0
+            existing.activityCount  = row.activityCount ?? 0
+            existing.avgEfficiency  = row.avgEfficiency ?? 0
+        } else {
+            modelContext.insert(FitnessSnapshotModel(from: row))
+        }
+        try? modelContext.save()
+    }
+
+    private func upsertSegmentScore(_ row: SegmentScoreRow) {
+        let segId = Int(row.stravaSegmentId)
+        var descriptor = FetchDescriptor<SegmentScoreModel>(
+            predicate: #Predicate { $0.stravaSegmentId == segId }
+        )
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.segmentName          = row.segmentName ?? ""
+            existing.prSeconds            = row.prSeconds ?? 0
+            existing.prAchievedAt         = row.prAchievedAt ?? ""
+            existing.fitnessValueAtPr     = row.fitnessValueAtPr ?? 0
+            existing.currentFitnessValue  = row.currentFitnessValue ?? 0
+            existing.trendDirection       = row.trendDirection ?? "flat"
+            existing.lastEffortSeconds    = row.lastEffortSeconds ?? 0
+            existing.lastEffortDate       = row.lastEffortDate ?? ""
+            existing.strikeScore          = row.strikeScore ?? 0
+            existing.strikeLabel          = row.strikeLabel ?? ""
+            existing.distanceMeters       = row.distanceMeters ?? 0
+            existing.elevationDeltaMeters = row.elevationDeltaMeters ?? 0
+        } else {
+            modelContext.insert(SegmentScoreModel(from: row))
+        }
+        try? modelContext.save()
     }
 
     // MARK: - Claude response cache

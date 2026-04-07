@@ -1,9 +1,9 @@
 import Foundation
 
-/// Codable DTO for the `segment_scores` Supabase table.
+/// Codable DTO for segment score data.
 /// Converts to/from the `SegmentScore` domain model.
-/// Note: `stravaSegmentId` is required by the DB but not on the domain model.
-/// SyncService (Step 9) provides it from the Strava API when writing rows.
+/// Note: `stravaSegmentId` is not on the domain model.
+/// SyncService provides it from the Strava API when writing rows.
 struct SegmentScoreRow: Codable {
     var id: UUID?
     var userId: UUID?
