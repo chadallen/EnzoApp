@@ -33,15 +33,15 @@ struct AthleteContext {
         }
     }
 
-    // MARK: - Factory: build from real Supabase data
+    // MARK: - Factory: build from local store data
 
     /// Assembles a live AthleteContext from fetched snapshots and an optional goal row.
     /// Pure function — no network, fully testable.
     ///
     /// - Parameters:
-    ///   - name: Athlete display name from Supabase users table.
+    ///   - name: Athlete display name.
     ///   - snapshots: All fetched FitnessSnapshot rows, any order.
-    ///   - goalRow: Active GoalRow from Supabase, or nil if no goal is set.
+    ///   - goalRow: Active GoalRow, or nil if no goal is set.
     ///   - lastActivityDate: Most recent qualifying ride date, used for days_since_last_ride.
     static func build(
         name: String,

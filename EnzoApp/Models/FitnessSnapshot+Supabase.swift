@@ -1,6 +1,6 @@
 import Foundation
 
-/// Codable DTO for the `fitness_snapshots` Supabase table.
+/// Codable DTO for fitness snapshot data.
 /// Converts to/from the `FitnessSnapshot` domain model.
 struct FitnessSnapshotRow: Codable {
     var id: UUID?
@@ -38,6 +38,14 @@ struct FitnessSnapshotRow: Codable {
         self.fitnessValue = snapshot.value
         self.fitnessLabel = snapshot.label
         self.trendDirection = snapshot.trend
+    }
+
+    /// Parses the "YYYY-MM-DD" month string into a UTC Date for use with SwiftData.
+    var monthDate: Date {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f.date(from: month) ?? .distantPast
     }
 
     // MARK: - Conversion to domain model
