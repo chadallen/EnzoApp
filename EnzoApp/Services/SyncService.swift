@@ -48,6 +48,10 @@ actor SyncService {
         let durationHours: Double
     }
 
+    // SyncService no longer owns a persistence layer. All writes are handled by
+    // AppState, which owns the SwiftData ModelContext. SyncService is purely a
+    // data-fetching and computation layer: fetch from Strava, compute, return rows.
+    // This keeps SyncService as a testable actor with no SwiftData dependency.
     private let stravaService: StravaService
 
     init(stravaService: StravaService) {
@@ -228,8 +232,15 @@ actor SyncService {
     }
 
     /// Fetches recent cycling activities in detail, extracts segment efforts,
-    /// computes strike scores, and returns rows for the caller to persist.
+    /// computes strike scores, and returns rows for the caller (AppState) to persist.
     /// Raw Strava data is never persisted.
+    ///
+    /// - Parameter fitnessSnapshots: The locally stored fitness history, used to look up
+    ///   the athlete's fitness value at the time each PR was set (fitnessValueAtPR).
+    ///   Previously fetched from Supabase; now passed in from AppState's in-memory state.
+    ///
+    /// - Returns: One SegmentScoreRow per segment where the athlete has a PR.
+    ///   AppState calls upsertSegmentScore() on each returned row.
     func syncPhase2(fitnessSnapshots: [FitnessSnapshot]) async throws -> [SegmentScoreRow] {
         try await stravaService.refreshTokenIfNeeded()
         guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
