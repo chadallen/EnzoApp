@@ -1,17 +1,53 @@
-# Session Handoff — Enzo Voice / Prompt Tuning (next session)
+# Session Handoff — SwiftData Migration UAT (next session)
 
-## What was completed this session (Readiness Score Differentiation)
+## What was completed this session (Supabase → SwiftData migration)
 
-| Change | Files touched | Commit |
+| Change | Files touched | Commits |
 |---|---|---|
-| SegmentScorer: replace trend modifier with PR age bonus + effort gap | `SegmentScorer.swift`, `SegmentScorerTests.swift` | 35e1e71 |
-| SyncService: track latest effort per segment + demo score jitter | `SyncService.swift` | 99e4e7a |
-| EnzoAppApp: force light mode at WindowGroup level | `EnzoAppApp.swift` | 2cbca98 |
-| ArcView: force .colorScheme(.light) on inputArea (dark mode fix) | `ArcView.swift` | 7aff4d6 |
-| SegmentsView: update readiness chip colors to 5-tier thresholds | `SegmentsView.swift` | 0d26506 |
-| Enzo prompt: Italian coach character, updated labels, no markdown | `ClaudeService.swift`, `AppState.swift` | bf0c303 |
-| enzo-voice.MD: sync with updated system prompt | `skills/enzo-voice.MD` | 4fe5816 |
-| REVERTED: Enzo prompt changes (Chad found responses worse) | `ClaudeService.swift`, `AppState.swift`, `skills/enzo-voice.MD` | 4599be2, e72229b |
+| SwiftData @Model classes + shared ModelContainer | `Models/SwiftDataModels.swift` (new) | 87ec584 |
+| SyncService: removed supabaseService, returns data instead of writing | `Services/SyncService.swift` | 87ec584 |
+| AppState: removed supabaseUserId + supabaseService, wired ModelContext | `App/AppState.swift` | 87ec584 |
+| EnzoAppApp: inject .modelContainer(ModelContainer.enzo) | `EnzoAppApp.swift` | 87ec584 |
+| Deleted SupabaseService.swift | `Services/SupabaseService.swift` (deleted) | 87ec584 |
+| Updated Supabase DTO comments to be storage-agnostic | `Models/FitnessSnapshot+Supabase.swift`, `SegmentScore+Supabase.swift`, `Goal+Supabase.swift`, `AthleteContext.swift` | 87ec584 |
+| Cleaned Config.swift, KeychainHelper, Info.plist (removed Supabase keys) | `Utils/Config.swift`, `Utils/KeychainHelper.swift`, `Info.plist` | 87ec584 |
+| xcconfig: removed SUPABASE_HOST, SUPABASE_URL, SUPABASE_ANON_KEY | `Config/Debug.xcconfig`, `Config/Release.xcconfig` (gitignored) | — |
+| Updated SyncServiceTests: removed userId param from computeSnapshots calls | `EnzoAppTests/SyncServiceTests.swift` | 87ec584 |
+| Replaced SupabaseServiceTests with row DTO unit tests | `EnzoAppTests/SupabaseServiceTests.swift` | 87ec584 |
+| Added migration plan doc | `migration-supabase-to-swiftdata.md` (new) | 87ec584 |
+| Inline documentation pass on all modified files | `SwiftDataModels.swift`, `AppState.swift`, `SyncService.swift` | bf798a0 |
+
+---
+
+## Architecture changes — what moved where
+
+### Before
+```
+AppState.loadContext()  → SupabaseService (HTTP GET) → Supabase REST API
+SyncService.syncPhase1() → writes FitnessSnapshotRow via SupabaseService
+SyncService.syncPhase2() → reads + writes via SupabaseService
+AppState.setGoal()      → SupabaseService.saveGoal() (HTTP POST)
+authenticate()          → SupabaseService.createUser() → gets UUID back
+```
+
+### After
+```
+AppState.loadContext()  → ModelContext.fetch(FitnessSnapshotModel) → SwiftData (on-device)
+SyncService.syncPhase1() → returns [FitnessSnapshotRow] to AppState
+AppState.syncPhase1()   → calls upsertSnapshot() for each row → ModelContext
+SyncService.syncPhase2(fitnessSnapshots:) → returns [SegmentScoreRow] to AppState
+AppState.syncPhase2()   → calls upsertSegmentScore() for each row → ModelContext
+AppState.setGoal()      → ModelContext.insert(GoalModel) directly
+authenticate()          → Strava OAuth only, no Supabase call, no UUID
+```
+
+### Key design decisions
+- **No user_id foreign key** — single-user device, every model instance implicitly belongs to the authenticated athlete
+- **No supabaseUserId** — removed from AppState, Keychain, authenticate(), and all sync guards
+- **SyncService owns no persistence** — it computes and returns; AppState owns ModelContext and writes
+- **Upsert pattern** — fetch by unique key (month or stravaSegmentId), update fields if found, insert if not
+- **Identity** — `strava_athlete_id` in Keychain only. Display name + last activity date → UserDefaults
+- **CloudKit path** — swapping `ModelConfiguration(isStoredInMemoryOnly: false)` for `ModelConfiguration(cloudKitContainerIdentifier:)` enables iCloud sync with one line change
 
 ---
 
@@ -19,89 +55,93 @@
 
 All changes committed and pushed. Working tree is clean. Branch: `main`.
 
-**Important — Chad must re-sync to see updated scores:**
-Settings → Reset sync history → Sync now
-
-This rewrites `strikeScore` and `strikeLabel` in Supabase with the new formula (PR age bonus + effort gap modifier) and demo jitter.
-
----
-
-## What the readiness score formula looks like now
-
-```
-score = clamp(0.75 + fitnessDelta + prAgeBonus + effortGapModifier, 0, 1)
-```
-
-- `fitnessDelta` = `currentFitnessValue − fitnessValueAtPR` (primary signal)
-- `prAgeBonus` = `min(daysSincePR / 1095, 1.0) × 0.15` (linear, 0→+0.15 over 3 years)
-- `effortGapModifier` = `clamp(−gapRatio × 0.5, −0.20, +0.10)` where `gapRatio = (lastEffortSeconds − prSeconds) / prSeconds`
-- **Demo jitter**: `±0.25` deterministic noise seeded from `segId` — makes scores look meaningfully spread for demos. **Must be removed before shipping.**
-- Trend modifier removed entirely (was ±0.05, global signal, same for all segments)
-
-`lastEffortSeconds` is now correctly populated as the actual most recent elapsed time (previously always equalled `prSeconds`).
+**Build status:** BUILD SUCCEEDED (tested against iPhone 17 Pro simulator)  
+**Test status:** All tests pass except 2 pre-existing failures unrelated to this migration:
+- `SegmentScorerTests/lowScoreWhenLessFitThanPR()` — pre-existing
+- `AthleteContextTests/contextPayloadHistoryOrder()` — pre-existing
 
 ---
 
-## Dark mode fix (complete)
+## Next session: UAT — SwiftData migration acceptance testing
 
-App was rendering black text on dark backgrounds when the device was in dark mode. Fixed with:
-1. `preferredColorScheme(.light)` on `WindowGroup` in `EnzoAppApp.swift`
-2. `.colorScheme(.light)` directly on `inputArea` in `ArcView.swift` (safeAreaInset doesn't inherit window-level preference reliably)
+The migration has not been run on a real device against live Strava data. The next session is acceptance testing. **The agent's job is to guide Chad through the checklist and fix any bugs found.** No new features until UAT passes.
+
+### UAT checklist
+
+Run these in order. Each one must pass before moving to the next.
+
+**1. Fresh install**
+- Delete the app from the device
+- Build and install fresh
+- Connect Strava (OAuth flow)
+- Run Phase 1 + Phase 2 sync (onboarding flow)
+- Verify: fitness chart populates with real data
+- Verify: Targets tab shows segment list with real segments
+- Verify: Strike scores and labels are correct
+
+**2. Persistence across relaunch**
+- Force-quit the app
+- Reopen
+- Verify: fitness chart still shows — no blank state, no re-sync needed
+- Verify: segments still load — data survived relaunch
+- Verify: no network calls to Supabase (it's gone — any Supabase errors would indicate stale code)
+
+**3. Goal persistence**
+- Set a goal segment in Targets tab
+- Force-quit
+- Reopen
+- Verify: same goal segment is still active (marked with goal indicator)
+
+**4. Reset sync + re-sync**
+- Settings → Reset sync history
+- Verify: local store is wiped (segments and fitness chart should revert to preview/empty)
+- Sync now (manual sync from settings)
+- Verify: data repopulates correctly
+
+**5. Disconnect + reconnect**
+- Settings → Disconnect
+- Verify: app returns to ConnectView, all data cleared
+- Reconnect Strava
+- Run sync again
+- Verify: clean state, no stale data from previous session
+
+### After UAT passes
+
+Once all 5 checklist items pass, move on to deferred cleanup (in order):
+1. `GoalSettingView.strikeLabelColor()` — maps old 3-tier labels, all fall through to amber. One-line fix per label.
+2. `enzo-voice.MD` stale labels — update system prompt section with current 5-tier fitness + readiness labels before any prompt work
+3. Step 11b: Enzo voice/prompt tuning — use `scripts/enzo_playground.py` first, never touch ClaudeService.swift without playground validation
 
 ---
 
-## Enzo prompt: reverted
+## Key files for next session
 
-Attempted to add Italian coach character (piano piano, Dai, Coraggio etc.) and updated labels/no-markdown rules. Chad found the responses worse. Both commits were reverted cleanly. The system prompt is back to the pre-session state.
-
-**Known issues still in system prompt (not fixed this session):**
-- Readiness labels still say "No brainer, Worth a shot, Not quite ready" — stale (5-tier labels not reflected)
-- Fitness labels in `enzo-voice.MD` system prompt section still say "Peak shape, Strong base, Building, Coming back" — stale
-
-These should be fixed in the next prompt tuning session, carefully, with playground testing before touching the live app.
-
----
-
-## Next session: Enzo Voice / Prompt Tuning
-
-### The problem
-
-The Enzo prompt is hard to tune directly in the app — there's no fast feedback loop. Responses take a full sync + app launch cycle to evaluate. The playground script (`scripts/enzo_playground.py`) exists for exactly this, but hasn't been used for tuning yet.
-
-### Recommended approach
-
-1. **Use the playground first.** Run `python3 scripts/enzo_playground.py --mode chat --message "What should I do this week?"` and iterate on the system prompt there. Fast feedback, no build required.
-2. **Fix stale labels in system prompt.** Update readiness labels (5-tier) and fitness labels before any other tuning.
-3. **Suppress markdown.** Add explicit no-markdown instruction. Test that it actually works in playground before committing.
-4. **Italian character — optional.** Chad liked the idea but the implementation made responses worse. If retrying: use the playground to find the right balance before touching ClaudeService.swift.
-5. **Lookahead prompt.** The improved version (goal-aware, direct address) was part of the reverted commit. Consider re-applying just the lookahead prompt change — it was directionally correct and simpler than the system prompt changes.
-
-### Other things to look at this session
-
-- **GoalSettingView.strikeLabelColor()** maps old 3-tier labels — falls through to amber for all new 5-tier labels. Simple fix.
-- **Demo jitter in SyncService** — remove before any real user testing or App Store submission.
-- **`enzo-voice.MD` stale labels** — fix alongside any prompt work.
-
-### Working rules
-
-- Read CLAUDE.md and handoff.MD before doing anything.
-- Do NOT read scratch.md or UI-punch-list.md.
-- Do not write a single line of code without presenting the plan and getting explicit approval from Chad.
-- Make frequent, small commits — one change per commit, descriptive message.
-- When Chad needs to test on device or perform a manual action (re-sync, playground run, etc.), stop and prompt him explicitly before continuing.
+| File | What it does |
+|---|---|
+| `EnzoApp/Models/SwiftDataModels.swift` | @Model classes + ModelContainer.enzo — the persistence schema |
+| `EnzoApp/App/AppState.swift` | loadContext, loadSegments, syncPhase1/2, setGoal, upsert helpers |
+| `EnzoApp/Services/SyncService.swift` | Phase 1 returns (count, snapshots, lastActivityDate); Phase 2 takes fitnessSnapshots, returns [SegmentScoreRow] |
+| `migration-supabase-to-swiftdata.md` | Full migration plan with architecture diagrams — good reference |
 
 ---
 
-## Build notes from this session
+## Working rules for next agent
 
-**Demo jitter in SyncService — remove before shipping**
-`SyncService.syncPhase2` applies a deterministic ±0.25 jitter to each segment's strike score, seeded from `segId` using a Knuth multiplicative hash. This makes scores look meaningfully spread during demos. The comment in code says "DEMO" and "Remove before shipping." Do not raise `phase2ActivityLimit` or run production syncs while this is active.
+- **Read CLAUDE.md and handoff.MD before doing anything.**
+- **Do NOT read scratch.md or UI-punch-list.md.**
+- **Do not write a single line of code without presenting a plan and getting explicit approval from Chad.**
+- **Prompt Chad when he needs to test on device or perform a manual action** — stop and wait, don't continue past a manual step.
+- Make frequent small commits — one change per commit, descriptive message.
+- Build must compile before any commit. Run `xcodebuild test` before marking any fix done.
 
-**latestEffortMap is populated correctly now**
-Previously `lastEffortSeconds` always equalled `prSeconds` because it was only set inside the `prRank == 1` branch. Now a `latestEffortMap: [Int64: Int]` is populated on the first occurrence of each segment in the activity loop (activities are newest-first, so first = most recent). `lastEffortSeconds` in the PR row now uses `latestEffortMap[segId] ?? prSecs`.
+---
 
-**Prompt revert lesson**
-Prompt changes are hard to evaluate without a fast feedback loop. Always use `scripts/enzo_playground.py` to test before touching `ClaudeService.swift` or `AppState.swift`. The playground streams responses in ~2 seconds — much faster than the app's cache + sync cycle.
+## Deferred items (carry forward)
 
-**safeAreaInset dark mode**
-`preferredColorScheme(.light)` on `WindowGroup` is not sufficient for `safeAreaInset` content — it needs an explicit `.colorScheme(.light)` on the view itself. Both are now in place.
+- **Demo jitter in SyncService** — `±0.25` deterministic noise seeded from `segId` in `syncPhase2`. Marked "DEMO — Remove before shipping." Do not remove until Chad explicitly approves.
+- **`enzo-voice.MD` stale labels** — system prompt section has old fitness labels (Peak shape, Strong base...) and old readiness labels. Fix before any prompt work in Step 11b.
+- **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all 5-tier labels fall through to amber.
+- **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
+- **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden.
+- **Sync progress indicator** — no visible indicator in main UI during manual sync from SettingsSheet.
+- **Step 12: Strava webhooks** — not needed for beta.
