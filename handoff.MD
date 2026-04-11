@@ -1,36 +1,19 @@
-# Session Handoff — SwiftData Migration UAT (next session)
+# Session Handoff — UAT: SwiftData Migration (next session)
 
-## What was completed this session (Supabase → SwiftData migration)
+## What was completed last session (build verification after directory move)
 
-| Change | Files touched | Commits |
-|---|---|---|
-| SwiftData @Model classes + shared ModelContainer | `Models/SwiftDataModels.swift` (new) | 87ec584 |
-| SyncService: removed supabaseService, returns data instead of writing | `Services/SyncService.swift` | 87ec584 |
-| AppState: removed supabaseUserId + supabaseService, wired ModelContext | `App/AppState.swift` | 87ec584 |
-| EnzoAppApp: inject .modelContainer(ModelContainer.enzo) | `EnzoAppApp.swift` | 87ec584 |
-| Deleted SupabaseService.swift | `Services/SupabaseService.swift` (deleted) | 87ec584 |
-| Updated Supabase DTO comments to be storage-agnostic | `Models/FitnessSnapshot+Supabase.swift`, `SegmentScore+Supabase.swift`, `Goal+Supabase.swift`, `AthleteContext.swift` | 87ec584 |
-| Cleaned Config.swift, KeychainHelper, Info.plist (removed Supabase keys) | `Utils/Config.swift`, `Utils/KeychainHelper.swift`, `Info.plist` | 87ec584 |
-| xcconfig: removed SUPABASE_HOST, SUPABASE_URL, SUPABASE_ANON_KEY | `Config/Debug.xcconfig`, `Config/Release.xcconfig` (gitignored) | — |
-| Updated SyncServiceTests: removed userId param from computeSnapshots calls | `EnzoAppTests/SyncServiceTests.swift` | 87ec584 |
-| Replaced SupabaseServiceTests with row DTO unit tests | `EnzoAppTests/SupabaseServiceTests.swift` | 87ec584 |
-| Added migration plan doc | `migration-supabase-to-swiftdata.md` (new) | 87ec584 |
-| Inline documentation pass on all modified files | `SwiftDataModels.swift`, `AppState.swift`, `SyncService.swift` | bf798a0 |
+| Change | Details |
+|---|---|
+| Project directory moved | `/Users/chadallen/EnzoApp` → `/Users/chadallen/projects/EnzoApp` |
+| Build verified | `xcodebuild` BUILD SUCCEEDED against iPhone 17 Pro simulator (Xcode 26, iOS 26.3.1) |
+| Gitignore updated | Added `.claude/settings.json`, `__pycache__/`, `*.MP4` |
+| PRD.md updated | Section 3 backend reference changed from "Supabase" to "SwiftData" |
+| No code changes | Migration code is untouched since commits 87ec584 + bf798a0 |
 
 ---
 
-## Architecture changes — what moved where
+## Architecture (unchanged from migration session)
 
-### Before
-```
-AppState.loadContext()  → SupabaseService (HTTP GET) → Supabase REST API
-SyncService.syncPhase1() → writes FitnessSnapshotRow via SupabaseService
-SyncService.syncPhase2() → reads + writes via SupabaseService
-AppState.setGoal()      → SupabaseService.saveGoal() (HTTP POST)
-authenticate()          → SupabaseService.createUser() → gets UUID back
-```
-
-### After
 ```
 AppState.loadContext()  → ModelContext.fetch(FitnessSnapshotModel) → SwiftData (on-device)
 SyncService.syncPhase1() → returns [FitnessSnapshotRow] to AppState
@@ -41,22 +24,14 @@ AppState.setGoal()      → ModelContext.insert(GoalModel) directly
 authenticate()          → Strava OAuth only, no Supabase call, no UUID
 ```
 
-### Key design decisions
-- **No user_id foreign key** — single-user device, every model instance implicitly belongs to the authenticated athlete
-- **No supabaseUserId** — removed from AppState, Keychain, authenticate(), and all sync guards
-- **SyncService owns no persistence** — it computes and returns; AppState owns ModelContext and writes
-- **Upsert pattern** — fetch by unique key (month or stravaSegmentId), update fields if found, insert if not
-- **Identity** — `strava_athlete_id` in Keychain only. Display name + last activity date → UserDefaults
-- **CloudKit path** — swapping `ModelConfiguration(isStoredInMemoryOnly: false)` for `ModelConfiguration(cloudKitContainerIdentifier:)` enables iCloud sync with one line change
-
 ---
 
 ## Current app state
 
-All changes committed and pushed. Working tree is clean. Branch: `main`.
+All changes committed and pushed. Branch: `main`.
 
-**Build status:** BUILD SUCCEEDED (tested against iPhone 17 Pro simulator)  
-**Test status:** All tests pass except 2 pre-existing failures unrelated to this migration:
+**Build status:** BUILD SUCCEEDED (iPhone 17 Pro simulator, Xcode 26, iOS 26.3.1)
+**Test status:** All tests pass except 2 pre-existing failures unrelated to migration:
 - `SegmentScorerTests/lowScoreWhenLessFitThanPR()` — pre-existing
 - `AthleteContextTests/contextPayloadHistoryOrder()` — pre-existing
 
@@ -145,3 +120,4 @@ Once all 5 checklist items pass, move on to deferred cleanup (in order):
 - **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden.
 - **Sync progress indicator** — no visible indicator in main UI during manual sync from SettingsSheet.
 - **Step 12: Strava webhooks** — not needed for beta.
+- **Empty state UI** — After a fresh install with no sync yet, the fitness ring and chart show blank/grey states with no explanation. Should show a "Connect Strava to get started" prompt or similar when `snapshots.isEmpty`. Deferred.
