@@ -9,10 +9,10 @@ enum SegmentScorer {
 
     // MARK: - Constants
 
-    static let strikeNowThreshold: Double = 0.80
-    static let almostThereThreshold: Double = 0.65
-    static let worthAShotThreshold: Double = 0.45
-    static let gettingThereThreshold: Double = 0.25
+    nonisolated(unsafe) static let strikeNowThreshold: Double = 0.80
+    nonisolated(unsafe) static let almostThereThreshold: Double = 0.65
+    nonisolated(unsafe) static let worthAShotThreshold: Double = 0.45
+    nonisolated(unsafe) static let gettingThereThreshold: Double = 0.25
 
     // MARK: - Strike score (0.0–1.0)
 
@@ -33,7 +33,7 @@ enum SegmentScorer {
     ///   - lastEffortSeconds: Most recent elapsed time on this segment.
     ///   - prSeconds: PR elapsed time on this segment.
     /// - Returns: Strike score clamped to 0.0–1.0.
-    static func strikeScore(
+    nonisolated static func strikeScore(
         fitnessValueAtPR: Double,
         currentFitnessValue: Double,
         prDate: String,
@@ -71,7 +71,7 @@ enum SegmentScorer {
     // MARK: - Strike label
 
     /// Maps a strike score to a user-facing readiness label.
-    static func strikeLabel(for score: Double) -> String {
+    nonisolated static func strikeLabel(for score: Double) -> String {
         switch score {
         case strikeNowThreshold...:                          return "Strike now"
         case almostThereThreshold..<strikeNowThreshold:     return "Almost there"
@@ -88,7 +88,7 @@ enum SegmentScorer {
     ///
     /// Rationale: you don't need to exactly match your peak to challenge a PR —
     /// being one tier below is close enough to make a run at it worthwhile.
-    static func requiredFitnessLabel(fitnessValueAtPR: Double) -> String {
+    nonisolated static func requiredFitnessLabel(fitnessValueAtPR: Double) -> String {
         let prLabel = FitnessCalculator.fitnessLabel(for: fitnessValueAtPR)
         switch prLabel {
         case "Epic":      return "Strong"
