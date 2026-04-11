@@ -2,7 +2,7 @@ import Foundation
 
 /// Codable DTO for fitness snapshot data.
 /// Converts to/from the `FitnessSnapshot` domain model.
-struct FitnessSnapshotRow: Codable {
+struct FitnessSnapshotRow: Codable, Sendable {
     var id: UUID?
     var userId: UUID?
     /// PostgreSQL `date` format: "YYYY-MM-DD" (always stored as first of month)
@@ -28,7 +28,7 @@ struct FitnessSnapshotRow: Codable {
 
     // MARK: - Conversion from domain model
 
-    init(snapshot: FitnessSnapshot, userId: UUID? = nil) {
+    nonisolated init(snapshot: FitnessSnapshot, userId: UUID? = nil) {
         self.id = nil
         self.userId = userId
         self.month = snapshot.month + "-01"   // "2025-08" → "2025-08-01"

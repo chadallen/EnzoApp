@@ -15,7 +15,7 @@ enum StravaError: Error {
 
 // MARK: - Response models
 
-struct StravaTokenResponse: Decodable {
+struct StravaTokenResponse: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String
     let expiresAt: Int          // Unix timestamp
@@ -27,9 +27,17 @@ struct StravaTokenResponse: Decodable {
         case expiresAt = "expires_at"
         case athlete
     }
+
+    nonisolated init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accessToken = try c.decode(String.self, forKey: .accessToken)
+        refreshToken = try c.decode(String.self, forKey: .refreshToken)
+        expiresAt = try c.decode(Int.self, forKey: .expiresAt)
+        athlete = try c.decodeIfPresent(StravaAthlete.self, forKey: .athlete)
+    }
 }
 
-struct StravaAthlete: Decodable {
+struct StravaAthlete: Decodable, Sendable {
     let id: Int64
     let firstName: String
     let lastName: String
@@ -38,6 +46,13 @@ struct StravaAthlete: Decodable {
         case id
         case firstName = "firstname"
         case lastName = "lastname"
+    }
+
+    nonisolated init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int64.self, forKey: .id)
+        firstName = try c.decode(String.self, forKey: .firstName)
+        lastName = try c.decode(String.self, forKey: .lastName)
     }
 
     var displayName: String { "\(firstName) \(lastName)" }
