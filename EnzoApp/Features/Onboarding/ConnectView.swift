@@ -12,19 +12,17 @@ struct ConnectView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                VStack(spacing: 16) {
-                    Image(systemName: "figure.outdoor.cycle")
-                        .font(.system(size: 56))
-                        .foregroundStyle(Color.enzoAccent)
+                VStack(spacing: 24) {
+                    Image("EnzoIcon")
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 13.5))
 
-                    Text("Enzo")
-                        .font(.system(.title, design: .rounded, weight: .bold))
-                        .foregroundStyle(Color.enzoPrimary)
-
-                    Text("Meet Enzo. Your cycling companion.")
-                        .font(.system(.body))
+                    Text(Config.connectWelcomeText)
+                        .font(.system(.body, design: .rounded))
                         .foregroundStyle(Color.enzoSecondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
 
                 Spacer()
@@ -36,18 +34,18 @@ struct ConnectView: View {
                         Group {
                             if isConnecting {
                                 ProgressView()
-                                    .tint(Color.enzoBg)
+                                    .tint(.white)
                             } else {
-                                Text("Connect Strava")
+                                Text("Connect")
                                     .font(.system(.body, design: .default, weight: .semibold))
-                                    .foregroundStyle(Color.enzoBg)
+                                    .foregroundStyle(.white)
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
                     }
                     .background(Color.enzoAccent)
-                    .clipShape(RoundedRectangle(cornerRadius: 26))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(isConnecting)
 
                     if let error = errorMessage {
