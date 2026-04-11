@@ -7,10 +7,10 @@ enum FitnessCalculator {
     // MARK: - Constants
 
     /// Minimum ride duration (minutes) to qualify for efficiency computation.
-    static let minimumDurationMinutes: Double = 30
+    nonisolated(unsafe) static let minimumDurationMinutes: Double = 30
 
     /// Cycling sport types accepted for fitness computation.
-    static let cyclingTypes: Set<String> = [
+    nonisolated(unsafe) static let cyclingTypes: Set<String> = [
         "Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "EMountainBikeRide"
     ]
 
@@ -22,7 +22,7 @@ enum FitnessCalculator {
     /// GravelRide gets a 1.15× adjusted-distance bonus.
     ///
     /// Returns `nil` if the ride is too short or has no valid HR.
-    static func efficiency(
+    nonisolated static func efficiency(
         distanceKm: Double,
         elevationGainM: Double,
         sportType: String,
@@ -44,7 +44,7 @@ enum FitnessCalculator {
     ///
     /// Used for normalization to avoid outlier months (illness, minimal riding) compressing
     /// the fitness scale. Pass the full set of all-time ride efficiencies.
-    static func percentile(_ p: Int, of values: [Double]) -> Double {
+    nonisolated static func percentile(_ p: Int, of values: [Double]) -> Double {
         guard !values.isEmpty else { return 0 }
         let sorted = values.sorted()
         guard sorted.count > 1 else { return sorted[0] }
@@ -64,7 +64,7 @@ enum FitnessCalculator {
     ///   - allTimeMin: Personal all-time minimum ride efficiency.
     ///   - allTimeMax: Personal all-time maximum ride efficiency.
     /// - Returns: Clamped fitness value 0.0–1.0. Returns 0 if empty, 0.5 if min == max.
-    static func fitnessValue(
+    nonisolated static func fitnessValue(
         recentEfficiencies: [Double],
         allTimeMin: Double,
         allTimeMax: Double
@@ -79,12 +79,12 @@ enum FitnessCalculator {
 
     /// Minimum absolute efficiency change to register as a trend.
     /// Calibrated against real data (efficiency range ~0.10–0.28): ±0.008 ≈ 4–8% relative change.
-    static let trendThreshold: Double = 0.008
+    nonisolated(unsafe) static let trendThreshold: Double = 0.008
 
     /// Compares average efficiency in the most recent 4 weeks vs the prior 4 weeks.
     ///
     /// - Returns: `"up"` if change > trendThreshold, `"down"` if change < -trendThreshold, `"flat"` otherwise.
-    static func trendDirection(recentFourWeeks: Double, priorFourWeeks: Double) -> String {
+    nonisolated static func trendDirection(recentFourWeeks: Double, priorFourWeeks: Double) -> String {
         let change = recentFourWeeks - priorFourWeeks
         if change > trendThreshold { return "up" }
         if change < -trendThreshold { return "down" }
@@ -95,7 +95,7 @@ enum FitnessCalculator {
 
     /// Maps a 0.0–1.0 fitness value to a user-facing label.
     /// Thresholds match `AthleteContext.fitnessLabel(for:)`.
-    static func fitnessLabel(for value: Double) -> String {
+    nonisolated static func fitnessLabel(for value: Double) -> String {
         switch value {
         case 0.85...: return "Epic"
         case 0.65..<0.85: return "Strong"

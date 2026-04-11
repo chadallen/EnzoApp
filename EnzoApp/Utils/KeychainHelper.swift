@@ -3,7 +3,7 @@ import Security
 
 enum KeychainHelper {
 
-    static func save(_ value: String, for key: String) {
+    nonisolated static func save(_ value: String, for key: String) {
         guard let data = value.data(using: .utf8) else { return }
 
         let query: [CFString: Any] = [
@@ -24,7 +24,7 @@ enum KeychainHelper {
         }
     }
 
-    static func load(for key: String) -> String? {
+    nonisolated static func load(for key: String) -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key,
@@ -45,7 +45,7 @@ enum KeychainHelper {
     }
 
     @discardableResult
-    static func delete(for key: String) -> Bool {
+    nonisolated static func delete(for key: String) -> Bool {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key
@@ -58,8 +58,8 @@ enum KeychainHelper {
 // MARK: - Key constants
 
 extension KeychainHelper {
-    static let stravaAccessToken = "strava_access_token"
-    static let stravaRefreshToken = "strava_refresh_token"
-    static let stravaTokenExpiry = "strava_token_expiry"
-    static let stravaAthleteId = "strava_athlete_id"
+    nonisolated(unsafe) static let stravaAccessToken = "strava_access_token"
+    nonisolated(unsafe) static let stravaRefreshToken = "strava_refresh_token"
+    nonisolated(unsafe) static let stravaTokenExpiry = "strava_token_expiry"
+    nonisolated(unsafe) static let stravaAthleteId = "strava_athlete_id"
 }
