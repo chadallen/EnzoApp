@@ -36,7 +36,7 @@ struct SegmentScore: Identifiable, Hashable {
 
     // MARK: - Hardcoded preview data (Section 18)
 
-    static let previewSegments: [SegmentScore] = [
+    nonisolated(unsafe) static let previewSegments: [SegmentScore] = [
         SegmentScore(
             name: "Hawk Hill",
             prSeconds: 342,

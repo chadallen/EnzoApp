@@ -36,7 +36,7 @@ struct FitnessSnapshot: Identifiable {
 
     // MARK: - Hardcoded preview data (Section 18)
 
-    static let previewSnapshots: [FitnessSnapshot] = [
+    nonisolated(unsafe) static let previewSnapshots: [FitnessSnapshot] = [
         FitnessSnapshot(month: "2024-10", label: "Baseline",   value: 0.24, hours: 7.6,  rides: 7,  trend: "flat"),
         FitnessSnapshot(month: "2024-11", label: "Recovering", value: 0.12, hours: 4.1,  rides: 4,  trend: "down"),
         FitnessSnapshot(month: "2024-12", label: "Recovering", value: 0.13, hours: 4.3,  rides: 4,  trend: "flat"),
