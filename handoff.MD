@@ -1,18 +1,20 @@
 # Session Handoff — UAT: SwiftData Migration (next session)
 
-## What was completed last session (build verification after directory move)
+## What was completed this session
 
-| Change | Details |
-|---|---|
-| Project directory moved | `/Users/chadallen/EnzoApp` → `/Users/chadallen/projects/EnzoApp` |
-| Build verified | `xcodebuild` BUILD SUCCEEDED against iPhone 17 Pro simulator (Xcode 26, iOS 26.3.1) |
-| Gitignore updated | Added `.claude/settings.json`, `__pycache__/`, `*.MP4` |
-| PRD.md updated | Section 3 backend reference changed from "Supabase" to "SwiftData" |
-| No code changes | Migration code is untouched since commits 87ec584 + bf798a0 |
+| Change | Details | Commit |
+|---|---|---|
+| Project moved to `/Users/chadallen/projects/EnzoApp` | Build verified against iPhone 17 Pro sim (Xcode 26, iOS 26.3.1) | — |
+| Gitignore | Added `.claude/settings.json`, `__pycache__/`, `*.MP4` | f02f8d3 |
+| PRD.md | Section 3 backend updated from "Supabase" to "SwiftData" | 00e76be |
+| NaN fix in FitnessRingView | `max(0.001, ...)` guard on both SectorMark angles — prevented CoreGraphics NaN crash on empty state | 852ee96 |
+| Swift 6 concurrency warnings | `nonisolated(unsafe)` on static lets, `nonisolated` on static methods, `Sendable` + `nonisolated init` on DTOs — zero warnings now | 20441ea, 78e0d1f |
+| ConnectView redesign | Real app icon (EnzoIcon imageset), welcome copy from `Config.connectWelcomeText`, plain "Connect" button | 6117730 |
+| Kickoff prompt created | `kickoff-prompt.MD` added | f02f8d3 |
 
 ---
 
-## Architecture (unchanged from migration session)
+## Architecture (SwiftData, unchanged)
 
 ```
 AppState.loadContext()  → ModelContext.fetch(FitnessSnapshotModel) → SwiftData (on-device)
@@ -28,26 +30,31 @@ authenticate()          → Strava OAuth only, no Supabase call, no UUID
 
 ## Current app state
 
-All changes committed and pushed. Branch: `main`.
+All changes committed and pushed. Branch: `main`. Working tree clean.
 
-**Build status:** BUILD SUCCEEDED (iPhone 17 Pro simulator, Xcode 26, iOS 26.3.1)
+**Build status:** BUILD SUCCEEDED (iPhone 17 Pro simulator, Xcode 26, iOS 26.3.1), zero warnings  
 **Test status:** All tests pass except 2 pre-existing failures unrelated to migration:
 - `SegmentScorerTests/lowScoreWhenLessFitThanPR()` — pre-existing
 - `AthleteContextTests/contextPayloadHistoryOrder()` — pre-existing
+
+**Runtime logging:** Active via `NSLog` throughout AppState. Stream with:
+```bash
+log stream --predicate 'process == "EnzoApp"' --level debug
+```
 
 ---
 
 ## Next session: UAT — SwiftData migration acceptance testing
 
-The migration has not been run on a real device against live Strava data. The next session is acceptance testing. **The agent's job is to guide Chad through the checklist and fix any bugs found.** No new features until UAT passes.
+The migration code is complete but has never been run against live Strava data on a real device. **The agent's job is to guide Chad through the checklist and fix any bugs found.** No new features until UAT passes.
 
 ### UAT checklist
 
-Run these in order. Each one must pass before moving to the next.
+Run these in order. Each must pass before moving to the next.
 
 **1. Fresh install**
 - Delete the app from the device
-- Build and install fresh
+- Build and install fresh (new ConnectView will show)
 - Connect Strava (OAuth flow)
 - Run Phase 1 + Phase 2 sync (onboarding flow)
 - Verify: fitness chart populates with real data
@@ -59,44 +66,43 @@ Run these in order. Each one must pass before moving to the next.
 - Reopen
 - Verify: fitness chart still shows — no blank state, no re-sync needed
 - Verify: segments still load — data survived relaunch
-- Verify: no network calls to Supabase (it's gone — any Supabase errors would indicate stale code)
 
 **3. Goal persistence**
 - Set a goal segment in Targets tab
-- Force-quit
-- Reopen
-- Verify: same goal segment is still active (marked with goal indicator)
+- Force-quit, reopen
+- Verify: same goal segment is still active
 
 **4. Reset sync + re-sync**
 - Settings → Reset sync history
-- Verify: local store is wiped (segments and fitness chart should revert to preview/empty)
+- Verify: local store wiped (segments + chart revert to preview/empty)
 - Sync now (manual sync from settings)
 - Verify: data repopulates correctly
 
 **5. Disconnect + reconnect**
 - Settings → Disconnect
 - Verify: app returns to ConnectView, all data cleared
-- Reconnect Strava
-- Run sync again
-- Verify: clean state, no stale data from previous session
+- Reconnect Strava, run sync
+- Verify: clean state, no stale data
 
 ### After UAT passes
 
 Once all 5 checklist items pass, move on to deferred cleanup (in order):
-1. `GoalSettingView.strikeLabelColor()` — maps old 3-tier labels, all fall through to amber. One-line fix per label.
-2. `enzo-voice.MD` stale labels — update system prompt section with current 5-tier fitness + readiness labels before any prompt work
-3. Step 11b: Enzo voice/prompt tuning — use `scripts/enzo_playground.py` first, never touch ClaudeService.swift without playground validation
+1. `GoalSettingView.strikeLabelColor()` — maps old 3-tier labels, all fall through to amber
+2. `enzo-voice.MD` stale labels — fix before any prompt work
+3. Step 11b: Enzo voice/prompt tuning — playground first, never touch ClaudeService.swift without it
 
 ---
 
-## Key files for next session
+## Key files
 
 | File | What it does |
 |---|---|
-| `EnzoApp/Models/SwiftDataModels.swift` | @Model classes + ModelContainer.enzo — the persistence schema |
+| `EnzoApp/Models/SwiftDataModels.swift` | @Model classes + ModelContainer.enzo |
 | `EnzoApp/App/AppState.swift` | loadContext, loadSegments, syncPhase1/2, setGoal, upsert helpers |
-| `EnzoApp/Services/SyncService.swift` | Phase 1 returns (count, snapshots, lastActivityDate); Phase 2 takes fitnessSnapshots, returns [SegmentScoreRow] |
-| `migration-supabase-to-swiftdata.md` | Full migration plan with architecture diagrams — good reference |
+| `EnzoApp/Services/SyncService.swift` | Phase 1 + Phase 2 sync logic |
+| `EnzoApp/Features/Onboarding/ConnectView.swift` | New onboarding screen |
+| `EnzoApp/Utils/Config.swift` | API keys + `connectWelcomeText` UI copy |
+| `migration-supabase-to-swiftdata.md` | Full migration architecture reference |
 
 ---
 
@@ -113,11 +119,11 @@ Once all 5 checklist items pass, move on to deferred cleanup (in order):
 
 ## Deferred items (carry forward)
 
-- **Demo jitter in SyncService** — `±0.25` deterministic noise seeded from `segId` in `syncPhase2`. Marked "DEMO — Remove before shipping." Do not remove until Chad explicitly approves.
-- **`enzo-voice.MD` stale labels** — system prompt section has old fitness labels (Peak shape, Strong base...) and old readiness labels. Fix before any prompt work in Step 11b.
+- **Demo jitter in SyncService** — `±0.25` deterministic noise seeded from `segId` in `syncPhase2`. Tagged "DEMO — Remove before shipping." Do not remove until Chad explicitly approves.
+- **`enzo-voice.MD` stale labels** — system prompt section has old fitness labels. Fix before any prompt work in Step 11b.
 - **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all 5-tier labels fall through to amber.
 - **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
 - **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden.
-- **Sync progress indicator** — no visible indicator in main UI during manual sync from SettingsSheet.
+- **Sync progress indicator** — no visible indicator during manual sync from SettingsSheet.
+- **Empty state UI** — After fresh install with no sync, fitness ring and chart show blank/grey with no explanation. Should show a prompt when `snapshots.isEmpty`. Deferred.
 - **Step 12: Strava webhooks** — not needed for beta.
-- **Empty state UI** — After a fresh install with no sync yet, the fitness ring and chart show blank/grey states with no explanation. Should show a "Connect Strava to get started" prompt or similar when `snapshots.isEmpty`. Deferred.
