@@ -75,6 +75,7 @@ Read the relevant skill file before starting that type of work.
 - **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden. Needs dedicated time.
 - **Sync progress indicator** — no visible indicator in main UI during manual sync from SettingsSheet.
 - **Step 12: Strava webhooks** — not needed for beta.
+- **Empty state UI** — Fresh install with no sync shows blank/grey ring and chart. Should show a "Connect Strava" prompt when `snapshots.isEmpty`. Deferred.
 
 ---
 

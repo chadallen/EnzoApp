@@ -42,7 +42,7 @@ These inform every product, UI, and copy decision:
 * **IDE:** Xcode (build, simulator, signing)
 * **Primary language:** Swift / SwiftUI
 * **Target platform:** iOS 17+, iPhone only (iPad later)
-* **Backend:** Supabase (Postgres + Edge Functions)
+* **Backend:** SwiftData (on-device SQLite — no remote backend)
 * **AI:** Anthropic Claude API (`claude-sonnet-4-6`)
 * **Data source:** Strava API (OAuth 2.0)
 * **Assumed user:** Established cyclists with meaningful Strava history. The fitness model requires sufficient ride data to produce reliable signals — riders with fewer than ~100 rides or less than a year of history will see reduced accuracy. Enzo is not designed for beginners.
