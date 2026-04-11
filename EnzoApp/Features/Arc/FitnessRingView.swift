@@ -51,7 +51,7 @@ struct FitnessRingView: View {
                     ZStack {
                         Chart {
                             SectorMark(
-                                angle: .value("Fitness", context.currentFitnessValue),
+                                angle: .value("Fitness", max(0.001, context.currentFitnessValue)),
                                 innerRadius: .ratio(0.65),
                                 angularInset: 2
                             )
@@ -85,7 +85,7 @@ struct FitnessRingView: View {
                         ZStack {
                             Chart {
                                 SectorMark(
-                                    angle: .value("Readiness", seg.strikeScore),
+                                    angle: .value("Readiness", max(0.001, seg.strikeScore)),
                                     innerRadius: .ratio(0.65),
                                     angularInset: 2
                                 )
