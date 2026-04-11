@@ -20,6 +20,13 @@ xcuserdata/
 
 # Python venv
 scripts/.venv/
+__pycache__/
+
+# Claude Code local settings
+.claude/settings.json
+
+# Screen recordings
+*.MP4
 
 # Real athlete data — never commit
 scripts/data/
