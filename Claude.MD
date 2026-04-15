@@ -29,7 +29,7 @@ Build gotchas: @.claude/rules/build-notes.md — check before making changes in 
 
 **Testing** — Write unit tests alongside every logic file. Swift Testing (not XCTest). Test pure functions only. Every view needs a `#Preview` with hardcoded data. Run tests before marking any step done.
 
-**UI** — Light mode only. Background `#FAFAFA`, cards `#F7F7FA`, primary `#000000`, secondary `#666666`, accent `#FC5201`. All colors via `Color.enzoXxx` constants — never raw hex in views. No streaks, no guilt, no missed-workout states.
+**UI** — Light and dark mode will both be supported (Phase J of `ux-audit.md`). Until Phase J is complete, the app is forced to light mode via `.preferredColorScheme(.light)` — do not remove this yet. Background `#FAFAFA`, cards `#F7F7FA`, primary `#000000`, secondary `#666666`, accent `#FC5201`. All colors via `Color.enzoXxx` constants — never raw hex in views. No streaks, no guilt, no missed-workout states.
 
 **Commits** — One thing per commit. If the message needs "and", split it. Commit before moving to the next step.
 
@@ -60,7 +60,11 @@ Read the relevant skill file before starting that type of work.
 - [x] Score UI: 5-tier readiness labels, dual donuts, 0.75 parity, goal overwrite bug fixed
 - [x] Readiness differentiation: PR age bonus + effort gap modifier, demo jitter, dark mode fix, chip colors
 - [x] Persistence migration: Supabase → SwiftData (local on-device SQLite)
-- [ ] **UAT: SwiftData migration acceptance testing** ← next session
+- [x] Swift 6 concurrency warnings resolved (nonisolated, Sendable, nonisolated(unsafe))
+- [x] ConnectView redesign: real app icon, welcome copy from Config, plain Connect button
+- [x] UX/UI audit: `ux-audit.md` created — 27 annotated items, 10-phase work plan
+- [ ] **UX polish (Phases A–I): Execute `ux-audit.md` work plan** ← next session
+- [ ] **UAT: SwiftData migration acceptance testing** ← still pending, ask Chad which to do first
 - [ ] Step 11b: Enzo voice/prompt tuning
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
@@ -68,14 +72,17 @@ Read the relevant skill file before starting that type of work.
 
 ## Deferred Items
 
+Many of these are now captured in `ux-audit.md` with specific phases. Check there before starting work on any of them.
+
 - **Demo jitter in SyncService** — ±0.25 deterministic noise in `syncPhase2`. Remove before shipping.
 - **`enzo-voice.MD` stale labels** — system prompt section has old fitness + readiness label names. Fix in Step 11b before touching any prompts.
-- **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all fall through to amber. Fix in Step 11b.
+- **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all fall through to amber. In `ux-audit.md` Phase B.
 - **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
-- **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden. Needs dedicated time.
-- **Sync progress indicator** — no visible indicator in main UI during manual sync from SettingsSheet.
+- **FitnessChartView axis polish** — x-axis label overlap. In `ux-audit.md` Phase G. Y-axis: chart tap interaction is being removed (Phase A).
+- **Sync progress indicator** — no visible indicator during manual sync. In `ux-audit.md` Phase G.
+- **Empty state UI** — Fresh install shows blank ring + chart. In `ux-audit.md` Phase I.
+- **Dark mode** — Planned in `ux-audit.md` Phase J. Requires design decisions before implementation.
 - **Step 12: Strava webhooks** — not needed for beta.
-- **Empty state UI** — Fresh install with no sync shows blank/grey ring and chart. Should show a "Connect Strava" prompt when `snapshots.isEmpty`. Deferred.
 
 ---
 
