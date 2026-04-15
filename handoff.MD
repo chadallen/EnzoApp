@@ -1,30 +1,48 @@
-# Session Handoff — UAT: SwiftData Migration (next session)
+# Session Handoff — UX Polish (next session)
 
 ## What was completed this session
 
-| Change | Details | Commit |
-|---|---|---|
-| Project moved to `/Users/chadallen/projects/EnzoApp` | Build verified against iPhone 17 Pro sim (Xcode 26, iOS 26.3.1) | — |
-| Gitignore | Added `.claude/settings.json`, `__pycache__/`, `*.MP4` | f02f8d3 |
-| PRD.md | Section 3 backend updated from "Supabase" to "SwiftData" | 00e76be |
-| NaN fix in FitnessRingView | `max(0.001, ...)` guard on both SectorMark angles — prevented CoreGraphics NaN crash on empty state | 852ee96 |
-| Swift 6 concurrency warnings | `nonisolated(unsafe)` on static lets, `nonisolated` on static methods, `Sendable` + `nonisolated init` on DTOs — zero warnings now | 20441ea, 78e0d1f |
-| ConnectView redesign | Real app icon (EnzoIcon imageset), welcome copy from `Config.connectWelcomeText`, plain "Connect" button | 6117730 |
-| Kickoff prompt created | `kickoff-prompt.MD` added | f02f8d3 |
+| Change | Details |
+|---|---|
+| iOS UX/UI audit | Full audit of every view against iOS HIG. Created `ux-audit.md` — 27 annotated items Chad marked "--> DO THIS:", organized into 10 phases (A–J) |
+| `Claude.MD` updated | Build status, UI hard rule (dark mode planned), deferred items now reference `ux-audit.md` |
+| No code was written | This was a planning/audit session only |
 
 ---
 
-## Architecture (SwiftData, unchanged)
+## Priority question for next session
 
-```
-AppState.loadContext()  → ModelContext.fetch(FitnessSnapshotModel) → SwiftData (on-device)
-SyncService.syncPhase1() → returns [FitnessSnapshotRow] to AppState
-AppState.syncPhase1()   → calls upsertSnapshot() for each row → ModelContext
-SyncService.syncPhase2(fitnessSnapshots:) → returns [SegmentScoreRow] to AppState
-AppState.syncPhase2()   → calls upsertSegmentScore() for each row → ModelContext
-AppState.setGoal()      → ModelContext.insert(GoalModel) directly
-authenticate()          → Strava OAuth only, no Supabase call, no UUID
-```
+**Ask Chad at the start:** Do you want to start UX polish (Phases A–C of `ux-audit.md`) or first complete the SwiftData UAT checklist from the previous handoff?
+
+The UAT checklist is still fully pending (5-step device test, details in git history or the previous handoff). Recommend asking before diving in.
+
+---
+
+## Next session work: `ux-audit.md` Phases A, B, C
+
+If Chad wants to do UX work, start with these three phases in order. They are all low-risk, contained, and can be done without device testing.
+
+### Phase A — Safe deletes (no design decisions, just removal)
+
+1. **Remove chart tap interaction from `FitnessChartView.swift`** — delete the entire `chartOverlay` block (the `GeometryReader` + `onTapGesture` that sets `selectedSnapshot`) and the `.sheet(isPresented: $showingDetail)` modifier. Also remove `@State private var selectedSnapshot` and `@State private var showingDetail`.
+2. **Delete `MonthDetailSheet.swift`** — it was only used by the chart tap.
+3. **Delete `PromptChipsView.swift`** — Chad confirmed: no prompt chips.
+
+### Phase B — Bug fixes (one-liners and near-one-liners)
+
+4. **Path B top segments sort** — In `GoalSettingView.pathBList`, change `appState.segments.prefix(3)` to `appState.segments.sorted { $0.strikeScore > $1.strikeScore }.prefix(3)`.
+5. **Streaming scroll animation** — In `ArcView.scrollContent`, wrap the `onChange(of: appState.streamingText)` scroll call in `withAnimation(.easeOut(duration: 0.1)) { ... }`.
+6. **`strikeLabelColor()` stale labels** — In `GoalSettingView`, update the switch to match the current 5-tier labels: "Strike now", "Almost there", "Worth a shot", "Getting there", "Build first". Map to `.enzoGoal`, `.enzoChartPrimary`, `.enzoAmber`, `.enzoSecondary`, `.enzoSecondary` respectively.
+
+### Phase C — Settings polish (all changes in `SettingsSheet.swift`)
+
+7. **Show "last synced" always** — Change the Sync row so `sublabel` always shows the last synced timestamp, not just when syncing. Pass `lastSyncedText` (not `nil`) when not actively syncing.
+8. **Confirm before "Reset sync history"** — Add `.confirmationDialog` gating the reset action.
+9. **Disconnect: systemRed + confirmation** — Change `isDestructive` rows to use `Color(.systemRed)` instead of `Color.enzoAmber`. Add `.confirmationDialog` before executing disconnect.
+
+### After A, B, C
+
+Ask Chad whether to continue to Phase D (touch targets) or do the SwiftData UAT. Full phase descriptions are in `ux-audit.md`.
 
 ---
 
@@ -32,64 +50,7 @@ authenticate()          → Strava OAuth only, no Supabase call, no UUID
 
 All changes committed and pushed. Branch: `main`. Working tree clean.
 
-**Build status:** BUILD SUCCEEDED (iPhone 17 Pro simulator, Xcode 26, iOS 26.3.1), zero warnings  
-**Test status:** All tests pass except 2 pre-existing failures unrelated to migration:
-- `SegmentScorerTests/lowScoreWhenLessFitThanPR()` — pre-existing
-- `AthleteContextTests/contextPayloadHistoryOrder()` — pre-existing
-
-**Runtime logging:** Active via `NSLog` throughout AppState. Stream with:
-```bash
-log stream --predicate 'process == "EnzoApp"' --level debug
-```
-
----
-
-## Next session: UAT — SwiftData migration acceptance testing
-
-The migration code is complete but has never been run against live Strava data on a real device. **The agent's job is to guide Chad through the checklist and fix any bugs found.** No new features until UAT passes.
-
-### UAT checklist
-
-Run these in order. Each must pass before moving to the next.
-
-**1. Fresh install**
-- Delete the app from the device
-- Build and install fresh (new ConnectView will show)
-- Connect Strava (OAuth flow)
-- Run Phase 1 + Phase 2 sync (onboarding flow)
-- Verify: fitness chart populates with real data
-- Verify: Targets tab shows segment list with real segments
-- Verify: Strike scores and labels are correct
-
-**2. Persistence across relaunch**
-- Force-quit the app
-- Reopen
-- Verify: fitness chart still shows — no blank state, no re-sync needed
-- Verify: segments still load — data survived relaunch
-
-**3. Goal persistence**
-- Set a goal segment in Targets tab
-- Force-quit, reopen
-- Verify: same goal segment is still active
-
-**4. Reset sync + re-sync**
-- Settings → Reset sync history
-- Verify: local store wiped (segments + chart revert to preview/empty)
-- Sync now (manual sync from settings)
-- Verify: data repopulates correctly
-
-**5. Disconnect + reconnect**
-- Settings → Disconnect
-- Verify: app returns to ConnectView, all data cleared
-- Reconnect Strava, run sync
-- Verify: clean state, no stale data
-
-### After UAT passes
-
-Once all 5 checklist items pass, move on to deferred cleanup (in order):
-1. `GoalSettingView.strikeLabelColor()` — maps old 3-tier labels, all fall through to amber
-2. `enzo-voice.MD` stale labels — fix before any prompt work
-3. Step 11b: Enzo voice/prompt tuning — playground first, never touch ClaudeService.swift without it
+**Build status:** Should be BUILD SUCCEEDED — no code was touched this session, last known good build was from the prior session (iPhone 17 Pro simulator, Xcode 26, iOS 26.3.1, zero warnings).
 
 ---
 
@@ -97,33 +58,32 @@ Once all 5 checklist items pass, move on to deferred cleanup (in order):
 
 | File | What it does |
 |---|---|
-| `EnzoApp/Models/SwiftDataModels.swift` | @Model classes + ModelContainer.enzo |
-| `EnzoApp/App/AppState.swift` | loadContext, loadSegments, syncPhase1/2, setGoal, upsert helpers |
-| `EnzoApp/Services/SyncService.swift` | Phase 1 + Phase 2 sync logic |
-| `EnzoApp/Features/Onboarding/ConnectView.swift` | New onboarding screen |
-| `EnzoApp/Utils/Config.swift` | API keys + `connectWelcomeText` UI copy |
-| `migration-supabase-to-swiftdata.md` | Full migration architecture reference |
+| `ux-audit.md` | Full UX/UI audit + 10-phase work plan — the primary reference for next session |
+| `EnzoApp/Features/Arc/FitnessChartView.swift` | Phase A: remove chart tap overlay |
+| `EnzoApp/Features/Arc/MonthDetailSheet.swift` | Phase A: delete this file |
+| `EnzoApp/Features/Arc/PromptChipsView.swift` | Phase A: delete this file |
+| `EnzoApp/Features/Arc/GoalSettingView.swift` | Phase B: Path B sort + strikeLabelColor fix |
+| `EnzoApp/Features/Arc/ArcView.swift` | Phase B: streaming scroll animation |
+| `EnzoApp/Features/Onboarding/SettingsSheet.swift` | Phase C: last synced, confirmations, systemRed |
 
 ---
 
 ## Working rules for next agent
 
-- **Read CLAUDE.md and handoff.MD before doing anything.**
-- **Do NOT read scratch.md or UI-punch-list.md.**
-- **Do not write a single line of code without presenting a plan and getting explicit approval from Chad.**
-- **Prompt Chad when he needs to test on device or perform a manual action** — stop and wait, don't continue past a manual step.
-- Make frequent small commits — one change per commit, descriptive message.
-- Build must compile before any commit. Run `xcodebuild test` before marking any fix done.
+- **Read `Claude.MD`, `handoff.MD`, and `ux-audit.md` before doing anything.**
+- **Do NOT read `scratch.md`.**
+- **Do not write a single line of code without presenting a plan and getting explicit approval from Chad.** Present the specific changes you plan to make (what files, what lines, what the change is) and wait for a green light.
+- **Commit after every single logical change** — one change per commit, descriptive message. Do not batch.
+- **Prompt Chad when manual testing is needed** — stop and wait, do not continue past a manual step.
+- Build must compile before any commit.
+- Use `NSLog()` not `print()` for any debug logging.
 
 ---
 
 ## Deferred items (carry forward)
 
-- **Demo jitter in SyncService** — `±0.25` deterministic noise seeded from `segId` in `syncPhase2`. Tagged "DEMO — Remove before shipping." Do not remove until Chad explicitly approves.
-- **`enzo-voice.MD` stale labels** — system prompt section has old fitness labels. Fix before any prompt work in Step 11b.
-- **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all 5-tier labels fall through to amber.
+- **Demo jitter in SyncService** — `±0.25` deterministic noise in `syncPhase2`. Do not remove without Chad's approval.
+- **`enzo-voice.MD` stale labels** — Fix before any prompt work in Step 11b.
 - **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
-- **FitnessChartView axis polish** — x-axis label overlap, Y-axis hidden.
-- **Sync progress indicator** — no visible indicator during manual sync from SettingsSheet.
-- **Empty state UI** — After fresh install with no sync, fitness ring and chart show blank/grey with no explanation. Should show a prompt when `snapshots.isEmpty`. Deferred.
+- **Dark mode (Phase J)** — Requires design decisions first (see `ux-audit.md` Phase J table). Do not start without explicit approval and the dark color palette defined.
 - **Step 12: Strava webhooks** — not needed for beta.
