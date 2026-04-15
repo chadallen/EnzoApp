@@ -4,6 +4,9 @@ struct SettingsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    @State private var showResetConfirm = false
+    @State private var showDisconnectConfirm = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -25,6 +28,33 @@ struct SettingsSheet: View {
                         .foregroundStyle(Color.enzoAccent)
                 }
             }
+            .confirmationDialog(
+                "Reset sync history?",
+                isPresented: $showResetConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Reset and re-sync", role: .destructive) {
+                    appState.resetSyncHistory()
+                    dismiss()
+                    Task { await appState.syncPhase1() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("All activity history will be re-fetched on the next sync.")
+            }
+            .confirmationDialog(
+                "Disconnect Strava?",
+                isPresented: $showDisconnectConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Disconnect", role: .destructive) {
+                    dismiss()
+                    appState.disconnect()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You'll need to connect again to sync your rides.")
+            }
         }
     }
 
@@ -35,9 +65,7 @@ struct SettingsSheet: View {
             actionRow(
                 icon: "arrow.trianglehead.2.clockwise",
                 label: "Sync now",
-                sublabel: appState.isSyncing || appState.isSyncingPhase2
-                    ? syncStatusText
-                    : nil,
+                sublabel: syncStatusText.isEmpty ? nil : syncStatusText,
                 isDestructive: false
             ) {
                 dismiss()
@@ -53,9 +81,7 @@ struct SettingsSheet: View {
                 sublabel: "Re-fetches all activities on next sync",
                 isDestructive: false
             ) {
-                appState.resetSyncHistory()
-                dismiss()
-                Task { await appState.syncPhase1() }
+                showResetConfirm = true
             }
         }
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 12))
@@ -82,8 +108,7 @@ struct SettingsSheet: View {
             sublabel: nil,
             isDestructive: true
         ) {
-            dismiss()
-            appState.disconnect()
+            showDisconnectConfirm = true
         }
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 12))
     }
@@ -101,13 +126,13 @@ struct SettingsSheet: View {
             HStack(spacing: 14) {
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(isDestructive ? Color.enzoAmber : Color.enzoAccent)
+                    .foregroundStyle(isDestructive ? Color(.systemRed) : Color.enzoAccent)
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
                         .font(.system(.body, design: .rounded))
-                        .foregroundStyle(isDestructive ? Color.enzoAmber : Color.enzoPrimary)
+                        .foregroundStyle(isDestructive ? Color(.systemRed) : Color.enzoPrimary)
                     if let sublabel {
                         Text(sublabel)
                             .font(.system(.caption))
