@@ -63,9 +63,12 @@ Read the relevant skill file before starting that type of work.
 - [x] Swift 6 concurrency warnings resolved (nonisolated, Sendable, nonisolated(unsafe))
 - [x] ConnectView redesign: real app icon, welcome copy from Config, plain Connect button
 - [x] UX/UI audit: `ux-audit.md` created — 27 annotated items, 10-phase work plan
-- [ ] **UX polish (Phases A–I): Execute `ux-audit.md` work plan** ← next session
-- [ ] **UAT: SwiftData migration acceptance testing** ← still pending, ask Chad which to do first
-- [ ] Step 11b: Enzo voice/prompt tuning
+- [x] Segment-Focused Redesign: deleted fitness ring/chart/briefing views, segment list is now the main screen, per-segment Enzo chat added to SegmentDetailView, navigation simplified to single stack
+- [x] UX polish Phases A, B (partial), C, D (partial), E (partial): see `ux-audit.md` for current status
+- [ ] **UX polish remaining: Phases D (touch targets, reduce motion), E (double title fix), F (onboarding), H (typography), I (goal toast), J (dark mode)** ← next
+- [ ] **UAT: SwiftData migration acceptance testing** ← still pending
+- [ ] **Build + simulator test of Segment-Focused Redesign** ← should happen before UX polish continues
+- [ ] Step 11b: Enzo voice/prompt tuning (segment assessment prompt needs refinement)
 - [ ] Step 12: Strava webhooks (deferred — not needed for beta)
 
 ---
@@ -76,11 +79,11 @@ Many of these are now captured in `ux-audit.md` with specific phases. Check ther
 
 - **Demo jitter in SyncService** — ±0.25 deterministic noise in `syncPhase2`. Remove before shipping.
 - **`enzo-voice.MD` stale labels** — system prompt section has old fitness + readiness label names. Fix in Step 11b before touching any prompts.
-- **GoalSettingView.strikeLabelColor()** — maps old 3-tier labels, all fall through to amber. In `ux-audit.md` Phase B.
+- **`segmentAssessmentPrompt` in AppState** — the opening prompt Enzo sees when "Ask Enzo" is tapped. Needs tuning via playground before shipping.
 - **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
-- **FitnessChartView axis polish** — x-axis label overlap. In `ux-audit.md` Phase G. Y-axis: chart tap interaction is being removed (Phase A).
-- **Sync progress indicator** — no visible indicator during manual sync. In `ux-audit.md` Phase G.
-- **Empty state UI** — Fresh install shows blank ring + chart. In `ux-audit.md` Phase I.
+- **Sync progress indicator** — no visible indicator in SegmentsView/top bar during manual sync. In `ux-audit.md` Phase G.
+- **Empty state UI** — fresh install shows preview segment data, not a proper empty state. In `ux-audit.md` Phase I.
+- **SegmentDetailView double title** — segment name appears in both `.navigationTitle` (inline) and the large title in scroll content. In `ux-audit.md` Phase E.
 - **Dark mode** — Planned in `ux-audit.md` Phase J. Requires design decisions before implementation.
 - **Step 12: Strava webhooks** — not needed for beta.
 

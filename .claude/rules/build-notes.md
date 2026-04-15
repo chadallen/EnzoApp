@@ -65,13 +65,11 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 ## UI
 
-**Dark mode** — App is forced light mode via `preferredColorScheme(.light)` on `WindowGroup` AND `.colorScheme(.light)` on `inputArea` in `ArcView`. Both are required — `safeAreaInset` content doesn't inherit window-level preference.
+**Dark mode** — App is forced light mode via `.preferredColorScheme(.light)` on `WindowGroup` in `EnzoAppApp.swift`. Only one place now — `ArcView` (which had a second `.colorScheme(.light)` on the `safeAreaInset` input area) was deleted in the Segment-Focused Redesign.
 
-**Navigation** — `MainTabView` owns the `NavigationStack`. `SegmentsView` does not wrap itself. `navigationDestination(for: SegmentScore.self)` in SegmentsView works because it's inside the ancestor NavigationStack.
+**Navigation** — `MainTabView` owns the `NavigationStack`. `SegmentsView` does not wrap itself. `navigationDestination(for: SegmentScore.self)` in SegmentsView works because it's inside the ancestor NavigationStack. Tabs were removed in the Segment-Focused Redesign — `SegmentsView` is now the single content view inside the stack.
 
-**Tab caching** — `ZStack` with `.opacity` + `.allowsHitTesting` keeps both tabs alive. Prevents `.task` re-running on tab switch.
-
-**loadContext() placement** — Only called from `RootView.task` (once per launch). Removed from `ArcView.task` to prevent goal overwrite on NavigationStack pop. `generateLookahead()` stays in `ArcView.task` (guarded, no-ops if content exists).
+**loadContext() placement** — Only called from `RootView.task` (once per launch). `generateLookahead()` and `generateBriefing()` were removed in the Segment-Focused Redesign — Claude responses are now scoped to individual segments via `sendSegmentMessage()`.
 
 ---
 
@@ -81,6 +79,6 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 **Stale labels in enzo-voice.MD** — System prompt section still has old fitness labels (Peak shape, Strong base...) and old readiness labels (No brainer, Worth a shot, Not quite ready). Fix before any prompt work.
 
-**GoalSettingView.strikeLabelColor()** — Maps old 3-tier labels. All 5-tier labels fall through to `.enzoAmber`. Fix alongside any GoalSettingView work.
+**segmentAssessmentPrompt in AppState** — The static func that generates the opening Enzo prompt when "Ask Enzo" is tapped on a segment. Needs tuning via playground (`scripts/enzo_playground.py`) before shipping. `GoalSettingView` and its `strikeLabelColor()` were deleted in the Segment-Focused Redesign.
 
 **NSLog not print()** — When running via Sweetpad, `print()` doesn't appear in the iOS log stream. Use `NSLog()` for anything you need to see via `log stream --predicate 'process == "EnzoApp"'`.

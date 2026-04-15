@@ -621,17 +621,17 @@ This is the largest change and touches every view. **Do not start without answer
 
 ### Phase order summary
 
-| Phase | Description | Scope | Can start immediately? |
+| Phase | Description | Scope | Status |
 |---|---|---|---|
-| A | Safe deletes (chart tap, PromptChips) | S | Yes |
-| B | Bug fixes (Path B sort, scroll animation) | S | Yes |
-| C | Settings polish (confirmations, systemRed, last synced) | S | Yes |
-| D | Touch targets & interaction | M | Yes |
-| E | Navigation refactor | M | Yes — but test thoroughly |
-| F | Onboarding polish | S | Yes |
-| G | Chart & main UI polish | M | Yes |
-| H | Typography polish | M | Yes |
-| I | Feedback & empty states | M | Yes |
+| A | Safe deletes (chart tap, PromptChips) | S | **COMPLETE** — all Arc/fitness views deleted in Segment-Focused Redesign |
+| B | Bug fixes (Path B sort, scroll animation) | S | **COMPLETE** — strikeLabelColor & Path B sort moot (GoalSettingView deleted); streaming scroll done in SegmentDetailView |
+| C | Settings polish (confirmations, systemRed, last synced) | S | **COMPLETE** |
+| D | Touch targets & interaction | M | **PARTIAL** — alternating rows removed; touch target sizing, reduce motion still pending |
+| E | Navigation refactor | M | **PARTIAL** — tabs removed, GoalSettingView gate removed; double title in SegmentDetailView still pending |
+| F | Onboarding polish | S | Pending |
+| G | Chart & main UI polish | M | **PARTIAL** — chart deleted (moot); sync indicator + "Ask Enzo" hint done via redesign |
+| H | Typography polish | M | Pending |
+| I | Feedback & empty states | M | Pending |
 | J | Dark mode + semantic colors | L | **No — design decision needed first** |
 
-Phases A, B, and C are fully independent and can be done in any order or combined into a single session. Phases D–I are also largely independent of each other. Phase J gates on design input.
+> **Context:** A major architectural redesign was completed (Segment-Focused Redesign) that deleted all fitness ring/chart/briefing views. Many ux-audit items became moot as a result. The segment list is now the single main screen, and Enzo chat is scoped to each segment's detail view.

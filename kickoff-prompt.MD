@@ -1,4 +1,4 @@
-# Kickoff Prompt — UX Polish Session
+# Kickoff Prompt — Post-Redesign Polish Session
 
 Paste this into a new Claude Code session to kick off the next work session.
 
@@ -6,12 +6,12 @@ Paste this into a new Claude Code session to kick off the next work session.
 
 ## Prompt
 
-You are continuing work on **Enzo**, a personal iOS cycling companion app (SwiftUI, iOS 17+, Swift 6). This is a planning + implementation session for UX polish.
+You are continuing work on **Enzo**, a personal iOS cycling companion app (SwiftUI, iOS 17+, Swift 6). The previous session completed a major architectural redesign.
 
 **Start by reading these files in full before doing or saying anything else:**
-1. `Claude.MD` — project rules, stack, build status, hard rules
+1. `CLAUDE.md` — project rules, stack, build status, hard rules
 2. `handoff.MD` — what was done last session and what to do next
-3. `ux-audit.md` — the full UX/UI audit with the 10-phase work plan we'll be executing
+3. `plan.md` — the redesign initiative that was just completed (for context on what changed)
 
 Do NOT read `scratch.md`.
 
@@ -19,19 +19,34 @@ Do NOT read `scratch.md`.
 
 ## What happened last session
 
-We did a comprehensive iOS UX/UI audit of every screen in the app. Chad reviewed the audit and annotated 27 items with "--> DO THIS:" markers — confirming he wants all of them addressed. I organized the 27 items into a 10-phase work plan in `ux-audit.md`. **No code was written** — this was entirely a planning session.
+A **Segment-Focused Redesign** was executed — 7 commits, all on `main`, all pushed. This was a major pivot:
+
+- **Deleted** all fitness ring, chart, briefing, and goal-setting views (`ArcView`, `FitnessRingView`, `FitnessChartView`, `ArcBriefingView`, `GoalHeaderView`, `LookaheadSuggestionView`, `GoalSettingView`, `MonthDetailSheet`, `PromptChipsView`, `PROpportunitiesCard`)
+- **New main screen:** Segment list only (no fitness ring, no chart, no auto-briefing)
+- **New segment detail:** Stats + readiness score + "Ask Enzo" button that opens a per-segment chat thread
+- **Navigation simplified:** Single NavigationStack wrapping SegmentsView — no tabs
+- **Onboarding simplified:** GoalSettingView gate removed — after sync completes, user goes directly to segment list
+- **ClaudeService updated:** Multi-turn conversation history support added, stale readiness labels fixed
+- **AppState cleaned up:** Briefing/lookahead code removed, `sendSegmentMessage()` and `segmentAssessmentPrompt()` added
+- **SettingsSheet polished:** Last-synced always visible, confirm dialogs on reset and disconnect, disconnect button now red
+
+Several ux-audit items (Phases A, B, C, D partial, E partial) were addressed as part of this redesign.
+
+The **build has not been tested in the simulator** since the redesign. That should happen at the start of this session.
+
+---
 
 ## What to do this session
 
-**First: ask Chad** whether he wants to start UX polish (Phases A–C of `ux-audit.md`) or first complete the SwiftData UAT checklist that has been pending since two sessions ago. Don't assume — ask.
+**First: ask Chad** which of these he wants to start with:
 
-If UX polish:
-- Start with **Phase A** (safe deletes), then **Phase B** (bug fixes), then **Phase C** (settings polish).
-- Full details for each phase are in `ux-audit.md` and `handoff.MD`.
-- After A, B, C, ask Chad before continuing to Phase D.
+1. **Build + smoke test** — run the app in the simulator, walk through the key flows (connect → sync → segment list → segment detail → Ask Enzo → settings). This is the recommended first step given the scope of change.
+2. **Continue UX polish** — remaining phases: D (touch targets, reduce motion), E (double title fix, optional native nav bar), F (onboarding), H (typography), I (goal toast), J (dark mode — requires design decisions first).
+3. **SwiftData UAT** — 5-step device checklist (fresh install → persistence → goal persistence → reset + re-sync → disconnect + reconnect). Still pending from earlier sessions.
 
-If UAT:
-- The SwiftData migration UAT is a 5-step device checklist (fresh install → persistence → goal persistence → reset + re-sync → disconnect + reconnect). Guide Chad through each step one at a time. Stop and wait for him to test before moving to the next step.
+Don't assume — ask Chad before doing anything.
+
+---
 
 ## Non-negotiable rules for this session
 
@@ -39,27 +54,31 @@ If UAT:
 
 2. **Commit after every single logical change.** One change = one commit. Descriptive message. Do not batch multiple changes into one commit. This lets Chad revert individual changes cleanly.
 
-3. **Stop and prompt Chad whenever he needs to do something manually** — build the app, test on device, run through a UI flow, etc. Do not continue past a manual step. Wait for his confirmation before proceeding.
+3. **Stop and prompt Chad whenever he needs to do something manually** — build the app, test in simulator, run through a UI flow, test on device, etc. Do not continue past a manual step. Wait for his confirmation before proceeding.
 
-4. **Read `ux-audit.md` carefully** before proposing any implementation. Each phase has specific files and specific changes. Don't improvise beyond what's in the plan without flagging it.
+4. **Build must compile before every commit.** Do not commit code that doesn't build.
 
-5. **Build must compile before every commit.** Do not commit code that doesn't build.
+5. **Use `NSLog()` not `print()`** — `print()` doesn't appear in the Sweetpad log stream.
 
-## Quick reference: Phase A, B, C scope
+---
 
-### Phase A — Safe deletes
-- `FitnessChartView.swift`: remove chart tap interaction (the `chartOverlay` block + `selectedSnapshot` state)
-- `MonthDetailSheet.swift`: delete the file entirely
-- `PromptChipsView.swift`: delete the file entirely
+## Quick reference: remaining UX polish work
 
-### Phase B — Bug fixes
-- `GoalSettingView.swift`: sort Path B segments by `strikeScore` before `.prefix(3)`
-- `ArcView.swift`: wrap streaming scroll-to-bottom in `withAnimation(.easeOut(duration: 0.1))`
-- `GoalSettingView.swift`: fix `strikeLabelColor()` to map the current 5-tier labels
+### Phase D — Touch targets (partial, pending)
+- Gear icon in `MainTabView.topBar`: add `.frame(width: 44, height: 44).contentShape(Rectangle())`
+- Sort menu in `SegmentsView.sortBar`: verify 44pt tappable area
+- Pulsing "Strike now" donut in `SegmentStrikeRow`: gate on `@Environment(\.accessibilityReduceMotion)`
 
-### Phase C — Settings polish (all in `SettingsSheet.swift`)
-- Always show last-synced timestamp on the Sync row
-- Add `.confirmationDialog` before "Reset sync history" executes
-- Change "Disconnect Strava" to `.systemRed` + add `.confirmationDialog`
+### Phase E — Navigation fixes (partial, pending)
+- `SegmentDetailView`: segment name appears in both `.navigationTitle` (inline) and the `headerSection` largeTitle — remove or shorten the inline title
+- Optional: restore native nav bar in `MainTabView` (large-title-on-scroll behavior)
 
-Full phase descriptions, affected files, and notes are in `ux-audit.md`.
+### Phase F — Onboarding polish (pending)
+- `ConnectView`: replace `padding(.bottom, 52)` with `.safeAreaInset(edge: .bottom)`
+- `SyncProgressView`: add `ProgressView()` spinner above phase text
+- `ConnectView`: add 1–2 lines of privacy disclosure copy
+
+### Phases H, I, J — Later
+- **H:** Typography — replace fixed-size fonts with named styles
+- **I:** Goal-set toast, empty state for fresh install
+- **J:** Dark mode — requires design decisions before touching code
