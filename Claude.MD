@@ -1,9 +1,9 @@
 # Enzo — Project Brief for Claude Code
 
-Enzo is a personal iOS cycling companion. It connects to Strava, computes a relative fitness score from HR history, and uses an AI companion (also named Enzo) to narrate training trajectory and surface PR opportunities.
+Enzo is a personal iOS cycling companion. It connects to Strava, computes a relative fitness score from HR history, and uses an AI companion (also named Enzo) to narrate training and surface PR opportunities via per-segment chat.
 
-Full spec: `PRD.md`. Preview data for Steps 1–5: Section 18 of spec — use exact values, don't invent.
-Build gotchas: @.claude/rules/build-notes.md — check before making changes in any area covered there.
+Product spec: `PRD.md`. Build status and what to work on next: `plan.md`.
+Build gotchas: `.claude/rules/build-notes.md` — check before making changes in any area covered there.
 
 ---
 
@@ -48,47 +48,6 @@ Read the relevant skill file before starting that type of work.
 
 ---
 
-## Build Status
-
-- [x] Steps 1–9: Project setup → Phase 2 sync + segment scoring
-- [x] Step 10: Onboarding flow (ConnectView, SyncProgressView, auth gating)
-- [x] Step 11: Polish pass
-- [x] UI Refactor: light mode, top-tab nav (Today/Targets)
-- [x] Today tab: FitnessRingView donut, chart timeframe picker, dynamic Y scale
-- [x] Targets tab: GoalHeaderView header, SegmentDetailView as goal-setting entry point, distance/elevation wired
-- [x] Score cleanup: % removed, percentile normalization, recency discount removed
-- [x] Score UI: 5-tier readiness labels, dual donuts, 0.75 parity, goal overwrite bug fixed
-- [x] Readiness differentiation: PR age bonus + effort gap modifier, demo jitter, dark mode fix, chip colors
-- [x] Persistence migration: Supabase → SwiftData (local on-device SQLite)
-- [x] Swift 6 concurrency warnings resolved (nonisolated, Sendable, nonisolated(unsafe))
-- [x] ConnectView redesign: real app icon, welcome copy from Config, plain Connect button
-- [x] UX/UI audit: `ux-audit.md` created — 27 annotated items, 10-phase work plan
-- [x] Segment-Focused Redesign: deleted fitness ring/chart/briefing views, segment list is now the main screen, per-segment Enzo chat added to SegmentDetailView, navigation simplified to single stack
-- [x] UX polish Phases A, B (partial), C, D (partial), E (partial): see `ux-audit.md` for current status
-- [ ] **UX polish remaining: Phases D (touch targets, reduce motion), E (double title fix), F (onboarding), H (typography), I (goal toast), J (dark mode)** ← next
-- [ ] **UAT: SwiftData migration acceptance testing** ← still pending
-- [ ] **Build + simulator test of Segment-Focused Redesign** ← should happen before UX polish continues
-- [ ] Step 11b: Enzo voice/prompt tuning (segment assessment prompt needs refinement)
-- [ ] Step 12: Strava webhooks (deferred — not needed for beta)
-
----
-
-## Deferred Items
-
-Many of these are now captured in `ux-audit.md` with specific phases. Check there before starting work on any of them.
-
-- **Demo jitter in SyncService** — ±0.25 deterministic noise in `syncPhase2`. Remove before shipping.
-- **`enzo-voice.MD` stale labels** — system prompt section has old fitness + readiness label names. Fix in Step 11b before touching any prompts.
-- **`segmentAssessmentPrompt` in AppState** — the opening prompt Enzo sees when "Ask Enzo" is tapped. Needs tuning via playground before shipping.
-- **phase2ActivityLimit = 25** — do not raise without Chad's instruction.
-- **Sync progress indicator** — no visible indicator in SegmentsView/top bar during manual sync. In `ux-audit.md` Phase G.
-- **Empty state UI** — fresh install shows preview segment data, not a proper empty state. In `ux-audit.md` Phase I.
-- **SegmentDetailView double title** — segment name appears in both `.navigationTitle` (inline) and the large title in scroll content. In `ux-audit.md` Phase E.
-- **Dark mode** — Planned in `ux-audit.md` Phase J. Requires design decisions before implementation.
-- **Step 12: Strava webhooks** — not needed for beta.
-
----
-
 ## Persistence Layer (SwiftData)
 
 All derived data is stored on-device via SwiftData. No remote backend. Models live in `EnzoApp/Models/SwiftDataModels.swift`:
@@ -97,13 +56,13 @@ All derived data is stored on-device via SwiftData. No remote backend. Models li
 - `SegmentScoreModel` — segment PRs + strike scores, keyed on stravaSegmentId (unique)
 - `GoalModel` — active/historical goals, isActive flag, one active at a time
 
-**Container:** `ModelContainer.enzo` (shared singleton in SwiftDataModels.swift)  
-**Access:** `AppState.modelContext` (mainContext, @MainActor)  
-**Upsert pattern:** fetch-first by unique key, update fields or insert new — see `AppState.upsertSnapshot()` and `upsertSegmentScore()`  
-**Wipe on reset:** `AppState.resetSyncHistory()` deletes all FitnessSnapshotModel + SegmentScoreModel rows  
+**Container:** `ModelContainer.enzo` (shared singleton in SwiftDataModels.swift)
+**Access:** `AppState.modelContext` (mainContext, @MainActor)
+**Upsert pattern:** fetch-first by unique key, update fields or insert new — see `AppState.upsertSnapshot()` and `upsertSegmentScore()`
+**Wipe on reset:** `AppState.resetSyncHistory()` deletes all FitnessSnapshotModel + SegmentScoreModel rows
 **Wipe on disconnect:** `AppState.disconnect()` deletes all three model types
 
-Identity is `strava_athlete_id` in Keychain only — no Supabase UUID, no remote user table.
+Identity is `strava_athlete_id` in Keychain only — no remote user table.
 
 ---
 
@@ -113,22 +72,21 @@ Iterate on Enzo's prompts without building the app. Use this before touching `Cl
 
 ```bash
 python3 scripts/enzo_playground.py --mode chat --message "What should I do this week?"
-python3 scripts/enzo_playground.py --mode briefing --fitness building --trend up
 ```
 
 Full usage: `scripts/README.md`. Requires `ANTHROPIC_API_KEY` in env.
-When happy with a prompt, paste it into: `ClaudeService.swift` → `systemPrompt` or `AppState.swift` → static prompt functions.
+When happy with a prompt, paste it into `ClaudeService.swift` → `systemPrompt` or `AppState.swift` → `segmentAssessmentPrompt`.
 
 ---
 
 ## How to Work
 
-**Starting a session** — Read this file + `handoff.MD`. Check build status. Read relevant `PRD.MD` section for the current step.
+**Starting a session** — Read this file + `plan.md`. `plan.md` has current status and what to work on next.
 
-**Unclear requirement** — Spec is source of truth. Ask before building if it doesn't cover it.
+**Unclear requirement** — `PRD.md` is the product spec. Ask before building if it doesn't cover it.
 
 **Spec conflicts with what's built** — Flag it. Don't silently pick one.
 
-**End of session** — Update build status here. Write handoff prompt to `handoff.MD`. Commit and push.
+**End of session** — Use `/end-session` skill to update `plan.md`, commit, and push.
 
 **GitHub** — https://github.com/chadallen/EnzoApp (private)
