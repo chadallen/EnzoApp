@@ -29,7 +29,7 @@ actor ClaudeService {
         Rules:
         - Always use their actual numbers and labels. Never give advice that could apply to anyone.
         - Fitness is described using these labels only: Epic, Strong, Building, Baseline, Recovering.
-        - Segment readiness uses: No brainer, Worth a shot, Not quite ready.
+        - Segment readiness uses: Strike now, Almost there, Worth a shot, Getting there, Build first.
         - Frame everything relative to their personal history and their goal.
         - Don't reference power, FTP, or watts unless the athlete brings it up.
         - A suggestion is not a plan. Make that clear when offering workouts.
@@ -44,11 +44,13 @@ actor ClaudeService {
 
     // Returns an AsyncStream of text tokens as they arrive from the API.
     // Yields a single error sentinel string on failure so the caller can surface it.
-    func stream(userMessage: String, context: String) -> AsyncStream<String> {
+    // history: prior ArcMessages in this conversation (oldest first). Context is prepended
+    // to the first user message; userMessage is appended as the latest user turn.
+    func stream(userMessage: String, context: String, history: [ArcMessage] = []) -> AsyncStream<String> {
         AsyncStream { continuation in
             Task {
                 do {
-                    let fullMessage = "Athlete context:\n\(context)\n\nUser: \(userMessage)"
+                    let messages = buildMessages(userMessage: userMessage, context: context, history: history)
 
                     var request = URLRequest(url: apiURL)
                     request.httpMethod = "POST"
@@ -62,9 +64,7 @@ actor ClaudeService {
                         "max_tokens": maxTokens,
                         "stream": true,
                         "system": systemPrompt,
-                        "messages": [
-                            ["role": "user", "content": fullMessage]
-                        ]
+                        "messages": messages
                     ]
 
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -101,5 +101,29 @@ actor ClaudeService {
                 }
             }
         }
+    }
+
+    // Builds the messages array for the API call.
+    // Context is embedded in the first user message of the conversation.
+    private func buildMessages(userMessage: String, context: String, history: [ArcMessage]) -> [[String: Any]] {
+        if history.isEmpty {
+            return [
+                ["role": "user", "content": "Athlete context:\n\(context)\n\nUser: \(userMessage)"]
+            ]
+        }
+
+        var messages: [[String: Any]] = []
+        for (i, msg) in history.enumerated() {
+            let role = msg.role == .user ? "user" : "assistant"
+            let content: String
+            if i == 0 && msg.role == .user {
+                content = "Athlete context:\n\(context)\n\nUser: \(msg.content)"
+            } else {
+                content = msg.content
+            }
+            messages.append(["role": role, "content": content])
+        }
+        messages.append(["role": "user", "content": userMessage])
+        return messages
     }
 }
