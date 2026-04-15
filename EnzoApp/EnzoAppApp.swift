@@ -32,9 +32,10 @@ struct RootView: View {
             } else if appState.isResolvingOnboarding {
                 Color.enzoBg.ignoresSafeArea()
             } else if appState.isOnboardingSyncing {
-                SyncProgressView(onComplete: { appState.isOnboardingSyncing = false })
-            } else if !appState.hasCompletedOnboarding {
-                GoalSettingView(onGoalConfirmed: { appState.hasCompletedOnboarding = true })
+                SyncProgressView(onComplete: {
+                    appState.isOnboardingSyncing = false
+                    appState.hasCompletedOnboarding = true
+                })
             } else {
                 MainTabView()
             }
@@ -47,29 +48,15 @@ struct RootView: View {
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedTab: Tab = .today
     @State private var showSettings = false
-
-    enum Tab: String, CaseIterable {
-        case today = "Today"
-        case targets = "Targets"
-    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 topBar
-                tabPicker
                 Divider()
                     .background(Color.enzoSecondary.opacity(0.15))
-                ZStack {
-                    ArcView()
-                        .opacity(selectedTab == .today ? 1 : 0)
-                        .allowsHitTesting(selectedTab == .today)
-                    SegmentsView()
-                        .opacity(selectedTab == .targets ? 1 : 0)
-                        .allowsHitTesting(selectedTab == .targets)
-                }
+                SegmentsView()
             }
             .background(Color.enzoBg.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -97,27 +84,5 @@ struct MainTabView: View {
         .padding(.horizontal)
         .padding(.top, 8)
         .padding(.bottom, 4)
-    }
-
-    private var tabPicker: some View {
-        HStack(spacing: 0) {
-            ForEach(Tab.allCases, id: \.self) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    VStack(spacing: 0) {
-                        Text(tab.rawValue)
-                            .font(.system(.subheadline, design: .rounded,
-                                          weight: selectedTab == tab ? .bold : .regular))
-                            .foregroundStyle(selectedTab == tab ? Color.enzoPrimary : Color.enzoSecondary)
-                            .padding(.vertical, 12)
-                        Rectangle()
-                            .fill(selectedTab == tab ? Color.enzoAccent : Color.clear)
-                            .frame(height: 2)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
     }
 }
