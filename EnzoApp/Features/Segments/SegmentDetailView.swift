@@ -130,10 +130,6 @@ struct SegmentDetailView: View {
 
                             Button {
                                 appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
-                                Task {
-                                    await appState.generateBriefing(forceRefresh: true)
-                                    await appState.generateLookahead(forceRefresh: true)
-                                }
                                 dismiss()
                             } label: {
                                 Text("Set this goal")
