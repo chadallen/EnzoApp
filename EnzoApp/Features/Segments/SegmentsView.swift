@@ -27,9 +27,6 @@ struct SegmentsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GoalHeaderView(context: appState.athleteContext, fullWidth: true)
-                .environment(appState)
-
             if !sortedSegments.isEmpty {
                 sortBar
             }
@@ -38,11 +35,11 @@ struct SegmentsView: View {
                 emptyState
             } else {
                 List {
-                    ForEach(Array(sortedSegments.enumerated()), id: \.element.id) { index, segment in
+                    ForEach(sortedSegments) { segment in
                         NavigationLink(value: segment) {
                             SegmentStrikeRow(segment: segment)
                         }
-                        .listRowBackground(index.isMultiple(of: 2) ? Color.enzoCard : Color.enzoBg)
+                        .listRowBackground(Color.enzoBg)
                         .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
                     }
                 }
