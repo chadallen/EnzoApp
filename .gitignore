@@ -31,7 +31,4 @@ __pycache__/
 # Real athlete data — never commit
 scripts/data/
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
+
