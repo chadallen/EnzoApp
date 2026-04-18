@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "EnzoApp",
+  "project_id": "76375496-976e-4b8b-bd5b-bfefd0f1adf4"
+}
