@@ -2,6 +2,8 @@
 
 This is the living status document. `PRD.md` is the product spec and is not modified here. `CLAUDE.md` is the project rulebook.
 
+Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
+
 ---
 
 ## Overall Build Sequence
@@ -51,10 +53,12 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-15
+## Current Status — 2026-04-17
 
-**Build state:** All commits on `main`, pushed. Working tree clean.
+**Build state:** All commits on `main`, pushed. Migrated to three-file + beads workflow.
 **⚠️ Build has NOT been tested in simulator post-redesign.** This must happen before continuing UX polish.
+
+Project state at migration: Segment-focused redesign complete. Core features (Strava sync, fitness computation, segment scoring, Enzo chat) all built. Remaining work is UX polish phases D–J and Step 11b (Enzo voice tuning). All remaining tasks filed in beads — run `bd ready` to see next work.
 
 **UX audit phase status:**
 - Phase A (safe deletes): **Complete** — all fitness/Arc views deleted
