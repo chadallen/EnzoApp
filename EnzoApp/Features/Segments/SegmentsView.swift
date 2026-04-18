@@ -27,11 +27,13 @@ struct SegmentsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !sortedSegments.isEmpty {
+            if appState.hasRealSegmentData && !sortedSegments.isEmpty {
                 sortBar
             }
 
-            if sortedSegments.isEmpty {
+            if appState.isSyncing || appState.isSyncingPhase2 {
+                loadingState
+            } else if !appState.hasRealSegmentData {
                 emptyState
             } else {
                 List {
@@ -79,16 +81,28 @@ struct SegmentsView: View {
         .background(Color.enzoBg)
     }
 
-    private var emptyState: some View {
+    private var loadingState: some View {
         VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color.enzoSecondary)
+            Text("Loading your segments…")
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
             Image(systemName: "figure.outdoor.cycle")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.enzoSecondary)
-            Text("No segments yet")
+            Text("Sync to see your segments")
                 .font(.system(.headline, design: .rounded, weight: .semibold))
                 .foregroundStyle(Color.enzoPrimary)
-            Text("Enzo will find your best opportunities once your rides sync.")
-                .font(.system(.body))
+                .padding(.top, 4)
+            Text("Enzo will rank your PR opportunities once your ride history loads.")
+                .font(.system(.subheadline))
                 .foregroundStyle(Color.enzoSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)

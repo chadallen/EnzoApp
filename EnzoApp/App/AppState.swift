@@ -54,6 +54,9 @@ class AppState {
     // Sync state
     var isSyncing: Bool = false
     var isSyncingPhase2: Bool = false
+    // True once loadSegments() has written at least one real row from the local store.
+    // False on fresh install while segments holds preview data.
+    var hasRealSegmentData: Bool = false
     // Total activities fetched in Phase 1 — displayed in SyncProgressView as "N rides and counting".
     var syncedActivityCount: Int = 0
     // Set on sync failure, cleared on sync start. Displayed as an inline amber message in ArcView.
@@ -165,6 +168,7 @@ class AppState {
                 return score
             }
             segments = loaded.sorted { $0.strikeScore > $1.strikeScore }
+            hasRealSegmentData = true
             NSLog("[Segments] Loaded \(loaded.count) segments from local store")
         } catch {
             NSLog("[Segments] loadSegments error: \(error)")
