@@ -77,7 +77,7 @@ struct MainTabView: View {
                 showSettings = true
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 20))
+                    .font(.system(.title3))
                     .foregroundStyle(Color.enzoSecondary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())

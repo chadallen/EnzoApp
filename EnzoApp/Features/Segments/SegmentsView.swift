@@ -177,7 +177,7 @@ struct SegmentStrikeRow: View {
                 .frame(width: 44, height: 44)
 
                 Text("\(Int(segment.strikeScore * 100))")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.caption2).minimumScaleFactor(0.6)
                     .foregroundStyle(readinessColor(for: segment.strikeScore))
             }
             .scaleEffect(isPulsing ? 1.06 : 1.0)
