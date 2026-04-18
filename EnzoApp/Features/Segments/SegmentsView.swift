@@ -71,9 +71,10 @@ struct SegmentsView: View {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.system(.subheadline))
                     .foregroundStyle(Color.enzoAccent)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .padding(.horizontal)
-            .padding(.vertical, 10)
         }
         .background(Color.enzoBg)
     }
@@ -99,6 +100,7 @@ struct SegmentsView: View {
 struct SegmentStrikeRow: View {
     let segment: SegmentScore
     @State private var isPulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func readinessColor(for score: Double) -> Color {
         switch score {
@@ -180,12 +182,12 @@ struct SegmentStrikeRow: View {
             }
             .scaleEffect(isPulsing ? 1.06 : 1.0)
             .animation(
-                segment.strikeLabel == "Strike now"
+                segment.strikeLabel == "Strike now" && !reduceMotion
                     ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
                     : .default,
                 value: isPulsing
             )
-            .onAppear { isPulsing = segment.strikeLabel == "Strike now" }
+            .onAppear { isPulsing = segment.strikeLabel == "Strike now" && !reduceMotion }
         }
         .padding(.vertical, 6)
     }

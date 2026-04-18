@@ -79,6 +79,8 @@ struct MainTabView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 20))
                     .foregroundStyle(Color.enzoSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
         }
         .padding(.horizontal)
