@@ -9,17 +9,21 @@ struct ConnectView: View {
         ZStack {
             Color.enzoBg.ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                Image("EnzoIcon")
-                    .resizable()
-                    .frame(width: 60, height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 13.5))
+            VStack {
+                Spacer()
+                VStack(spacing: 24) {
+                    Image("EnzoIcon")
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 13.5))
 
-                Text(Config.connectWelcomeText)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(Color.enzoSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    Text(Config.connectWelcomeText)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                Spacer()
             }
         }
         .safeAreaInset(edge: .bottom) {

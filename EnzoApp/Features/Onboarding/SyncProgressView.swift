@@ -56,7 +56,6 @@ struct SyncProgressView: View {
             Color.enzoBg.ignoresSafeArea()
 
             VStack(spacing: 12) {
-                // Spinner
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(Color.enzoAccent)
