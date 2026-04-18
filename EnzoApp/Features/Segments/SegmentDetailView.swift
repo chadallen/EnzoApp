@@ -8,6 +8,7 @@ struct SegmentDetailView: View {
     // Goal-setting state
     @State private var hasTargetDate = false
     @State private var targetDate = Calendar.current.date(byAdding: .weekOfYear, value: 6, to: Date()) ?? Date()
+    @State private var showGoalToast = false
 
     // Enzo chat state — session-scoped, cleared on view disappear
     @State private var messages: [ArcMessage] = []
@@ -106,6 +107,23 @@ struct SegmentDetailView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
+        .overlay(alignment: .top) {
+            if showGoalToast {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark")
+                        .font(.system(.caption, weight: .semibold))
+                    Text("Goal set")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                .foregroundStyle(Color.enzoPrimary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.enzoCard, in: Capsule())
+                .padding(.top, 12)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: showGoalToast)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
     }
@@ -213,7 +231,11 @@ struct SegmentDetailView: View {
 
             Button {
                 appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
-                dismiss()
+                showGoalToast = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    dismiss()
+                }
             } label: {
                 Text("Set this goal")
                     .font(.system(.body, design: .rounded, weight: .bold))
