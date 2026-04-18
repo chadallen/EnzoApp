@@ -106,7 +106,6 @@ struct SegmentDetailView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
-        .navigationTitle(segment.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
     }
