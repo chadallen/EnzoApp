@@ -28,7 +28,7 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | — | ConnectView redesign | ✅ Done |
 | — | UX/UI audit (`ux-audit.md`, 27 items, 10-phase plan) | ✅ Done |
 | — | Segment-Focused Redesign (see below) | ✅ Done |
-| — | UX polish Phases A–C, D (partial), E (partial) | ✅ Done |
+| — | UX polish Phases A–I (D–I completed 2026-04-17) | ✅ Done |
 | 11b | Enzo voice/prompt tuning | ⬜ Pending |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
@@ -55,92 +55,32 @@ Major architectural pivot — 7 commits on `main`:
 
 ## Current Status — 2026-04-17
 
-**Build state:** All commits on `main`, pushed. Migrated to three-file + beads workflow.
-**⚠️ Build has NOT been tested in simulator post-redesign.** This must happen before continuing UX polish.
+**Build state:** All commits on `main`, pushed. Working tree clean.
+**⚠️ Build has NOT been tested in simulator post-redesign.** This must happen before shipping.
 
-Project state at migration: Segment-focused redesign complete. Core features (Strava sync, fitness computation, segment scoring, Enzo chat) all built. Remaining work is UX polish phases D–J and Step 11b (Enzo voice tuning). All remaining tasks filed in beads — run `bd ready` to see next work.
+**This session:** Migrated to three-file + beads workflow (7 ADRs, `docs/adr/`, `docs/plans/`). Ran epic executor on `EnzoApp-55p` — completed 5 of 9 tasks: UX polish phases D, E, F, H, I all done. Remaining: smoke test (`55p.1`), device UAT (`55p.2`), prompt tuning (`55p.6`), dark mode (`55p.9`, blocked).
 
 **UX audit phase status:**
-- Phase A (safe deletes): **Complete** — all fitness/Arc views deleted
-- Phase B (bug fixes): **Complete** — moot items gone (GoalSettingView deleted), streaming scroll done in SegmentDetailView
-- Phase C (settings polish): **Complete** — last-synced visible, confirm dialogs, systemRed disconnect
-- Phase D (touch targets): **Partial** — alternating rows removed; touch target sizing and reduce motion still pending
-- Phase E (navigation): **Partial** — tabs removed, gate removed; SegmentDetailView double title still pending
-- Phase F (onboarding polish): Pending
-- Phase G (chart/main UI): Largely moot (chart deleted); sync indicator still open
-- Phase H (typography): Pending
-- Phase I (feedback/empty states): Pending
+- Phase A–C: Complete
+- Phase D (touch targets): **Complete** — gear icon + sort menu 44pt, donut animation gated on `accessibilityReduceMotion`
+- Phase E (navigation): **Complete** — `.navigationTitle` removed from SegmentDetailView, no more double title
+- Phase F (onboarding polish): **Complete** — safe area insets, sync spinner, privacy copy in ConnectView
+- Phase G (chart/main UI): Largely moot (chart deleted); sync indicator in main list now shows via `hasRealSegmentData` flag
+- Phase H (typography): **Complete** — semantic text styles replace raw font sizes
+- Phase I (feedback/empty states): **Complete** — goal-set toast, proper empty + loading states
 - Phase J (dark mode): **Blocked** — requires dark color palette design decisions before any code
 
 ---
 
-## What Remains (priority order)
-
-### 1. Build + smoke test (do first)
-Run in simulator. Walk through:
-- Connect (Strava OAuth) → sync → segment list
-- Tap segment → SegmentDetailView → "Ask Enzo" → chat follow-up
-- Settings → sync, reset, disconnect confirm dialogs
-- Back navigation, goal setting
-
-### 2. SwiftData UAT (5-step device checklist)
-Requires physical device. Steps:
-1. Fresh install — verify sync works end-to-end
-2. Kill + relaunch — verify snapshots and segments persist
-3. Set a goal — kill + relaunch — verify goal persists
-4. Settings → Reset sync history → re-sync — verify data re-fetches correctly
-5. Disconnect → reconnect → sync — verify clean slate
-
-### 3. UX polish — Phase D (touch targets, remaining)
-Files: `EnzoApp/EnzoAppApp.swift`, `EnzoApp/Features/Segments/SegmentsView.swift`
-- Gear icon: `.frame(width: 44, height: 44).contentShape(Rectangle())`
-- Sort menu: verify 44pt tappable area
-- Pulsing "Strike now" donut: gate on `@Environment(\.accessibilityReduceMotion)`
-
-### 4. UX polish — Phase E (navigation, remaining)
-File: `EnzoApp/Features/Segments/SegmentDetailView.swift`
-- Segment name appears in both `.navigationTitle` (inline) and large title in scroll content — remove or shorten the inline title
-- Optional: restore native nav bar in MainTabView for large-title-on-scroll behavior
-
-### 5. UX polish — Phase F (onboarding)
-Files: `EnzoApp/Features/Onboarding/ConnectView.swift`, `EnzoApp/Features/Onboarding/SyncProgressView.swift`
-- Replace `padding(.bottom, 52)` with `.safeAreaInset(edge: .bottom)`
-- Add `ProgressView()` spinner above phase text in SyncProgressView
-- Add 1–2 lines of privacy disclosure copy in ConnectView
-
-### 6. Step 11b — Enzo voice/prompt tuning
-- Update stale labels in `skills/enzo-voice.MD` (still has old fitness + readiness label names)
-- Tune `segmentAssessmentPrompt` in `AppState.swift` via playground first: `python3 scripts/enzo_playground.py`
-- Update `ClaudeService.swift` system prompt if needed after playground testing
-
-### 7. UX polish — Phase H (typography)
-Files: `SegmentsView.swift`, `EnzoAppApp.swift`
-- Replace `.system(size: 11)` in SegmentStrikeRow donut with `.caption2` + `.minimumScaleFactor(0.6)`
-- Replace `.system(size: 20)` on gear icon with a named text style
-
-### 8. UX polish — Phase I (feedback/empty states)
-Files: `SegmentDetailView.swift`, `SegmentsView.swift`
-- Goal-set confirmation toast after `setGoal` action
-- Empty state for fresh install (currently shows preview segment data)
-
-### 9. UX polish — Phase J (dark mode)
-**Blocked.** Design decisions required first:
-- Define dark palette for all `Color.enzoXxx` tokens (enzoBg, enzoCard, enzoPrimary, enzoSecondary, enzoAccent, etc.)
-- Define `enzoUserBubble` dark-mode-appropriate color
-- Only start after palette is agreed on
-
----
-
-## Known Issues / Deferred
+## Known Issues / Blockers
 
 | Issue | Notes |
 |---|---|
+| **Build untested post-redesign** | Simulator smoke test (`EnzoApp-55p.1`) not yet run. Do before shipping anything. |
 | **Demo jitter in SyncService** | ±0.25 deterministic noise in `syncPhase2`. Do NOT remove without Chad's explicit instruction. Tagged "DEMO — Remove before shipping." |
-| **`enzo-voice.MD` stale labels** | System prompt section has old fitness + readiness label names. Fix before any prompt work in Step 11b. |
-| **`segmentAssessmentPrompt` needs tuning** | The opening "Ask Enzo" prompt in `AppState.segmentAssessmentPrompt`. Use playground before touching `AppState.swift`. |
+| **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
+| **`segmentAssessmentPrompt` needs tuning** | Opening "Ask Enzo" prompt in `AppState.segmentAssessmentPrompt`. Use playground before touching `AppState.swift`. |
 | **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **SegmentDetailView double title** | Segment name in both `.navigationTitle` and scroll content header. Phase E. |
-| **Sync progress indicator** | No visible indicator in main UI during manual sync. Phase G. |
-| **Empty state UI** | Fresh install shows preview segment data. Phase I. |
-| **Dark mode** | Phase J — do not start without dark palette defined. `.preferredColorScheme(.light)` stays until then. |
+| **Re-sync shows spinner over existing data** | When user triggers manual re-sync from Settings, `SegmentsView` replaces the segment list with a loading spinner for the duration. Confirm with Chad whether this is the desired behavior. |
+| **Dark mode** | Phase J — blocked on dark palette design decisions. `.preferredColorScheme(.light)` stays until palette is agreed. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
