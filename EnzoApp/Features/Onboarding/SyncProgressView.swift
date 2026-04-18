@@ -56,6 +56,11 @@ struct SyncProgressView: View {
             Color.enzoBg.ignoresSafeArea()
 
             VStack(spacing: 12) {
+                // Spinner
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(Color.enzoAccent)
+
                 // Phase text with crossfade
                 Text(SyncPhase(rawValue: phaseIndex)?.text ?? SyncPhase.almostReady.text)
                     .font(.system(.title3, design: .rounded, weight: .bold))
