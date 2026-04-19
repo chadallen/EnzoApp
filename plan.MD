@@ -31,7 +31,8 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | — | UX/UI audit (`ux-audit.md`, 27 items, 10-phase plan) | ✅ Done |
 | — | Segment-Focused Redesign (see below) | ✅ Done |
 | — | UX polish Phases A–I (D–I completed 2026-04-17) | ✅ Done |
-| 11b | Enzo voice/prompt tuning | ⬜ Pending |
+| 11b | Enzo voice/prompt tuning | ⬜ Pending (EnzoApp-55p.6, EnzoApp-75h.9) |
+| — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | 🔄 Active |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -55,22 +56,16 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-17
+## Current Status — 2026-04-19
 
 **Build state:** All commits on `main`, pushed. Working tree clean.
-**⚠️ Build has NOT been tested in simulator post-redesign.** This must happen before shipping.
+**⚠️ Build has NOT been tested in simulator post-redesign.** Smoke test (`55p.1`) still pending.
 
-**This session:** Migrated to three-file + beads workflow (7 ADRs, `docs/adr/`, `docs/plans/`). Ran epic executor on `EnzoApp-55p` — completed 5 of 9 tasks: UX polish phases D, E, F, H, I all done. Remaining: smoke test (`55p.1`), device UAT (`55p.2`), prompt tuning (`55p.6`), dark mode (`55p.9`, blocked).
+**This session:** Workflow cleanup — removed stale `<!-- BEGIN BEADS INTEGRATION -->` block from Claude.MD, renamed `plan.md` → `plan.MD`, added `.vscode/` to `.gitignore`, moved `ux-audit.md` to `docs/plans/`, deleted stale migration doc. Planned and created epic `EnzoApp-75h` (Segment UX Improvements, 14 tasks) covering: rotating loading text, hero segment card, onboarding hint, detail view data (donut, effort history, elevation), Enzo response length, Settings cleanup, disconnect OAuth bug, tier grouping, search. No code written.
 
-**UX audit phase status:**
-- Phase A–C: Complete
-- Phase D (touch targets): **Complete** — gear icon + sort menu 44pt, donut animation gated on `accessibilityReduceMotion`
-- Phase E (navigation): **Complete** — `.navigationTitle` removed from SegmentDetailView, no more double title
-- Phase F (onboarding polish): **Complete** — safe area insets, sync spinner, privacy copy in ConnectView
-- Phase G (chart/main UI): Largely moot (chart deleted); sync indicator in main list now shows via `hasRealSegmentData` flag
-- Phase H (typography): **Complete** — semantic text styles replace raw font sizes
-- Phase I (feedback/empty states): **Complete** — goal-set toast, proper empty + loading states
-- Phase J (dark mode): **Blocked** — requires dark color palette design decisions before any code
+## Current Status — 2026-04-17
+
+**This session:** Migrated to three-file + beads workflow (7 ADRs). Completed UX polish phases D (touch targets), E (navigation), F (onboarding), H (typography), I (feedback/empty states) via `EnzoApp-55p`. Remaining in `55p`: smoke test (`55p.1`), device UAT (`55p.2`), prompt tuning (`55p.6`), dark mode (`55p.9`, blocked).
 
 ---
 
@@ -83,6 +78,6 @@ Major architectural pivot — 7 commits on `main`:
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
 | **`segmentAssessmentPrompt` needs tuning** | Opening "Ask Enzo" prompt in `AppState.segmentAssessmentPrompt`. Use playground before touching `AppState.swift`. |
 | **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **Re-sync shows spinner over existing data** | When user triggers manual re-sync from Settings, `SegmentsView` replaces the segment list with a loading spinner for the duration. Confirm with Chad whether this is the desired behavior. |
+| **Re-sync shows spinner over existing data** | When user triggers manual re-sync from Settings, `SegmentsView` replaces the segment list with a loading spinner. `75h.1` adds rotating text for the empty-state case; behavior when existing data is present is still unresolved — confirm with Chad. |
 | **Dark mode** | Phase J — blocked on dark palette design decisions. `.preferredColorScheme(.light)` stays until palette is agreed. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
