@@ -4,11 +4,18 @@ import Charts
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .strikeScore
+    @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
 
     enum SortOrder: String, CaseIterable {
         case strikeScore = "Strike Score"
         case alphabetical = "Alphabetical"
         case prDate = "PR Date"
+    }
+
+    private var showHintCard: Bool {
+        !hasSeenSegmentHint &&
+        appState.hasRealSegmentData &&
+        !appState.segments.contains(where: { $0.isGoalSegment })
     }
 
     private var sortedSegments: [SegmentScore] {
@@ -37,6 +44,12 @@ struct SegmentsView: View {
                 emptyState
             } else {
                 List {
+                    if showHintCard {
+                        segmentHintCard
+                            .listRowBackground(Color.enzoBg)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 2, trailing: 16))
+                    }
                     ForEach(sortedSegments) { segment in
                         NavigationLink(value: segment) {
                             SegmentStrikeRow(segment: segment)
@@ -79,6 +92,32 @@ struct SegmentsView: View {
             .padding(.horizontal)
         }
         .background(Color.enzoBg)
+    }
+
+    private var segmentHintCard: some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Tap a segment to see your readiness.")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.enzoPrimary)
+                Text("Star one to make it your target.")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(Color.enzoSecondary)
+            }
+            Spacer()
+            Button {
+                hasSeenSegmentHint = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(.caption, weight: .semibold))
+                    .foregroundStyle(Color.enzoSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.enzoAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var loadingState: some View {
