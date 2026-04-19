@@ -56,16 +56,17 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-19
+## Current Status — 2026-04-19 (Session 2)
 
-**Build state:** All commits on `main`, pushed. Working tree clean.
+**Build state:** All commits on `main`, pushed. Working tree clean. Tests passing.
+
+**This session:** Completed 5 tasks from EnzoApp-75h. Fixed `disconnect()` to use ephemeral browser session so reconnect forces real OAuth (75h.12). Shortened Enzo's opening segment response to 2-4 sentences via explicit prompt instruction (75h.9). Eliminated dark user-bubble flash on "Ask Enzo" tap using `isHidden` flag on `ArcMessage` (75h.8). Added `SegmentLoadingView` with 5 cycling phrases (75h.1). Added dismissible onboarding hint card when no goal set (75h.2). Also fixed 2 pre-existing test failures (`contextPayload` sort order, stale `prDate` in scorer test) and restored `StravaAthlete` memberwise init.
+
+## Current Status — 2026-04-19 (Session 1)
+
 **Build confirmed working in simulator** — smoke test (`55p.1`) passed. All four journeys complete post-redesign.
 
 **This session:** Workflow cleanup (beads block, casing, gitignore, docs). Created `EnzoApp-75h` (Segment UX Improvements, 15 tasks). Ran simulator smoke test — passed, closed `55p.1`. Decided re-sync should keep existing list visible with a subtle indicator (not full-screen spinner) — tracked as `75h.15`.
-
-## Current Status — 2026-04-17
-
-**This session:** Migrated to three-file + beads workflow (7 ADRs). Completed UX polish phases D (touch targets), E (navigation), F (onboarding), H (typography), I (feedback/empty states) via `EnzoApp-55p`. Remaining in `55p`: smoke test (`55p.1`), device UAT (`55p.2`), prompt tuning (`55p.6`), dark mode (`55p.9`, blocked).
 
 ---
 
@@ -76,8 +77,7 @@ Major architectural pivot — 7 commits on `main`:
 | **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
 | **Demo jitter in SyncService** | ±0.25 deterministic noise in `syncPhase2`. Do NOT remove without Chad's explicit instruction. Tagged "DEMO — Remove before shipping." |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
-| **`segmentAssessmentPrompt` needs tuning** | Opening "Ask Enzo" prompt in `AppState.segmentAssessmentPrompt`. Use playground before touching `AppState.swift`. |
 | **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **Re-sync shows spinner over existing data** | Decision: keep existing list visible, show subtle indicator. Tracked as `75h.15` (depends on `75h.1`). |
+| **Re-sync shows spinner over existing data** | Decision: keep existing list visible, show subtle indicator. Tracked as `75h.15` (depends on `75h.1`, now closed). |
 | **Dark mode** | Phase J — blocked on dark palette design decisions. `.preferredColorScheme(.light)` stays until palette is agreed. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
