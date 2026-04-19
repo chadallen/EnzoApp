@@ -31,7 +31,9 @@ struct StrikeScoreDonut: View {
     }
 
     private var color: Color { strikeColor(for: score) }
-    private var isCompact: Bool { size <= 56 }
+    // < 90: score number only (list rows at 44pt, hero card at 80pt)
+    // ≥ 90: score + label (detail view at 120pt)
+    private var isCompact: Bool { size < 90 }
 
     var body: some View {
         ZStack {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SegmentDetailView: View {
     let segment: SegmentScore
+    var autoStartChat: Bool = false
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
@@ -117,6 +118,11 @@ struct SegmentDetailView: View {
         .animation(.easeInOut(duration: 0.3), value: showGoalToast)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
+        .task {
+            if autoStartChat {
+                await askEnzo()
+            }
+        }
     }
 
     // MARK: - Subviews
