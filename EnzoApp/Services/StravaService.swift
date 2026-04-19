@@ -200,7 +200,7 @@ actor StravaService {
                 continuation.resume(returning: code)
             }
             session.presentationContextProvider = contextProvider
-            session.prefersEphemeralWebBrowserSession = false
+            session.prefersEphemeralWebBrowserSession = true
             session.start()
         }
     }
