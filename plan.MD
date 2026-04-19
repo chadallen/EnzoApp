@@ -4,6 +4,8 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
+**Active epic:** EnzoApp-75h — Segment UX Improvements (14 tasks)
+
 ---
 
 ## Overall Build Sequence
