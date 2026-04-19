@@ -68,9 +68,9 @@ struct SegmentDetailView: View {
                         }
 
                         // Message thread
-                        if !messages.isEmpty {
+                        if messages.contains(where: { !$0.isHidden }) {
                             VStack(spacing: 12) {
-                                ForEach(messages) { message in
+                                ForEach(messages.filter { !$0.isHidden }) { message in
                                     ArcMessageView(message: message)
                                 }
                             }
@@ -96,7 +96,7 @@ struct SegmentDetailView: View {
             }
 
             // Input bar pinned to bottom — only visible once a conversation has started
-            if !messages.isEmpty || isStreaming {
+            if messages.contains(where: { !$0.isHidden }) || isStreaming {
                 VStack {
                     Spacer()
                     ArcInputBar(text: $inputText, isSending: isStreaming) { text in
@@ -295,10 +295,10 @@ struct SegmentDetailView: View {
 
     private func askEnzo() async {
         let prompt = AppState.segmentAssessmentPrompt(segment: segment, athleteContext: appState.athleteContext)
-        let userMessage = ArcMessage(role: .user, content: prompt)
-        messages.append(userMessage)
         isStreaming = true
         streamingText = ""
+        // Append as hidden — keeps it in history for follow-up context but never renders as a bubble.
+        messages.append(ArcMessage(role: .user, content: prompt, isHidden: true))
 
         let stream = await appState.sendSegmentMessage(prompt, segment: segment, history: [])
         for await token in stream {
