@@ -28,6 +28,9 @@ __pycache__/
 # Screen recordings
 *.MP4
 
+# VS Code settings
+.vscode/
+
 # Real athlete data — never commit
 scripts/data/
 
