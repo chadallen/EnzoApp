@@ -468,9 +468,9 @@ class AppState {
     /// Pure function — builds the opening prompt Enzo receives when the user taps "Ask Enzo"
     /// on a segment. Extracted for testability and playground use.
     static func segmentAssessmentPrompt(segment: SegmentScore, athleteContext: AthleteContext) -> String {
-        "Give me a quick read on \(segment.name). " +
+        "Quick read on \(segment.name) — 2-4 sentences, no lists. " +
         "My fitness is \(athleteContext.currentFitnessLabel), trending \(athleteContext.trendDirection). " +
-        "The readiness score is \(segment.strikeLabel). " +
-        "Is now a good window to go after this, and what would move the needle if not?"
+        "Readiness score: \(segment.strikeLabel). " +
+        "Is this a good window, and if not, what changes it?"
     }
 }
