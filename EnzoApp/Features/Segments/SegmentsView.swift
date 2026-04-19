@@ -145,17 +145,6 @@ struct SegmentsView: View {
 
 struct SegmentStrikeRow: View {
     let segment: SegmentScore
-    @State private var isPulsing = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private func readinessColor(for score: Double) -> Color {
-        switch score {
-        case 0.80...:       return .enzoGoal
-        case 0.65..<0.80:   return .enzoChartPrimary
-        case 0.45..<0.65:   return .enzoAmber
-        default:            return .enzoSecondary
-        }
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -203,38 +192,7 @@ struct SegmentStrikeRow: View {
 
             Spacer()
 
-            ZStack {
-                Chart {
-                    SectorMark(
-                        angle: .value("Readiness", segment.strikeScore),
-                        innerRadius: .ratio(0.62),
-                        angularInset: 2
-                    )
-                    .foregroundStyle(readinessColor(for: segment.strikeScore))
-
-                    SectorMark(
-                        angle: .value("Remaining", max(0.001, 1.0 - segment.strikeScore)),
-                        innerRadius: .ratio(0.62),
-                        angularInset: 2
-                    )
-                    .foregroundStyle(readinessColor(for: segment.strikeScore).opacity(0.12))
-                }
-                .chartLegend(.hidden)
-                .frame(width: 44, height: 44)
-
-                Text("\(Int(segment.strikeScore * 100))")
-                    .font(.system(.caption2, design: .rounded, weight: .bold))
-                    .minimumScaleFactor(0.6)
-                    .foregroundStyle(readinessColor(for: segment.strikeScore))
-            }
-            .scaleEffect(isPulsing ? 1.06 : 1.0)
-            .animation(
-                segment.strikeLabel == "Strike now" && !reduceMotion
-                    ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
-                    : .default,
-                value: isPulsing
-            )
-            .onAppear { isPulsing = segment.strikeLabel == "Strike now" && !reduceMotion }
+            StrikeScoreDonut(score: segment.strikeScore, label: segment.strikeLabel, size: 44)
         }
         .padding(.vertical, 6)
     }

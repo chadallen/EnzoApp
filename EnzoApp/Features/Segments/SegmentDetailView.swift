@@ -16,15 +16,6 @@ struct SegmentDetailView: View {
     @State private var isStreaming = false
     @State private var streamingText = ""
 
-    private var pillColor: Color {
-        switch segment.strikeScore {
-        case 0.80...: return .enzoGoal
-        case 0.65..<0.80: return .enzoChartPrimary
-        case 0.45..<0.65: return .enzoAmber
-        default: return .enzoSecondary
-        }
-    }
-
     private var strikeLine: String {
         switch segment.strikeScore {
         case 0.80...:
@@ -46,8 +37,8 @@ struct SegmentDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         headerSection
-                        statsCard
                         readinessCard
+                        statsCard
 
                         if segment.isGoalSegment {
                             goalBadge
@@ -170,28 +161,17 @@ struct SegmentDetailView: View {
     }
 
     private var readinessCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Readiness score")
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.enzoSecondary)
-                .textCase(.uppercase)
-                .tracking(1)
-
-            HStack {
-                Text(segment.strikeLabel)
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(pillColor)
-                Spacer()
-                Text(String(format: "%.0f", segment.strikeScore * 100))
-                    .font(.system(.title3, design: .monospaced, weight: .bold))
-                    .foregroundStyle(pillColor)
-            }
+        VStack(spacing: 16) {
+            StrikeScoreDonut(score: segment.strikeScore, label: segment.strikeLabel)
             Text(strikeLine)
                 .font(.system(.subheadline))
                 .foregroundStyle(Color.enzoSecondary)
+                .multilineTextAlignment(.center)
                 .lineSpacing(3)
         }
-        .padding()
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .padding(.horizontal)
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
     }
 
