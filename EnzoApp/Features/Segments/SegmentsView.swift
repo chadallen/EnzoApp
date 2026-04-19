@@ -82,14 +82,7 @@ struct SegmentsView: View {
     }
 
     private var loadingState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .tint(Color.enzoSecondary)
-            Text("Loading your segments…")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(Color.enzoSecondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        SegmentLoadingView()
     }
 
     private var emptyState: some View {
@@ -208,9 +201,47 @@ struct SegmentStrikeRow: View {
     }
 }
 
-#Preview {
+struct SegmentLoadingView: View {
+    @State private var phraseIndex: Int = 0
+
+    private let phrases = [
+        "Getting your segments…",
+        "Analyzing your PR history…",
+        "Calculating your strike scores…",
+        "Ranking your best opportunities…",
+        "Almost there…"
+    ]
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color.enzoSecondary)
+            Text(phrases[phraseIndex])
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+                .id(phraseIndex)
+                .transition(.opacity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    phraseIndex = (phraseIndex + 1) % phrases.count
+                }
+            }
+        }
+    }
+}
+
+#Preview("Segments") {
     NavigationStack {
         SegmentsView()
             .environment(AppState())
     }
+}
+
+#Preview("Loading") {
+    SegmentLoadingView()
+        .background(Color.enzoBg)
 }
