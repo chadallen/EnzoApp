@@ -59,9 +59,9 @@ Major architectural pivot — 7 commits on `main`:
 ## Current Status — 2026-04-19
 
 **Build state:** All commits on `main`, pushed. Working tree clean.
-**⚠️ Build has NOT been tested in simulator post-redesign.** Smoke test (`55p.1`) still pending.
+**Build confirmed working in simulator** — smoke test (`55p.1`) passed. All four journeys complete post-redesign.
 
-**This session:** Workflow cleanup — removed stale `<!-- BEGIN BEADS INTEGRATION -->` block from Claude.MD, renamed `plan.md` → `plan.MD`, added `.vscode/` to `.gitignore`, moved `ux-audit.md` to `docs/plans/`, deleted stale migration doc. Planned and created epic `EnzoApp-75h` (Segment UX Improvements, 14 tasks) covering: rotating loading text, hero segment card, onboarding hint, detail view data (donut, effort history, elevation), Enzo response length, Settings cleanup, disconnect OAuth bug, tier grouping, search. No code written.
+**This session:** Workflow cleanup (beads block, casing, gitignore, docs). Created `EnzoApp-75h` (Segment UX Improvements, 15 tasks). Ran simulator smoke test — passed, closed `55p.1`. Decided re-sync should keep existing list visible with a subtle indicator (not full-screen spinner) — tracked as `75h.15`.
 
 ## Current Status — 2026-04-17
 
@@ -73,11 +73,11 @@ Major architectural pivot — 7 commits on `main`:
 
 | Issue | Notes |
 |---|---|
-| **Build untested post-redesign** | Simulator smoke test (`EnzoApp-55p.1`) not yet run. Do before shipping anything. |
+| **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
 | **Demo jitter in SyncService** | ±0.25 deterministic noise in `syncPhase2`. Do NOT remove without Chad's explicit instruction. Tagged "DEMO — Remove before shipping." |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
 | **`segmentAssessmentPrompt` needs tuning** | Opening "Ask Enzo" prompt in `AppState.segmentAssessmentPrompt`. Use playground before touching `AppState.swift`. |
 | **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **Re-sync shows spinner over existing data** | When user triggers manual re-sync from Settings, `SegmentsView` replaces the segment list with a loading spinner. `75h.1` adds rotating text for the empty-state case; behavior when existing data is present is still unresolved — confirm with Chad. |
+| **Re-sync shows spinner over existing data** | Decision: keep existing list visible, show subtle indicator. Tracked as `75h.15` (depends on `75h.1`). |
 | **Dark mode** | Phase J — blocked on dark palette design decisions. `.preferredColorScheme(.light)` stays until palette is agreed. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
