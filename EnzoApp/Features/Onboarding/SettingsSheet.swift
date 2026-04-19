@@ -4,7 +4,6 @@ struct SettingsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var showResetConfirm = false
     @State private var showDisconnectConfirm = false
 
     var body: some View {
@@ -29,20 +28,6 @@ struct SettingsSheet: View {
                 }
             }
             .confirmationDialog(
-                "Reset sync history?",
-                isPresented: $showResetConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Reset and re-sync", role: .destructive) {
-                    appState.resetSyncHistory()
-                    dismiss()
-                    Task { await appState.syncPhase1() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("All activity history will be re-fetched on the next sync.")
-            }
-            .confirmationDialog(
                 "Disconnect Strava?",
                 isPresented: $showDisconnectConfirm,
                 titleVisibility: .visible
@@ -61,28 +46,14 @@ struct SettingsSheet: View {
     // MARK: - Sync section
 
     private var syncSection: some View {
-        VStack(spacing: 1) {
-            actionRow(
-                icon: "arrow.trianglehead.2.clockwise",
-                label: "Sync now",
-                sublabel: syncStatusText.isEmpty ? nil : syncStatusText,
-                isDestructive: false
-            ) {
-                dismiss()
-                Task { await appState.syncPhase1() }
-            }
-
-            Divider()
-                .background(Color.enzoBg)
-
-            actionRow(
-                icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                label: "Reset sync history",
-                sublabel: "Re-fetches all activities on next sync",
-                isDestructive: false
-            ) {
-                showResetConfirm = true
-            }
+        actionRow(
+            icon: "arrow.trianglehead.2.clockwise",
+            label: "Sync now",
+            sublabel: syncStatusText.isEmpty ? "Fetch recent rides and update your scores." : syncStatusText,
+            isDestructive: false
+        ) {
+            dismiss()
+            Task { await appState.syncPhase1() }
         }
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 12))
     }
