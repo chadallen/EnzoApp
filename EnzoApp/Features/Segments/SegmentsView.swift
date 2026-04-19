@@ -1,6 +1,12 @@
 import SwiftUI
 import Charts
 
+/// Navigation value used by SegmentsView and HeroSegmentCard.
+enum SegmentNavigation: Hashable {
+    case detail(SegmentScore)
+    case detailWithChat(SegmentScore)
+}
+
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .strikeScore
@@ -12,24 +18,24 @@ struct SegmentsView: View {
         case prDate = "PR Date"
     }
 
+    private var heroSegment: SegmentScore? {
+        appState.segments.first(where: { $0.isGoalSegment })
+    }
+
     private var showHintCard: Bool {
         !hasSeenSegmentHint &&
         appState.hasRealSegmentData &&
-        !appState.segments.contains(where: { $0.isGoalSegment })
+        heroSegment == nil
     }
 
+    // Goal segment is shown in the hero card — exclude it from the list below.
     private var sortedSegments: [SegmentScore] {
-        let goal = appState.segments.filter { $0.isGoalSegment }
-        let rest: [SegmentScore]
+        let source = appState.segments.filter { !$0.isGoalSegment }
         switch sortOrder {
-        case .strikeScore:
-            rest = appState.segments.filter { !$0.isGoalSegment }.sorted { $0.strikeScore > $1.strikeScore }
-        case .alphabetical:
-            rest = appState.segments.filter { !$0.isGoalSegment }.sorted { $0.name < $1.name }
-        case .prDate:
-            rest = appState.segments.filter { !$0.isGoalSegment }.sorted { $0.prDate > $1.prDate }
+        case .strikeScore:  return source.sorted { $0.strikeScore > $1.strikeScore }
+        case .alphabetical: return source.sorted { $0.name < $1.name }
+        case .prDate:       return source.sorted { $0.prDate > $1.prDate }
         }
-        return goal + rest
     }
 
     var body: some View {
@@ -44,6 +50,12 @@ struct SegmentsView: View {
                 emptyState
             } else {
                 List {
+                    if let goal = heroSegment {
+                        HeroSegmentCard(segment: goal)
+                            .listRowBackground(Color.enzoBg)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
                     if showHintCard {
                         segmentHintCard
                             .listRowBackground(Color.enzoBg)
@@ -51,7 +63,7 @@ struct SegmentsView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 2, trailing: 16))
                     }
                     ForEach(sortedSegments) { segment in
-                        NavigationLink(value: segment) {
+                        NavigationLink(value: SegmentNavigation.detail(segment)) {
                             SegmentStrikeRow(segment: segment)
                         }
                         .listRowBackground(Color.enzoBg)
@@ -62,8 +74,13 @@ struct SegmentsView: View {
                 .scrollContentBackground(.hidden)
             }
         }
-        .navigationDestination(for: SegmentScore.self) { segment in
-            SegmentDetailView(segment: segment)
+        .navigationDestination(for: SegmentNavigation.self) { nav in
+            switch nav {
+            case .detail(let seg):
+                SegmentDetailView(segment: seg)
+            case .detailWithChat(let seg):
+                SegmentDetailView(segment: seg, autoStartChat: true)
+            }
         }
     }
 
