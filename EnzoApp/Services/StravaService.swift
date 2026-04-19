@@ -48,6 +48,12 @@ struct StravaAthlete: Decodable, Sendable {
         case lastName = "lastname"
     }
 
+    init(id: Int64, firstName: String, lastName: String) {
+        self.id = id
+        self.firstName = firstName
+        self.lastName = lastName
+    }
+
     nonisolated init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(Int64.self, forKey: .id)
