@@ -33,10 +33,11 @@ struct SegmentScorerTests {
 
     @Test("Score near 0.0 when current fitness far below PR fitness")
     func lowScoreWhenLessFitThanPR() {
+        // Use a recent PR date so the age bonus is negligible (< 0.01).
         let score = SegmentScorer.strikeScore(
             fitnessValueAtPR: 0.95,
             currentFitnessValue: 0.10,
-            prDate: "2024-01-01",
+            prDate: "2026-04-01",
             lastEffortSeconds: 300,
             prSeconds: 300
         )

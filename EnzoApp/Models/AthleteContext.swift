@@ -203,7 +203,7 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
             goalDict["weeks_remaining"] = weeks
         }
 
-        let fitnessHistory: [[String: Any]] = snapshots.map { s in
+        let fitnessHistory: [[String: Any]] = snapshots.sorted { $0.month < $1.month }.map { s in
             [
                 "month": s.month,
                 "hours": s.hours,
