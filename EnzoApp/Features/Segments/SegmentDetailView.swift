@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct SegmentDetailView: View {
@@ -40,6 +41,10 @@ struct SegmentDetailView: View {
                         headerSection
                         readinessCard
                         statsCard
+
+                        if segment.elevationDeltaMeters != nil {
+                            elevationCard
+                        }
 
                         if !segment.efforts.isEmpty {
                             effortHistoryCard
@@ -182,6 +187,64 @@ struct SegmentDetailView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
         .padding(.horizontal)
+        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // Two-point elevation profile: flat start → rise to delta over distance.
+    // TODO: replace with real elevation stream from Strava /segments/{id}/streams?keys=altitude
+    // once the segment map spike (EnzoApp-75h.5) determines feasibility.
+    private var elevationCard: some View {
+        let elevFt = (segment.elevationDeltaMeters ?? 0) * 3.28084
+        let distMi = (segment.distanceMeters ?? 1609.0) * 0.000621371
+        let data: [(dist: Double, elev: Double)] = [(0, 0), (distMi, max(elevFt, 0))]
+        let yMax = max(elevFt, 1) * 1.3
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Elevation profile")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.enzoSecondary)
+                .textCase(.uppercase)
+                .tracking(1)
+
+            Chart {
+                ForEach(data.indices, id: \.self) { i in
+                    AreaMark(
+                        x: .value("Distance", data[i].dist),
+                        y: .value("Elevation", data[i].elev)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.enzoChartSecondary.opacity(0.4), Color.enzoChartSecondary.opacity(0.0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("Distance", data[i].dist),
+                        y: .value("Elevation", data[i].elev)
+                    )
+                    .foregroundStyle(Color.enzoChartPrimary)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                }
+            }
+            .frame(height: 72)
+            .chartXScale(domain: 0...distMi)
+            .chartYScale(domain: 0...yMax)
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+
+            HStack {
+                Text(String(format: "%.1f mi", distMi))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Color.enzoSecondary)
+                Spacer()
+                Text(String(format: "+%.0f ft", elevFt))
+                    .font(.system(.caption, design: .monospaced, weight: .medium))
+                    .foregroundStyle(Color.enzoPrimary)
+            }
+        }
+        .padding()
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
     }
 
@@ -370,9 +433,16 @@ struct SegmentDetailView: View {
     }
 }
 
-#Preview {
+#Preview("Hilly — elevation chart") {
     NavigationStack {
         SegmentDetailView(segment: SegmentScore.previewSegments[0])
+    }
+    .environment(AppState())
+}
+
+#Preview("Flat — no elevation") {
+    NavigationStack {
+        SegmentDetailView(segment: SegmentScore.previewSegments[1])
     }
     .environment(AppState())
 }
