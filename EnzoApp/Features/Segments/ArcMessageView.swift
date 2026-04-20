@@ -9,10 +9,10 @@ struct ArcMessageView: View {
                 Spacer(minLength: 60)
                 Text(message.content)
                     .font(.system(.body))
-                    .foregroundStyle(Color.enzoPrimary)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Color(hex: "1C1C2E"), in: RoundedRectangle(cornerRadius: 14))
+                    .background(Color.enzoUserBubble, in: RoundedRectangle(cornerRadius: 14))
             } else {
                 HStack(alignment: .top, spacing: 10) {
                     RoundedRectangle(cornerRadius: 2)
