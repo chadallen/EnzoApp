@@ -1,5 +1,14 @@
 import Foundation
 
+/// A single past effort on a segment. Stored as JSON in SegmentScoreModel.effortsJSON.
+/// Reverse-chronological order (newest first). Capped at 20 per segment during sync.
+struct EffortRecord: Codable, Identifiable {
+    let date: String    // "yyyy-MM-dd"
+    let seconds: Int
+
+    var id: String { "\(date)-\(seconds)" }
+}
+
 struct SegmentScore: Identifiable, Hashable {
     let name: String
     let prSeconds: Int
@@ -13,8 +22,17 @@ struct SegmentScore: Identifiable, Hashable {
     var isGoalSegment: Bool = false
     var distanceMeters: Double? = nil
     var elevationDeltaMeters: Double? = nil
+    var effortsJSON: String = "[]"
 
     var id: String { name }
+
+    /// Decoded effort history, newest first. Empty if no data or malformed JSON.
+    var efforts: [EffortRecord] {
+        guard let data = effortsJSON.data(using: .utf8),
+              let records = try? JSONDecoder().decode([EffortRecord].self, from: data)
+        else { return [] }
+        return records
+    }
 
     var prFormatted: String {
         let mins = prSeconds / 60
@@ -49,7 +67,8 @@ struct SegmentScore: Identifiable, Hashable {
             strikeLabel: "Not quite ready",
             isGoalSegment: true,
             distanceMeters: 2736,
-            elevationDeltaMeters: 101
+            elevationDeltaMeters: 101,
+            effortsJSON: #"[{"date":"2026-03-15","seconds":401},{"date":"2025-12-02","seconds":389},{"date":"2025-08-10","seconds":342},{"date":"2025-06-04","seconds":371}]"#
         ),
         SegmentScore(
             name: "Camino Alto Cutoff",

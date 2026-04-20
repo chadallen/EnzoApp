@@ -41,6 +41,10 @@ struct SegmentDetailView: View {
                         readinessCard
                         statsCard
 
+                        if !segment.efforts.isEmpty {
+                            effortHistoryCard
+                        }
+
                         if segment.isGoalSegment {
                             goalBadge
                         } else {
@@ -179,6 +183,52 @@ struct SegmentDetailView: View {
         .padding(.vertical, 24)
         .padding(.horizontal)
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var effortHistoryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Effort history")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.enzoSecondary)
+                .textCase(.uppercase)
+                .tracking(1)
+
+            VStack(spacing: 10) {
+                ForEach(segment.efforts) { effort in
+                    effortRow(effort)
+                }
+            }
+        }
+        .padding()
+        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func effortRow(_ effort: EffortRecord) -> some View {
+        let isPR = effort.seconds == segment.prSeconds
+        return HStack {
+            Text(formattedPRDate(effort.date))
+                .font(.system(.subheadline, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+
+            Spacer()
+
+            if isPR {
+                Text("PR")
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.enzoAccent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.enzoAccent.opacity(0.1), in: Capsule())
+            }
+
+            Text(formattedTime(effort.seconds))
+                .font(.system(.subheadline, design: .monospaced, weight: isPR ? .bold : .regular))
+                .foregroundStyle(isPR ? Color.enzoAccent : Color.enzoPrimary)
+        }
+    }
+
+    private func formattedTime(_ seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private var goalBadge: some View {

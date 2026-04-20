@@ -427,6 +427,7 @@ class AppState {
             existing.strikeLabel          = row.strikeLabel ?? ""
             existing.distanceMeters       = row.distanceMeters ?? 0
             existing.elevationDeltaMeters = row.elevationDeltaMeters ?? 0
+            existing.effortsJSON          = row.effortsJSON ?? "[]"
         } else {
             modelContext.insert(SegmentScoreModel(from: row))
         }
