@@ -21,6 +21,8 @@ struct SegmentScoreRow: Codable {
     var strikeLabel: String?
     var distanceMeters: Double?
     var elevationDeltaMeters: Double?
+    /// Not from Strava/Supabase — populated locally by SyncService during Phase 2.
+    var effortsJSON: String?
 
     enum CodingKeys: String, CodingKey {
         case id

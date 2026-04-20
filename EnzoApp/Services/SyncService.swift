@@ -287,6 +287,10 @@ actor SyncService {
         // the first occurrence of each segment is the latest real-world effort).
         var latestEffortMap: [Int64: Int] = [:]
 
+        // Collects all efforts per segment for history display. Newest-first (matching
+        // activity order). Capped at 20 per segment to bound storage.
+        var effortsMap: [Int64: [EffortRecord]] = [:]
+
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         dateFormatter.timeZone = TimeZone(identifier: "UTC")
@@ -337,6 +341,13 @@ actor SyncService {
                     effortDateStr = String(effort.startDate.prefix(10))
                 }
 
+                // Collect all efforts for history (cap at 20 most recent per segment).
+                var effortList = effortsMap[segId, default: []]
+                if effortList.count < 20 {
+                    effortList.append(EffortRecord(date: effortDateStr, seconds: effort.elapsedTime))
+                    effortsMap[segId] = effortList
+                }
+
                 // prRank == 1 means this effort IS the athlete's all-time PR on this segment.
                 if effort.prRank == 1 {
                     let prDateISO = effort.startDateLocal
@@ -360,7 +371,7 @@ actor SyncService {
                     let demoJitter = Double((segId &* 2654435761) & 0xFFFF) / Double(0xFFFF) * 0.5 - 0.25
                     let score = min(max(baseScore + demoJitter, 0.10), 0.95)
 
-                    let row = SegmentScoreRow(
+                    var row = SegmentScoreRow(
                         id: nil,
                         userId: nil,
                         stravaSegmentId: segId,
@@ -377,6 +388,8 @@ actor SyncService {
                         distanceMeters: seg.distance,
                         elevationDeltaMeters: seg.elevationHigh - seg.elevationLow
                     )
+                    row.effortsJSON = (try? JSONEncoder().encode(effortsMap[segId] ?? []))
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
                     segmentMap[segId] = row
                 } else if segmentMap[segId] == nil {
                     // Non-PR effort on a segment we haven't seen yet — skip.

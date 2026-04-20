@@ -160,11 +160,15 @@ final class SegmentScoreModel {
     /// Elevation delta (high - low) in meters. Used for display context.
     var elevationDeltaMeters: Double
 
+    /// JSON-encoded [EffortRecord] array, newest-first, capped at 20.
+    /// Default "[]" so existing rows migrate cleanly on first launch after schema change.
+    var effortsJSON: String = "[]"
+
     init(stravaSegmentId: Int, segmentName: String, prSeconds: Int,
          prAchievedAt: String, fitnessValueAtPr: Double, currentFitnessValue: Double,
          trendDirection: String, lastEffortSeconds: Int, lastEffortDate: String,
          strikeScore: Double, strikeLabel: String, distanceMeters: Double,
-         elevationDeltaMeters: Double) {
+         elevationDeltaMeters: Double, effortsJSON: String = "[]") {
         self.stravaSegmentId = stravaSegmentId
         self.segmentName = segmentName
         self.prSeconds = prSeconds
@@ -178,6 +182,7 @@ final class SegmentScoreModel {
         self.strikeLabel = strikeLabel
         self.distanceMeters = distanceMeters
         self.elevationDeltaMeters = elevationDeltaMeters
+        self.effortsJSON = effortsJSON
     }
 
     /// Convenience init from the SegmentScoreRow DTO used by SyncService.
@@ -195,7 +200,8 @@ final class SegmentScoreModel {
             strikeScore: row.strikeScore ?? 0,
             strikeLabel: row.strikeLabel ?? "",
             distanceMeters: row.distanceMeters ?? 0,
-            elevationDeltaMeters: row.elevationDeltaMeters ?? 0
+            elevationDeltaMeters: row.elevationDeltaMeters ?? 0,
+            effortsJSON: row.effortsJSON ?? "[]"
         )
     }
 
@@ -214,7 +220,8 @@ final class SegmentScoreModel {
             strikeScore: strikeScore,
             strikeLabel: strikeLabel,
             distanceMeters: distanceMeters > 0 ? distanceMeters : nil,
-            elevationDeltaMeters: elevationDeltaMeters != 0 ? elevationDeltaMeters : nil
+            elevationDeltaMeters: elevationDeltaMeters != 0 ? elevationDeltaMeters : nil,
+            effortsJSON: effortsJSON
         )
     }
 }
