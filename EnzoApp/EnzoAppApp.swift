@@ -16,7 +16,6 @@ struct EnzoAppApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
-                .preferredColorScheme(.light)
         }
         .modelContainer(ModelContainer.enzo)
     }
