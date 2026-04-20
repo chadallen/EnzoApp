@@ -65,7 +65,7 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 ## UI
 
-**Dark mode** — App is forced light mode via `.preferredColorScheme(.light)` on `WindowGroup` in `EnzoAppApp.swift`. Only one place now — `ArcView` (which had a second `.colorScheme(.light)` on the `safeAreaInset` input area) was deleted in the Segment-Focused Redesign.
+**Dark mode** — Fully supported as of Phase J (commit 62e1d1f). `Color+Enzo.swift` uses `UIColor { traits in }` adaptive closures for bg/card/primary/secondary. Fixed tokens (accent, goal, amber, chart colors) are identical in both modes. `enzoUserBubble` is always a dark surface — always pair with `.white` text, never `Color.enzoPrimary`. The forced `.preferredColorScheme(.light)` was removed from `EnzoAppApp.swift`.
 
 **Navigation** — `MainTabView` owns the `NavigationStack`. `SegmentsView` does not wrap itself. `navigationDestination(for: SegmentScore.self)` in SegmentsView works because it's inside the ancestor NavigationStack. Tabs were removed in the Segment-Focused Redesign — `SegmentsView` is now the single content view inside the stack.
 

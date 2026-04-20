@@ -31,8 +31,9 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | — | UX/UI audit (`ux-audit.md`, 27 items, 10-phase plan) | ✅ Done |
 | — | Segment-Focused Redesign (see below) | ✅ Done |
 | — | UX polish Phases A–I (D–I completed 2026-04-17) | ✅ Done |
-| 11b | Enzo voice/prompt tuning | ⬜ Pending (EnzoApp-55p.6, EnzoApp-75h.9) |
-| — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | 🔄 Active |
+| 11b | Enzo voice/prompt tuning | ⬜ Pending (EnzoApp-55p.6) |
+| — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | ✅ Done |
+| — | UX Phase J — dark mode + semantic colors | ✅ Done |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -56,6 +57,14 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
+## Current Status — 2026-04-20 (Session 4)
+
+**Build state:** 2 commits ahead of origin, unpushed. Tests passing.
+
+**This session:** Closed the 75h epic with its final 2 tasks — elevation profile chart in `SegmentDetailView` (75h.6, Swift Charts AreaMark with enzoChartPrimary tokens) and the segment map spike (75h.5, recommendation written to beads notes: MapPolyline via on-demand stream fetch). Decided and implemented Phase J dark mode: adaptive `UIColor` trait closures in `Color+Enzo.swift`, `enzoUserBubble` token added, `.preferredColorScheme(.light)` removed (55p.9). Fixed pre-existing bug: user bubble text was black on dark navy (now `.white`). Researched Strava CTL API — not available via any public endpoint; findings captured in beads (15y). Discussed CTL/TSB computation from suffer_score and power data — paused for later. Implemented starred segment filter in Phase 2 (06k) then rolled back at Chad's request along with the CTL spike doc commit.
+
+**Next session:** `EnzoApp-06k` (starred segment filter, P2 — reimplement) or `EnzoApp-55p.2` (SwiftData UAT, P1 — needs physical device).
+
 ## Current Status — 2026-04-20 (Session 3)
 
 **Build state:** All commits on `main`, pushed. Working tree clean. Tests passing.
@@ -78,5 +87,5 @@ Major architectural pivot — 7 commits on `main`:
 | **Demo jitter in SyncService** | ±0.25 deterministic noise in `syncPhase2`. Do NOT remove without Chad's explicit instruction. Tagged "DEMO — Remove before shipping." |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
 | **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **Dark mode** | Phase J — blocked on dark palette design decisions. `.preferredColorScheme(.light)` stays until palette is agreed. |
+| **Starred segment filter rolled back** | `EnzoApp-06k` implemented then reverted at Chad's request. Needs reimplementation. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
