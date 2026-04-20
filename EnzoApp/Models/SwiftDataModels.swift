@@ -317,6 +317,149 @@ final class GoalModel {
     }
 }
 
+// MARK: - Fitness v2 Models
+//
+// These five models replace FitnessSnapshotModel and SegmentScoreModel as part of the
+// Fitness Algorithm v2 overhaul (EnzoApp-y69). The old models remain temporarily until
+// AppState and SyncService are updated to remove all references.
+//
+// Data flow:
+//   ActivityModel → LTHR → TSS (stored on ActivityModel)
+//   ActivityModel → DailyFitnessModel (CTL/ATL/TSB timeline, one row per calendar day)
+//   StarredSegmentModel + SegmentEffortModel → OLS regression → SegmentFitnessModel
+//   SegmentFitnessModel → PRPredictor → probability displayed in UI
+
+/// One Strava activity. TSS is computed on ingest and stored — it does not change.
+/// Only cycling sport types are stored (Ride, VirtualRide, GravelRide, MountainBikeRide, EBikeRide).
+/// avgWatts is only populated when Strava's device_watts == true.
+@Model
+final class ActivityModel {
+    @Attribute(.unique) var stravaId: Int
+    var date: Date
+    var movingTime: Int       // seconds
+    var avgHeartRate: Double?
+    var avgWatts: Double?     // nil unless device_watts == true
+    var tss: Double           // computed on ingest; 0 if neither HR nor power available
+
+    init(stravaId: Int, date: Date, movingTime: Int,
+         avgHeartRate: Double?, avgWatts: Double?, tss: Double) {
+        self.stravaId = stravaId
+        self.date = date
+        self.movingTime = movingTime
+        self.avgHeartRate = avgHeartRate
+        self.avgWatts = avgWatts
+        self.tss = tss
+    }
+}
+
+/// One row per calendar day from the oldest ActivityModel to today.
+/// CTL (42-day EMA) = fitness. ATL (7-day EMA) = fatigue.
+/// TSB = CTL_yesterday - ATL_yesterday, representing form going INTO the day.
+/// Rest days are included (tss contribution = 0) so decay works correctly — never skip days.
+@Model
+final class DailyFitnessModel {
+    @Attribute(.unique) var date: Date
+    var ctl: Double
+    var atl: Double
+    var tsb: Double  // = CTL_yesterday - ATL_yesterday (pre-update readiness)
+
+    init(date: Date, ctl: Double, atl: Double, tsb: Double) {
+        self.date = date
+        self.ctl = ctl
+        self.atl = atl
+        self.tsb = tsb
+    }
+}
+
+/// A segment the athlete has starred on Strava.
+/// Only starred segments appear in Enzo — star a segment in Strava to include it.
+/// Refreshed on every sync; segments that are unstarred are removed.
+@Model
+final class StarredSegmentModel {
+    @Attribute(.unique) var segmentId: Int
+    var name: String
+    var distance: Double  // meters
+    var avgGrade: Double  // percent
+
+    init(segmentId: Int, name: String, distance: Double, avgGrade: Double) {
+        self.segmentId = segmentId
+        self.name = name
+        self.distance = distance
+        self.avgGrade = avgGrade
+    }
+}
+
+/// One effort by the athlete on a starred segment, fetched from /segments/{id}/all_efforts.
+/// ctlOnDay and tsbOnDay are populated during the effort-fitness join (look up DailyFitnessModel
+/// for effortDate - 1 day). They default to 0 until the join runs.
+@Model
+final class SegmentEffortModel {
+    @Attribute(.unique) var stravaEffortId: Int
+    var segmentId: Int
+    var effortDate: Date
+    var elapsedTime: Double  // seconds
+    var ctlOnDay: Double     // populated by join; CTL from the day before this effort
+    var tsbOnDay: Double     // populated by join; TSB from the day before this effort
+
+    init(stravaEffortId: Int, segmentId: Int, effortDate: Date,
+         elapsedTime: Double, ctlOnDay: Double = 0, tsbOnDay: Double = 0) {
+        self.stravaEffortId = stravaEffortId
+        self.segmentId = segmentId
+        self.effortDate = effortDate
+        self.elapsedTime = elapsedTime
+        self.ctlOnDay = ctlOnDay
+        self.tsbOnDay = tsbOnDay
+    }
+}
+
+/// Per-segment OLS regression model: elapsed_time = β₀ + β₁·CTL + β₂·TSB + ε.
+/// Fit via normal equations using simd_double3x3.
+///
+/// isValid = false when:
+///   - nEfforts < 1 (no data)
+///   - beta1 > 0 (wrong sign — higher fitness predicts slower time, indicates confounding)
+///   - XᵀX matrix is singular (all efforts at identical CTL)
+///
+/// When isValid == false, only naiveFallback is shown in the UI.
+/// ctlMin/Max and tsbMin/Max are used for extrapolation detection at display time.
+@Model
+final class SegmentFitnessModel {
+    @Attribute(.unique) var segmentId: Int
+    var beta0: Double
+    var beta1: Double      // CTL coefficient; expected negative (fitter = faster = lower seconds)
+    var beta2: Double      // TSB coefficient; expected negative (fresher = faster = lower seconds)
+    var sigmaResid: Double // residual standard deviation; used for probability interval
+    var prTime: Double     // seconds — all-time best elapsed_time across all stored efforts
+    var prCTL: Double      // CTL on the day the PR was set (for naive fallback string)
+    var nEfforts: Int
+    var ctlMin: Double     // training range lower bound (extrapolation guard)
+    var ctlMax: Double
+    var tsbMin: Double
+    var tsbMax: Double
+    var isValid: Bool
+    var fittedAt: Date
+
+    init(segmentId: Int, beta0: Double, beta1: Double, beta2: Double,
+         sigmaResid: Double, prTime: Double, prCTL: Double, nEfforts: Int,
+         ctlMin: Double, ctlMax: Double, tsbMin: Double, tsbMax: Double,
+         isValid: Bool, fittedAt: Date) {
+        self.segmentId = segmentId
+        self.beta0 = beta0
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.sigmaResid = sigmaResid
+        self.prTime = prTime
+        self.prCTL = prCTL
+        self.nEfforts = nEfforts
+        self.ctlMin = ctlMin
+        self.ctlMax = ctlMax
+        self.tsbMin = tsbMin
+        self.tsbMax = tsbMax
+        self.isValid = isValid
+        self.fittedAt = fittedAt
+    }
+}
+
 // MARK: - Shared ModelContainer
 
 extension ModelContainer {
@@ -334,8 +477,16 @@ extension ModelContainer {
     ///   ModelConfiguration(cloudKitContainerIdentifier: "iCloud.com.enzo.app")
     static let enzo: ModelContainer = {
         let schema = Schema([
+            // Legacy models — removed once AppState/SyncService cutover is complete
             FitnessSnapshotModel.self,
             SegmentScoreModel.self,
+            // Fitness v2 models (EnzoApp-y69)
+            ActivityModel.self,
+            DailyFitnessModel.self,
+            StarredSegmentModel.self,
+            SegmentEffortModel.self,
+            SegmentFitnessModel.self,
+            // Unchanged
             GoalModel.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
