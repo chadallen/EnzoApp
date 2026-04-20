@@ -38,17 +38,34 @@ struct SegmentsView: View {
         }
     }
 
+    private static let tierOrder = ["Strike now", "Almost there", "Worth a shot", "Getting there", "Build first"]
+
+    private var tieredSegments: [(tier: String, segments: [SegmentScore])] {
+        let grouped = Dictionary(grouping: sortedSegments, by: \.strikeLabel)
+        return Self.tierOrder.compactMap { tier in
+            guard let segs = grouped[tier], !segs.isEmpty else { return nil }
+            return (tier: tier, segments: segs)
+        }
+    }
+
+    private var isSyncing: Bool { appState.isSyncing || appState.isSyncingPhase2 }
+
     var body: some View {
         VStack(spacing: 0) {
             if appState.hasRealSegmentData && !sortedSegments.isEmpty {
                 sortBar
             }
 
-            if appState.isSyncing || appState.isSyncingPhase2 {
+            // Full-screen spinner only on first load (no data yet).
+            // During re-sync with existing segments, keep the list visible.
+            if isSyncing && appState.segments.isEmpty {
                 loadingState
             } else if !appState.hasRealSegmentData {
                 emptyState
             } else {
+                if isSyncing {
+                    syncBanner
+                }
                 List {
                     if let goal = heroSegment {
                         HeroSegmentCard(segment: goal)
@@ -62,12 +79,22 @@ struct SegmentsView: View {
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 2, trailing: 16))
                     }
-                    ForEach(sortedSegments) { segment in
-                        NavigationLink(value: SegmentNavigation.detail(segment)) {
-                            SegmentStrikeRow(segment: segment)
+                    ForEach(tieredSegments, id: \.tier) { group in
+                        Section {
+                            ForEach(group.segments) { segment in
+                                NavigationLink(value: SegmentNavigation.detail(segment)) {
+                                    SegmentStrikeRow(segment: segment)
+                                }
+                                .listRowBackground(Color.enzoBg)
+                                .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+                            }
+                        } header: {
+                            Text(group.tier.uppercased())
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .foregroundStyle(Color.enzoSecondary)
+                                .tracking(0.5)
                         }
-                        .listRowBackground(Color.enzoBg)
-                        .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+                        .listSectionSeparator(.hidden, edges: .top)
                     }
                 }
                 .listStyle(.plain)
@@ -139,6 +166,20 @@ struct SegmentsView: View {
 
     private var loadingState: some View {
         SegmentLoadingView()
+    }
+
+    private var syncBanner: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.75)
+                .tint(Color.enzoSecondary)
+            Text("Syncing…")
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(Color.enzoSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color.enzoBg)
     }
 
     private var emptyState: some View {
