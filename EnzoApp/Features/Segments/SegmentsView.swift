@@ -10,6 +10,7 @@ enum SegmentNavigation: Hashable {
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .strikeScore
+    @State private var searchText = ""
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
 
     enum SortOrder: String, CaseIterable {
@@ -50,9 +51,17 @@ struct SegmentsView: View {
 
     private var isSyncing: Bool { appState.isSyncing || appState.isSyncingPhase2 }
 
+    private var isSearching: Bool { !searchText.isEmpty }
+
+    /// All segments (including goal) filtered by searchText. Used only when isSearching.
+    private var filteredSegments: [SegmentScore] {
+        SegmentScore.filter(appState.segments, by: searchText)
+            .sorted { $0.strikeScore > $1.strikeScore }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if appState.hasRealSegmentData && !sortedSegments.isEmpty {
+            if !isSearching && appState.hasRealSegmentData && !sortedSegments.isEmpty {
                 sortBar
             }
 
@@ -62,6 +71,8 @@ struct SegmentsView: View {
                 loadingState
             } else if !appState.hasRealSegmentData {
                 emptyState
+            } else if isSearching {
+                searchResultsList
             } else {
                 if isSyncing {
                     syncBanner
@@ -101,12 +112,40 @@ struct SegmentsView: View {
                 .scrollContentBackground(.hidden)
             }
         }
+        .searchable(text: $searchText, prompt: "Search segments")
         .navigationDestination(for: SegmentNavigation.self) { nav in
             switch nav {
             case .detail(let seg):
                 SegmentDetailView(segment: seg)
             case .detailWithChat(let seg):
                 SegmentDetailView(segment: seg, autoStartChat: true)
+            }
+        }
+    }
+
+    private var searchResultsList: some View {
+        Group {
+            if filteredSegments.isEmpty {
+                VStack(spacing: 8) {
+                    Text("No segments match \"\(searchText)\"")
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(filteredSegments) { segment in
+                        NavigationLink(value: SegmentNavigation.detail(segment)) {
+                            SegmentStrikeRow(segment: segment)
+                        }
+                        .listRowBackground(Color.enzoBg)
+                        .listRowSeparatorTint(Color.enzoSecondary.opacity(0.15))
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
     }
