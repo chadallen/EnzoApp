@@ -785,10 +785,10 @@ class AppState {
             let latestEffort = (try? modelContext.fetch(effortDescriptor))?.first
             lastEffortSeconds = latestEffort.map { Int($0.elapsedTime.rounded()) } ?? prSeconds
 
-            let score = SegmentScore(
+            var score = SegmentScore(
                 name: starred.name,
                 prSeconds: prSeconds,
-                prDate: "",                     // UI task (1tl) will wire this properly
+                prDate: "",                     // segment PR date not yet stored in v2 models
                 fitnessValueAtPR: fitModel.prCTL / 100.0,  // rough bridge: CTL/100 ≈ 0-1
                 currentFitnessValue: ctlToday / 100.0,
                 trendDirection: "flat",
@@ -799,6 +799,13 @@ class AppState {
                 elevationDeltaMeters: nil,
                 effortsJSON: "[]"
             )
+            // Populate v2 prediction fields from PRPredictor result
+            score.prProbability = prediction.isValid ? prediction.probability : nil
+            score.predictedTime = prediction.isValid ? prediction.predictedTime : nil
+            score.predictionSigma = prediction.isValid ? fitModel.sigmaResid : nil
+            score.isExtrapolating = prediction.isExtrapolating
+            score.naiveFallback = prediction.naiveFallback
+            score.nEfforts = prediction.nEfforts
             newSegments.append(score)
         }
 
@@ -855,9 +862,23 @@ class AppState {
     /// Pure function — builds the opening prompt Enzo receives when the user taps "Ask Enzo"
     /// on a segment. Extracted for testability and playground use.
     static func segmentAssessmentPrompt(segment: SegmentScore, athleteContext: AthleteContext) -> String {
-        "Quick read on \(segment.name) — 2-4 sentences, no lists. " +
-        "My fitness is \(athleteContext.currentFitnessLabel), trending \(athleteContext.trendDirection). " +
-        "Readiness score: \(segment.strikeLabel). " +
-        "Is this a good window, and if not, what changes it?"
+        var prompt = "Quick read on \(segment.name) — 2-4 sentences, no lists. " +
+        "My fitness is \(athleteContext.currentFitnessLabel), trending \(athleteContext.trendDirection). "
+        if let prob = segment.prProbability {
+            let pct = Int(prob * 100)
+            prompt += "PR probability: \(pct)% (\(segment.strikeLabel)). "
+            if let predicted = segment.predictedTime {
+                let mins = Int(predicted) / 60
+                let secs = Int(predicted) % 60
+                prompt += "Predicted time: \(mins):\(String(format: "%02d", secs)). "
+            }
+            if segment.isExtrapolating {
+                prompt += "Note: current fitness is outside the range used to build this model — confidence is limited. "
+            }
+        } else {
+            prompt += "Not enough data to model a probability — \(segment.naiveFallback ?? "limited history on this segment"). "
+        }
+        prompt += "Is this a good window, and if not, what changes it?"
+        return prompt
     }
 }
