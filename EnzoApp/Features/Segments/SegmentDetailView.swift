@@ -18,17 +18,9 @@ struct SegmentDetailView: View {
     @State private var isStreaming = false
     @State private var streamingText = ""
 
-    private var strikeLine: String {
-        switch segment.strikeScore {
-        case 0.80...:
-            return "You're fit and trending in the right direction. A good window to go after it."
-        case 0.65..<0.80:
-            return "Close — a little more consistency and the timing will be right."
-        case 0.45..<0.65:
-            return "Getting there. Worth targeting once you've built a bit more fitness."
-        default:
-            return "Not quite there yet. Worth targeting once you've built more fitness."
-        }
+    private func formattedSeconds(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     var body: some View {
@@ -177,12 +169,53 @@ struct SegmentDetailView: View {
 
     private var readinessCard: some View {
         VStack(spacing: 16) {
-            StrikeScoreDonut(score: segment.strikeScore, label: segment.strikeLabel)
-            Text(strikeLine)
-                .font(.system(.subheadline))
-                .foregroundStyle(Color.enzoSecondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(3)
+            if let prob = segment.prProbability {
+                // Valid model — show donut + probability + predicted time + range
+                StrikeScoreDonut(score: prob, label: segment.strikeLabel)
+
+                Text("\(Int(prob * 100))%")
+                    .font(.system(.largeTitle, design: .monospaced, weight: .bold))
+                    .foregroundStyle(Color.enzoAccent)
+
+                Text(segment.strikeLabel)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(strikeColor(for: prob))
+
+                if let predicted = segment.predictedTime, let sigma = segment.predictionSigma {
+                    VStack(spacing: 4) {
+                        Text("Predicted: \(formattedSeconds(predicted))")
+                            .font(.system(.callout, design: .monospaced, weight: .medium))
+                            .foregroundStyle(Color.enzoPrimary)
+                        Text("Range: \(formattedSeconds(predicted - sigma)) – \(formattedSeconds(predicted + sigma))")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(Color.enzoSecondary)
+                    }
+                }
+
+                if segment.isExtrapolating {
+                    Text("Outside your training range — estimate is approximate")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(Color.enzoAmber)
+                        .multilineTextAlignment(.center)
+                }
+            } else {
+                // Invalid model — show naive fallback
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Color.enzoSecondary)
+
+                if let fallback = segment.naiveFallback {
+                    Text(fallback)
+                        .font(.system(.subheadline))
+                        .foregroundStyle(Color.enzoSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                }
+
+                Text(segment.nEfforts < 1 ? "Not enough efforts yet" : "Based on \(segment.nEfforts) effort\(segment.nEfforts == 1 ? "" : "s")")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(Color.enzoSecondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
