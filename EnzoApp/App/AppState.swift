@@ -9,8 +9,13 @@ import SwiftData
 // It reads from and writes to three persistence layers:
 //
 //   SwiftData (ModelContext)
-//     FitnessSnapshotModel  — monthly fitness history, written by Phase 1 sync
-//     SegmentScoreModel     — segment PRs + strike scores, written by Phase 2 sync
+//     FitnessSnapshotModel  — monthly fitness history (legacy, kept until UI cutover)
+//     SegmentScoreModel     — segment PRs + strike scores (legacy, kept until UI cutover)
+//     ActivityModel         — per-activity TSS (v2)
+//     DailyFitnessModel     — CTL/ATL/TSB timeline (v2)
+//     StarredSegmentModel   — athlete's starred segments (v2)
+//     SegmentEffortModel    — per-effort data for starred segments (v2)
+//     SegmentFitnessModel   — OLS regression model per segment (v2)
 //     GoalModel             — active/historical goals, written by setGoal()
 //
 //   Keychain
@@ -53,16 +58,17 @@ class AppState {
 
     // Sync state
     var isSyncing: Bool = false
-    var isSyncingPhase2: Bool = false
     // True once loadSegments() has written at least one real row from the local store.
     // False on fresh install while segments holds preview data.
     var hasRealSegmentData: Bool = false
-    // Total activities fetched in Phase 1 — displayed in SyncProgressView as "N rides and counting".
+    // Total activities fetched — displayed in SyncProgressView as "N rides and counting".
     var syncedActivityCount: Int = 0
     // Set on sync failure, cleared on sync start. Displayed as an inline amber message in ArcView.
     var syncErrorMessage: String? = nil
     // Set when a sync completes successfully. Persisted to UserDefaults.
     var lastSyncedAt: Date? = UserDefaults.standard.object(forKey: "lastSyncedAt") as? Date
+    // Progress message shown during syncV2() steps.
+    var syncProgressMessage: String = ""
 
     // MARK: - Services
 
@@ -264,6 +270,9 @@ class AppState {
         UserDefaults.standard.removeObject(forKey: "athleteDisplayName")
         UserDefaults.standard.removeObject(forKey: "lastActivityDate")
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
+        UserDefaults.standard.removeObject(forKey: "lastV2SyncDate")
+        UserDefaults.standard.removeObject(forKey: "athleteLTHR")
+        UserDefaults.standard.removeObject(forKey: "athleteFTP")
         UserDefaults.standard.removeObject(forKey: "lastSyncedAt")
         lastSyncedAt = nil
 
@@ -271,6 +280,11 @@ class AppState {
         do {
             try modelContext.delete(model: FitnessSnapshotModel.self)
             try modelContext.delete(model: SegmentScoreModel.self)
+            try modelContext.delete(model: ActivityModel.self)
+            try modelContext.delete(model: DailyFitnessModel.self)
+            try modelContext.delete(model: StarredSegmentModel.self)
+            try modelContext.delete(model: SegmentEffortModel.self)
+            try modelContext.delete(model: SegmentFitnessModel.self)
             try modelContext.delete(model: GoalModel.self)
             try modelContext.save()
         } catch {
@@ -292,7 +306,7 @@ class AppState {
     /// that via its onComplete handler after the completion animation finishes.
     func startOnboardingSync() async {
         isOnboardingSyncing = true
-        await syncPhase1()
+        await syncV2()
     }
 
     func authenticate(contextProvider: ASWebAuthenticationPresentationContextProviding) async throws {
@@ -302,31 +316,202 @@ class AppState {
         UserDefaults.standard.set(athlete.displayName, forKey: "athleteDisplayName")
     }
 
-    // MARK: - Sync
+    // MARK: - Sync v2
 
-    func syncPhase1() async {
-        NSLog("[Sync] starting Phase 1")
+    /// Full v2 sync pipeline:
+    ///   1. Fetch & store activities → compute LTHR → update TSS
+    ///   2. Build CTL/ATL/TSB daily timeline
+    ///   3. Fetch & sync starred segments
+    ///   4. Fetch & store segment efforts
+    ///   5. Join efforts to fitness values
+    ///   6. Fit OLS regression per segment
+    ///   7. Persist last sync date and LTHR
+    ///   8. Update in-memory segments for UI
+    func syncV2() async {
+        guard isAuthenticated else {
+            NSLog("[SyncV2] not authenticated — aborting")
+            return
+        }
+
+        NSLog("[SyncV2] starting")
         isSyncing = true
         syncErrorMessage = nil
+
         do {
-            let (count, snapshotRows, lastActivityDate) = try await syncService.syncPhase1()
-
-            for row in snapshotRows {
-                upsertSnapshot(row)
+            try await stravaService.refreshTokenIfNeeded()
+            guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
+                throw SyncError.notAuthenticated
             }
-            if let date = lastActivityDate {
-                UserDefaults.standard.set(date, forKey: "lastActivityDate")
+            guard let athleteIdStr = KeychainHelper.load(for: KeychainHelper.stravaAthleteId),
+                  let athleteId = Int64(athleteIdStr) else {
+                throw SyncError.notAuthenticated
             }
 
-            // Reload context from newly written snapshots.
-            await loadContext()
+            // Step 1a — Fetch activities from Strava
+            setSyncProgress("Fetching your rides...")
+            let fetchedActivities = try await syncService.fetchActivitiesV2(accessToken: accessToken)
+            NSLog("[SyncV2] Fetched \(fetchedActivities.count) activities")
 
-            syncedActivityCount = count
+            // Step 1b — Store activities with tss=0 initially (we need LTHR first)
+            setSyncProgress("Storing activities...")
+            for activity in fetchedActivities {
+                upsertActivityModel(activity, tss: 0)
+            }
+            syncedActivityCount = fetchedActivities.count
+
+            // Step 1c — Estimate LTHR from stored activities
+            let allStoredActivities = (try? modelContext.fetch(FetchDescriptor<ActivityModel>())) ?? []
+            let lthrInputs = allStoredActivities.map {
+                LTHREstimator.ActivityInput(movingTime: $0.movingTime, avgHeartRate: $0.avgHeartRate)
+            }
+            let lthr = LTHREstimator.estimate(from: lthrInputs)
+            let ftp = UserDefaults.standard.object(forKey: "athleteFTP") as? Double
+            NSLog("[SyncV2] LTHR=\(lthr.map { String($0) } ?? "nil"), FTP=\(ftp.map { String($0) } ?? "nil")")
+
+            // Step 1d — Recompute TSS for all stored activities using LTHR
+            setSyncProgress("Computing your fitness...")
+            for model in allStoredActivities {
+                let tss = TSSCalculator.compute(
+                    movingTime: model.movingTime,
+                    avgHeartRate: model.avgHeartRate,
+                    avgWatts: model.avgWatts,
+                    lthr: lthr,
+                    ftp: ftp
+                ) ?? 0
+                model.tss = tss
+            }
+            try? modelContext.save()
+
+            // Step 2 — Build fitness timeline (CTL/ATL/TSB)
+            setSyncProgress("Building fitness timeline...")
+            let lastV2SyncDate = UserDefaults.standard.object(forKey: "lastV2SyncDate") as? Date
+            let isIncremental = lastV2SyncDate != nil
+
+            let startCTL: Double
+            let startATL: Double
+            let startDate: Date
+
+            if isIncremental,
+               let lastStored = try? modelContext.fetch(
+                   FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+               ).first {
+                // Incremental: start from the day after the last stored row
+                startCTL = lastStored.ctl
+                startATL = lastStored.atl
+                startDate = Calendar.utc.date(byAdding: .day, value: 1, to: lastStored.date) ?? Date()
+            } else {
+                // Full rebuild
+                startCTL = 0
+                startATL = 0
+                startDate = DailyFitnessBuilder.oldestActivityDate(from: allStoredActivities) ?? Date()
+            }
+
+            let dailyRows = DailyFitnessBuilder.build(
+                from: allStoredActivities,
+                startCTL: startCTL,
+                startATL: startATL,
+                startDate: startDate,
+                endDate: Date()
+            )
+            for row in dailyRows {
+                upsertDailyFitness(row)
+            }
+            NSLog("[SyncV2] Built \(dailyRows.count) daily fitness rows")
+
+            // Step 3 — Fetch starred segments
+            setSyncProgress("Fetching your segments...")
+            let starredFromStrava = try await syncService.fetchStarredSegmentsV2(accessToken: accessToken)
+            let starredIds = Set(starredFromStrava.map { $0.id })
+
+            // Upsert current starred segments
+            for seg in starredFromStrava {
+                upsertStarredSegment(seg)
+            }
+
+            // Remove any segments that were unstarred since last sync
+            let existingStarred = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+            for model in existingStarred where !starredIds.contains(model.segmentId) {
+                modelContext.delete(model)
+            }
+            try? modelContext.save()
+            NSLog("[SyncV2] \(starredFromStrava.count) starred segments synced")
+
+            // Step 4 — Fetch segment efforts for each starred segment
+            setSyncProgress("Analyzing segments...")
+            let currentStarred = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+            for starred in currentStarred {
+                let efforts = try await syncService.fetchSegmentEffortsV2(
+                    segmentId: starred.segmentId,
+                    athleteId: athleteId,
+                    accessToken: accessToken
+                )
+                for effort in efforts {
+                    upsertSegmentEffort(effort, segmentId: starred.segmentId)
+                }
+            }
+            NSLog("[SyncV2] Segment efforts stored")
+
+            // Step 5 — Join efforts to fitness values
+            setSyncProgress("Joining efforts to fitness...")
+            let allDailyFitness = (try? modelContext.fetch(FetchDescriptor<DailyFitnessModel>())) ?? []
+            let fitnessIndex = EffortFitnessJoiner.buildIndex(from: allDailyFitness)
+            let allEfforts = (try? modelContext.fetch(FetchDescriptor<SegmentEffortModel>())) ?? []
+            let joinResults = EffortFitnessJoiner.join(efforts: allEfforts, fitnessIndex: fitnessIndex)
+            let joinById = Dictionary(joinResults.map { ($0.effortId, $0) },
+                                      uniquingKeysWith: { first, _ in first })
+            for effort in allEfforts {
+                if let r = joinById[effort.stravaEffortId] {
+                    effort.ctlOnDay = r.ctlOnDay
+                    effort.tsbOnDay = r.tsbOnDay
+                }
+            }
+            try? modelContext.save()
+
+            // Step 6 — Fit regression per segment
+            setSyncProgress("Fitting performance models...")
+            let latestDailyFitness = (try? modelContext.fetch(
+                FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+            ).first)
+
+            for starred in currentStarred {
+                let segId = starred.segmentId
+                var descriptor = FetchDescriptor<SegmentEffortModel>(
+                    predicate: #Predicate { $0.segmentId == segId }
+                )
+                descriptor.sortBy = [SortDescriptor(\.effortDate)]
+                let segEfforts = (try? modelContext.fetch(descriptor)) ?? []
+
+                let points = segEfforts.map {
+                    SegmentOLSSolver.EffortPoint(
+                        elapsedTime: $0.elapsedTime,
+                        ctlOnDay: $0.ctlOnDay,
+                        tsbOnDay: $0.tsbOnDay
+                    )
+                }
+                let fitResult = SegmentOLSSolver.fit(efforts: points)
+                upsertSegmentFitness(segmentId: segId, result: fitResult)
+            }
+            try? modelContext.save()
+            NSLog("[SyncV2] Regression models fit for \(currentStarred.count) segments")
+
+            // Step 7 — Persist last sync date and LTHR
+            UserDefaults.standard.set(Date(), forKey: "lastV2SyncDate")
+            if let lthr {
+                UserDefaults.standard.set(lthr, forKey: "athleteLTHR")
+            }
             lastSyncedAt = Date()
             UserDefaults.standard.set(lastSyncedAt, forKey: "lastSyncedAt")
-            NSLog("[Sync] Phase 1 complete — \(count) activities fetched, \(snapshotRows.count) snapshots written")
+
+            // Step 8 — Update in-memory segments for UI
+            setSyncProgress("Preparing your segments...")
+            await updateSegmentsFromV2Models(
+                starredSegments: currentStarred,
+                todayFitness: latestDailyFitness
+            )
+
+            NSLog("[SyncV2] complete")
         } catch let error as StravaError {
-            NSLog("[Sync] Phase 1 Strava error: \(error)")
+            NSLog("[SyncV2] Strava error: \(error)")
             switch error {
             case .notAuthenticated, .tokenExchangeFailed:
                 syncErrorMessage = "Strava needs you to reconnect — takes 10 seconds."
@@ -336,47 +521,31 @@ class AppState {
                 syncErrorMessage = "Sync didn't complete — tap to try again."
             }
         } catch {
-            NSLog("[Sync] Phase 1 error: \(error)")
+            NSLog("[SyncV2] error: \(error)")
             syncErrorMessage = "Sync didn't complete — tap to try again."
         }
-        isSyncing = false
 
-        // Phase 2 runs automatically after Phase 1 completes.
-        await syncPhase2()
+        syncProgressMessage = ""
+        isSyncing = false
     }
 
     /// Clears sync history and wipes the local SwiftData store so the next sync re-fetches from scratch.
     func resetSyncHistory() {
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
+        UserDefaults.standard.removeObject(forKey: "lastV2SyncDate")
         do {
             try modelContext.delete(model: FitnessSnapshotModel.self)
             try modelContext.delete(model: SegmentScoreModel.self)
+            try modelContext.delete(model: ActivityModel.self)
+            try modelContext.delete(model: DailyFitnessModel.self)
+            try modelContext.delete(model: StarredSegmentModel.self)
+            try modelContext.delete(model: SegmentEffortModel.self)
+            try modelContext.delete(model: SegmentFitnessModel.self)
             try modelContext.save()
         } catch {
             NSLog("[Sync] Failed to wipe local store on reset: \(error)")
         }
         NSLog("[Sync] History reset — local store wiped, next sync will re-fetch from scratch")
-    }
-
-    func syncPhase2() async {
-        guard isAuthenticated else {
-            NSLog("[Sync] syncPhase2: not authenticated — aborting")
-            return
-        }
-
-        NSLog("[Sync] starting Phase 2")
-        isSyncingPhase2 = true
-        do {
-            let segmentRows = try await syncService.syncPhase2(fitnessSnapshots: fitnessSnapshots)
-            for row in segmentRows {
-                upsertSegmentScore(row)
-            }
-            NSLog("[Sync] Phase 2 complete — \(segmentRows.count) segment rows written")
-            await loadSegments(goalSegmentName: athleteContext.goal.segmentName)
-        } catch {
-            NSLog("[Sync] Phase 2 error: \(error)")
-        }
-        isSyncingPhase2 = false
     }
 
     // MARK: - Private: SwiftData write helpers
@@ -432,6 +601,223 @@ class AppState {
             modelContext.insert(SegmentScoreModel(from: row))
         }
         try? modelContext.save()
+    }
+
+    // MARK: - Private: v2 SwiftData write helpers
+
+    private func setSyncProgress(_ message: String) {
+        syncProgressMessage = message
+        NSLog("[SyncV2] \(message)")
+    }
+
+    /// Upsert one ActivityModel from a StravaActivityV2. TSS is set by the caller after LTHR is known.
+    private func upsertActivityModel(_ activity: SyncService.StravaActivityV2, tss: Double) {
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoBasic = ISO8601DateFormatter()
+        let date = isoFull.date(from: activity.startDate)
+            ?? isoBasic.date(from: activity.startDate)
+            ?? Date()
+
+        let watts: Double? = (activity.deviceWatts == true) ? activity.averageWatts : nil
+        let id = activity.id
+        var descriptor = FetchDescriptor<ActivityModel>(predicate: #Predicate { $0.stravaId == id })
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.date = date
+            existing.movingTime = activity.movingTime
+            existing.avgHeartRate = activity.averageHeartrate
+            existing.avgWatts = watts
+            existing.tss = tss
+        } else {
+            modelContext.insert(ActivityModel(
+                stravaId: id,
+                date: date,
+                movingTime: activity.movingTime,
+                avgHeartRate: activity.averageHeartrate,
+                avgWatts: watts,
+                tss: tss
+            ))
+        }
+        try? modelContext.save()
+    }
+
+    /// Upsert one DailyFitnessModel, keyed on date (UTC midnight).
+    private func upsertDailyFitness(_ row: DailyFitnessModel) {
+        let day = row.date
+        var descriptor = FetchDescriptor<DailyFitnessModel>(predicate: #Predicate { $0.date == day })
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.ctl = row.ctl
+            existing.atl = row.atl
+            existing.tsb = row.tsb
+        } else {
+            modelContext.insert(row)
+        }
+    }
+
+    /// Upsert one StarredSegmentModel, keyed on segmentId.
+    private func upsertStarredSegment(_ seg: SyncService.StravaStarredSegmentV2) {
+        let id = seg.id
+        var descriptor = FetchDescriptor<StarredSegmentModel>(predicate: #Predicate { $0.segmentId == id })
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.name = seg.name
+            existing.distance = seg.distance
+            existing.avgGrade = seg.averageGrade
+        } else {
+            modelContext.insert(StarredSegmentModel(
+                segmentId: id,
+                name: seg.name,
+                distance: seg.distance,
+                avgGrade: seg.averageGrade
+            ))
+        }
+        try? modelContext.save()
+    }
+
+    /// Upsert one SegmentEffortModel, keyed on stravaEffortId.
+    private func upsertSegmentEffort(_ effort: SyncService.StravaSegmentEffortV2, segmentId: Int) {
+        let isoFull = ISO8601DateFormatter()
+        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoBasic = ISO8601DateFormatter()
+        let date = isoFull.date(from: effort.startDate)
+            ?? isoBasic.date(from: effort.startDate)
+            ?? Date()
+
+        let effortId = effort.id
+        var descriptor = FetchDescriptor<SegmentEffortModel>(
+            predicate: #Predicate { $0.stravaEffortId == effortId }
+        )
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.effortDate = date
+            existing.elapsedTime = Double(effort.elapsedTime)
+            // ctlOnDay/tsbOnDay are populated by the join step — don't overwrite here
+        } else {
+            modelContext.insert(SegmentEffortModel(
+                stravaEffortId: effortId,
+                segmentId: segmentId,
+                effortDate: date,
+                elapsedTime: Double(effort.elapsedTime)
+            ))
+        }
+        try? modelContext.save()
+    }
+
+    /// Upsert one SegmentFitnessModel from an OLS FitResult, keyed on segmentId.
+    private func upsertSegmentFitness(segmentId: Int, result: SegmentOLSSolver.FitResult) {
+        var descriptor = FetchDescriptor<SegmentFitnessModel>(
+            predicate: #Predicate { $0.segmentId == segmentId }
+        )
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            existing.beta0 = result.beta0
+            existing.beta1 = result.beta1
+            existing.beta2 = result.beta2
+            existing.sigmaResid = result.sigmaResid
+            existing.prTime = result.prTime
+            existing.prCTL = result.prCTL
+            existing.nEfforts = result.nEfforts
+            existing.ctlMin = result.ctlMin
+            existing.ctlMax = result.ctlMax
+            existing.tsbMin = result.tsbMin
+            existing.tsbMax = result.tsbMax
+            existing.isValid = result.isValid
+            existing.fittedAt = Date()
+        } else {
+            modelContext.insert(SegmentFitnessModel(
+                segmentId: segmentId,
+                beta0: result.beta0,
+                beta1: result.beta1,
+                beta2: result.beta2,
+                sigmaResid: result.sigmaResid,
+                prTime: result.prTime,
+                prCTL: result.prCTL,
+                nEfforts: result.nEfforts,
+                ctlMin: result.ctlMin,
+                ctlMax: result.ctlMax,
+                tsbMin: result.tsbMin,
+                tsbMax: result.tsbMax,
+                isValid: result.isValid,
+                fittedAt: Date()
+            ))
+        }
+    }
+
+    /// Populates appState.segments from v2 models. Acts as a bridge until the UI task (1tl)
+    /// fully adopts the new data model. Uses PRPredictor probability as the strike score.
+    private func updateSegmentsFromV2Models(
+        starredSegments: [StarredSegmentModel],
+        todayFitness: DailyFitnessModel?
+    ) async {
+        let ctlToday = todayFitness?.ctl ?? 0
+        let tsbToday = todayFitness?.tsb ?? 0
+
+        var newSegments: [SegmentScore] = []
+
+        for starred in starredSegments {
+            let segId = starred.segmentId
+            var descriptor = FetchDescriptor<SegmentFitnessModel>(
+                predicate: #Predicate { $0.segmentId == segId }
+            )
+            descriptor.fetchLimit = 1
+            guard let fitModel = (try? modelContext.fetch(descriptor))?.first else { continue }
+
+            let prediction = PRPredictor.predict(
+                model: fitModel,
+                ctlToday: ctlToday,
+                tsbToday: tsbToday
+            )
+
+            let strikeScore = prediction.probability
+            let strikeLabel = Self.strikeLabelV2(for: strikeScore)
+
+            // Fetch PR time from the model for display (convert seconds to Int)
+            let prSeconds = Int(fitModel.prTime.rounded())
+            let lastEffortSeconds: Int
+            // Fetch most recent effort date for display
+            var effortDescriptor = FetchDescriptor<SegmentEffortModel>(
+                predicate: #Predicate { $0.segmentId == segId },
+                sortBy: [SortDescriptor(\.effortDate, order: .reverse)]
+            )
+            effortDescriptor.fetchLimit = 1
+            let latestEffort = (try? modelContext.fetch(effortDescriptor))?.first
+            lastEffortSeconds = latestEffort.map { Int($0.elapsedTime.rounded()) } ?? prSeconds
+
+            let score = SegmentScore(
+                name: starred.name,
+                prSeconds: prSeconds,
+                prDate: "",                     // UI task (1tl) will wire this properly
+                fitnessValueAtPR: fitModel.prCTL / 100.0,  // rough bridge: CTL/100 ≈ 0-1
+                currentFitnessValue: ctlToday / 100.0,
+                trendDirection: "flat",
+                lastEffortSeconds: lastEffortSeconds,
+                strikeScore: strikeScore,
+                strikeLabel: strikeLabel,
+                distanceMeters: starred.distance,
+                elevationDeltaMeters: nil,
+                effortsJSON: "[]"
+            )
+            newSegments.append(score)
+        }
+
+        if !newSegments.isEmpty {
+            segments = newSegments.sorted { $0.strikeScore > $1.strikeScore }
+            hasRealSegmentData = true
+            NSLog("[SyncV2] Updated \(newSegments.count) segments in-memory")
+        }
+    }
+
+    /// Maps a probability value to the standard strike label. Mirrors legacy SegmentScorer labels.
+    static func strikeLabelV2(for probability: Double) -> String {
+        switch probability {
+        case 0.80...: return "Strike now"
+        case 0.65..<0.80: return "Almost there"
+        case 0.45..<0.65: return "Worth a shot"
+        case 0.25..<0.45: return "Getting there"
+        default: return "Build first"
+        }
     }
 
     // MARK: - Messaging

@@ -12,28 +12,24 @@ struct SyncProgressView: View {
     @Environment(AppState.self) private var appState
     let onComplete: () -> Void
 
-    // Copy phases
+    // Copy phases — cycled automatically while isSyncing is true.
     private enum SyncPhase: Int, CaseIterable {
-        case findingRides     = 0  // Phase 1
-        case trackingProgress = 1  // Phase 1
-        case bestEfforts      = 2  // Phase 1
-        case computingFitness = 3  // Phase 1
-        case findingSegments  = 4  // Phase 2
-        case checkingPRs      = 5  // Phase 2
-        case analyzingOpps    = 6  // Phase 2
-        case scoringEfforts   = 7  // Phase 2
-        case almostReady      = 8  // Completion
+        case findingRides     = 0
+        case trackingProgress = 1
+        case computingFitness = 2
+        case findingSegments  = 3
+        case analyzingOpps    = 4
+        case fittingModels    = 5
+        case almostReady      = 6
 
         var text: String {
             switch self {
-            case .findingRides:     return "Finding your rides..."
-            case .trackingProgress: return "Tracking your progress..."
-            case .bestEfforts:      return "Checking your best efforts..."
-            case .computingFitness: return "Computing your fitness..."
-            case .findingSegments:  return "Finding your segments..."
-            case .checkingPRs:      return "Checking PRs..."
+            case .findingRides:     return "Fetching your rides..."
+            case .trackingProgress: return "Computing your fitness..."
+            case .computingFitness: return "Building fitness timeline..."
+            case .findingSegments:  return "Fetching your segments..."
             case .analyzingOpps:    return "Analyzing opportunities..."
-            case .scoringEfforts:   return "Scoring your efforts..."
+            case .fittingModels:    return "Fitting performance models..."
             case .almostReady:      return "Enzo is almost ready..."
             }
         }
@@ -60,12 +56,15 @@ struct SyncProgressView: View {
                     .progressViewStyle(.circular)
                     .tint(Color.enzoAccent)
 
-                // Phase text with crossfade
-                Text(SyncPhase(rawValue: phaseIndex)?.text ?? SyncPhase.almostReady.text)
+                // Phase text with crossfade — prefer live progress message when available.
+                let displayText = appState.syncProgressMessage.isEmpty
+                    ? (SyncPhase(rawValue: phaseIndex)?.text ?? SyncPhase.almostReady.text)
+                    : appState.syncProgressMessage
+                Text(displayText)
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundColor(.enzoPrimary)
                     .multilineTextAlignment(.center)
-                    .id(phaseIndex)
+                    .id(displayText)
                     .transition(.opacity)
 
                 // Activity counter
@@ -90,17 +89,12 @@ struct SyncProgressView: View {
         .onReceive(secondTick) { _ in
             elapsed += 1
         }
-        // Phase cycling timer
+        // Phase cycling timer (fallback when syncProgressMessage is empty)
         .onReceive(phaseTick) { _ in
             advancePhase()
         }
-        // Start detection + completion detection for isSyncing
+        // Start detection + completion detection
         .onChange(of: appState.isSyncing) { _, newValue in
-            if newValue { syncHasStarted = true }
-            checkCompletion()
-        }
-        // Start detection + completion detection for isSyncingPhase2
-        .onChange(of: appState.isSyncingPhase2) { _, newValue in
             if newValue { syncHasStarted = true }
             checkCompletion()
         }
@@ -109,19 +103,9 @@ struct SyncProgressView: View {
     // MARK: - Helpers
 
     private func advancePhase() {
-        let nextIndex: Int
-        if appState.isSyncing {
-            // Cycle phases 0–3 during Phase 1
-            let current = phaseIndex <= 3 ? phaseIndex : 0
-            nextIndex = current < 3 ? current + 1 : 0
-        } else if appState.isSyncingPhase2 {
-            // Cycle phases 4–7 during Phase 2
-            let current = phaseIndex >= 4 ? phaseIndex : 4
-            nextIndex = current < 7 ? current + 1 : 4
-        } else {
-            return
-        }
-
+        guard appState.isSyncing else { return }
+        let maxPhase = SyncPhase.fittingModels.rawValue
+        let nextIndex = phaseIndex < maxPhase ? phaseIndex + 1 : 0
         withAnimation(.easeInOut(duration: 0.5)) {
             phaseIndex = nextIndex
         }
@@ -130,14 +114,13 @@ struct SyncProgressView: View {
     private func checkCompletion() {
         guard syncHasStarted,
               !appState.isSyncing,
-              !appState.isSyncingPhase2,
               !completionFired else { return }
 
         completionFired = true
 
         // Show "Enzo is almost ready..." then hand off
         withAnimation(.easeInOut(duration: 0.5)) {
-            phaseIndex = SyncPhase.almostReady.rawValue  // 8
+            phaseIndex = SyncPhase.almostReady.rawValue
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
