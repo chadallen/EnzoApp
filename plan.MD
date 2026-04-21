@@ -4,7 +4,7 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-75h — Segment UX Improvements (14 tasks)
+**Active epic:** EnzoApp-y69 — Fitness Algorithm v2 (in progress, 1 task remaining)
 
 ---
 
@@ -34,6 +34,7 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | 11b | Enzo voice/prompt tuning | ⬜ Pending (EnzoApp-55p.6) |
 | — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | ✅ Done |
 | — | UX Phase J — dark mode + semantic colors | ✅ Done |
+| — | Fitness Algorithm v2 — CTL/TSB + OLS regression (EnzoApp-y69) | 🔄 In progress (1 task left) |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -56,6 +57,14 @@ Major architectural pivot — 7 commits on `main`:
 - Fitness score computed silently, powers strikeScore — never shown in UI
 
 ---
+
+## Current Status — 2026-04-21 (Session 5)
+
+**Build state:** All commits on `main`, pushed. Tests passing (183 tests).
+
+**This session:** Designed and began implementing Fitness Algorithm v2 (EnzoApp-y69). Replaced the HR-efficiency fitness model and heuristic strike score with a CTL/ATL/TSB Performance Management Chart + per-segment OLS regression. New SwiftData models: `ActivityModel`, `DailyFitnessModel`, `StarredSegmentModel`, `SegmentEffortModel`, `SegmentFitnessModel`. New utilities: `LTHREstimator`, `TSSCalculator`, `DailyFitnessBuilder`, `SegmentOLSSolver` (simd_double3x3), `PRPredictor` (normal CDF via erf()). New Strava fetch methods for activities, starred segments, and segment efforts. Full sync pipeline wired into `AppState.syncV2()` replacing Phase 1 + Phase 2 (fht, my2, 1uc, cqa, wdi, h44, mkx, 95i all closed). UI partially updated: `SegmentScore` extended with v2 prediction fields, `SegmentDetailView` readiness card shows probability %, predicted time ± 1σ range, extrapolation warning. `segmentAssessmentPrompt` updated with probability context. 51 new algorithm tests added. Remaining in `EnzoApp-1tl`: delete legacy `FitnessSnapshotModel` + `SegmentScoreModel` definitions and `FitnessCalculator.swift` + `SegmentScorer.swift`.
+
+**Next session:** `EnzoApp-1tl` (finish UI cutover — delete legacy models/calculators, ~30 min). Then `EnzoApp-55p.2` (SwiftData UAT on physical device) or `EnzoApp-06k` (starred segment filter, P2).
 
 ## Current Status — 2026-04-20 (Session 4)
 
@@ -84,8 +93,8 @@ Major architectural pivot — 7 commits on `main`:
 | Issue | Notes |
 |---|---|
 | **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
-| **Demo jitter in SyncService** | ±0.25 deterministic noise in `syncPhase2`. Do NOT remove without Chad's explicit instruction. Tagged "DEMO — Remove before shipping." |
+| **EnzoApp-1tl partial** | SegmentScore v2 fields + SegmentDetailView probability display done. Legacy model deletion (`FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer`) still pending — do first next session. |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
-| **phase2ActivityLimit = 25** | Do not raise without Chad's instruction. |
-| **Starred segment filter rolled back** | `EnzoApp-06k` implemented then reverted at Chad's request. Needs reimplementation. |
+| **Starred segment filter** | `EnzoApp-06k` — rolled back previously, needs reimplementation against v2 sync (now uses starred segment fetch natively). |
+| **Demo jitter removed** | Old `syncPhase2` (which had the jitter) is no longer called — v2 sync has no jitter. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
