@@ -49,7 +49,7 @@ struct SegmentsView: View {
         }
     }
 
-    private var isSyncing: Bool { appState.isSyncing || appState.isSyncingPhase2 }
+    private var isSyncing: Bool { appState.isSyncing }
 
     private var isSearching: Bool { !searchText.isEmpty }
 

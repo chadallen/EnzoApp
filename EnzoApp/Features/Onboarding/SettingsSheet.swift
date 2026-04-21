@@ -53,14 +53,15 @@ struct SettingsSheet: View {
             isDestructive: false
         ) {
             dismiss()
-            Task { await appState.syncPhase1() }
+            Task { await appState.syncV2() }
         }
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var syncStatusText: String {
-        if appState.isSyncing { return "Fetching rides..." }
-        if appState.isSyncingPhase2 { return "Scoring segments..." }
+        if appState.isSyncing {
+            return appState.syncProgressMessage.isEmpty ? "Syncing..." : appState.syncProgressMessage
+        }
         if let date = appState.lastSyncedAt {
             let formatter = DateFormatter()
             formatter.dateStyle = .medium
