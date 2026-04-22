@@ -29,6 +29,8 @@ Build gotchas: `.claude/rules/build-notes.md` — check before making changes in
 
 **Testing** — Write unit tests alongside every logic file. Swift Testing (not XCTest). Test pure functions only. Every view needs a `#Preview` with hardcoded data. Run tests before marking any step done.
 
+Test command: `xcodebuild test -scheme EnzoApp -destination 'platform=iOS Simulator,name=iPhone 17'` (~5 min cold). If build artifacts are warm from the same session, use `test-without-building` instead (~30s). Pre-boot the simulator once per session: `xcrun simctl boot "iPhone 17"`. Don't re-run the full suite at end-session if build-tasks already verified them this session.
+
 **UI** — Light and dark mode supported (Phase J complete). Adaptive colors use `UIColor { traits in }` closures in `Color+Enzo.swift`. Accent `#FC5201` is fixed across modes; bg/card/primary/secondary are adaptive. `enzoUserBubble` is always a dark surface — use `.white` text on it, not `enzoPrimary`. All colors via `Color.enzoXxx` — never raw hex in views. No streaks, no guilt, no missed-workout states.
 
 **Commits** — One thing per commit. If the message needs "and", split it. Commit before moving to the next step.
