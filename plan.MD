@@ -4,7 +4,7 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-y69 — Fitness Algorithm v2 (in progress, 1 task remaining)
+**Active epic:** EnzoApp-an6 — Segment UI Polish + Data Quality (7 tasks)
 
 ---
 
