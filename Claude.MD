@@ -47,6 +47,7 @@ Read the relevant skill file before starting that type of work.
 | Writing UI copy or Enzo responses | `skills/enzo-voice.MD` |
 | Architecture decisions or new files | `skills/swift-patterns.MD` |
 | Logic, services, data transformation | `skills/testing.md` |
+| Testing a UI flow end-to-end | Use `ios-ui-test` skill (global) |
 
 ---
 
