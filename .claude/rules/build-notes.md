@@ -73,6 +73,18 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 ---
 
+## Visual UI Verification
+
+**How to capture a screenshot** — Run `bash scripts/screenshot.sh` from the repo root. It saves to `scripts/screenshots/latest.png` and prints the path.
+
+**How to read it** — Use `Read scripts/screenshots/latest.png` (absolute path: `/Users/chadallen/projects/EnzoApp/scripts/screenshots/latest.png`). The Read tool renders the image inline.
+
+**Manual prerequisite** — Simulator must be booted and the app running before taking a screenshot. Boot once per session: `xcrun simctl boot "iPhone 17"`, then launch via Sweetpad or Xcode. The screenshot script does not launch the app.
+
+**When to use** — After any view change, run the script and read the result to verify layout, colors, and content before committing.
+
+---
+
 ## Prompts
 
 **Playground first** — Use `scripts/enzo_playground.py` to test prompt changes before touching `ClaudeService.swift` or `AppState.swift`. Streams in ~2 seconds. See `scripts/README.md`.
