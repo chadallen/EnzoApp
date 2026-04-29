@@ -39,7 +39,7 @@ struct HeroSegmentCard: View {
 
                 Spacer()
 
-                StrikeScoreDonut(score: segment.strikeScore, label: segment.strikeLabel, size: 80)
+                StrikeScoreDonut(score: segment.prProbability ?? segment.strikeScore, label: segment.strikeLabel, size: 80)
             }
 
             // CTAs

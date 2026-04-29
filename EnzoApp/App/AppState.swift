@@ -160,9 +160,44 @@ class AppState {
 
     /// Fetches segment scores from the local SwiftData store and populates appState.segments.
     /// Marks the goal segment if a goal is active.
+    ///
+    /// Tries the v2 path first (StarredSegmentModel + SegmentFitnessModel). If v2 data exists,
+    /// it calls updateSegmentsFromV2Models() so prProbability is always populated after a restart.
+    /// Falls back to the legacy SegmentScoreModel path only when no v2 data is present.
     func loadSegments(goalSegmentName: String? = nil) async {
         guard isAuthenticated else { return }
         do {
+            // V2 path: use StarredSegmentModel + SegmentFitnessModel when available.
+            // This ensures prProbability is populated even after a restart (not just during sync).
+            let starredSegments = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+            let fitnessModels   = (try? modelContext.fetch(FetchDescriptor<SegmentFitnessModel>())) ?? []
+            // DEBUG an6.1 — remove: trace v2 model counts on load
+            NSLog("[DEBUG an6.1] loadSegments: starredSegments=\(starredSegments.count) fitnessModels=\(fitnessModels.count)")
+
+            if !starredSegments.isEmpty && !fitnessModels.isEmpty {
+                // V2 data is available — reconstruct prProbability from stored models.
+                let latestDailyFitness = try? modelContext.fetch(
+                    FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+                ).first
+                // DEBUG an6.1 — remove: trace today's fitness on restart load
+                NSLog("[DEBUG an6.1] loadSegments v2: todayFitness date=\(String(describing: latestDailyFitness?.date)) ctl=\(latestDailyFitness?.ctl ?? 0) tsb=\(latestDailyFitness?.tsb ?? 0)")
+                await updateSegmentsFromV2Models(
+                    starredSegments: starredSegments,
+                    todayFitness: latestDailyFitness
+                )
+                // Mark goal segment after updateSegmentsFromV2Models has populated segments.
+                if let goalName = goalSegmentName {
+                    segments = segments.map { seg in
+                        var updated = seg
+                        updated.isGoalSegment = seg.name == goalName
+                        return updated
+                    }
+                }
+                NSLog("[Segments] Loaded \(starredSegments.count) segments from v2 store with prProbability")
+                return
+            }
+
+            // Legacy fallback: SegmentScoreModel path (populated by old Phase 1/2 sync).
             let models = try modelContext.fetch(FetchDescriptor<SegmentScoreModel>())
             guard !models.isEmpty else {
                 NSLog("[Segments] No segment rows in local store yet — keeping preview data")
@@ -175,7 +210,7 @@ class AppState {
             }
             segments = loaded.sorted { $0.strikeScore > $1.strikeScore }
             hasRealSegmentData = true
-            NSLog("[Segments] Loaded \(loaded.count) segments from local store")
+            NSLog("[Segments] Loaded \(loaded.count) segments from legacy store")
         } catch {
             NSLog("[Segments] loadSegments error: \(error)")
         }
@@ -466,12 +501,17 @@ class AppState {
                 }
             }
             try? modelContext.save()
+            // DEBUG an6.1 — remove: trace effort-fitness join quality
+            let joinedWithFitness = allEfforts.filter { $0.ctlOnDay > 0 }.count
+            NSLog("[DEBUG an6.1] Effort-fitness join: \(joinedWithFitness)/\(allEfforts.count) efforts have non-zero CTL. dailyFitnessRows=\(allDailyFitness.count)")
 
             // Step 6 — Fit regression per segment
             setSyncProgress("Fitting performance models...")
             let latestDailyFitness = (try? modelContext.fetch(
                 FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
             ).first)
+            // DEBUG an6.1 — remove: trace today's CTL/TSB used for probability
+            NSLog("[DEBUG an6.1] Today's fitness: date=\(String(describing: latestDailyFitness?.date)) ctl=\(latestDailyFitness?.ctl ?? 0) tsb=\(latestDailyFitness?.tsb ?? 0)")
 
             for starred in currentStarred {
                 let segId = starred.segmentId
@@ -489,6 +529,8 @@ class AppState {
                     )
                 }
                 let fitResult = SegmentOLSSolver.fit(efforts: points)
+                // DEBUG an6.1 — remove: trace OLS result per segment
+                NSLog("[DEBUG an6.1] segId=\(segId) name=\(starred.name) nEfforts=\(fitResult.nEfforts) isValid=\(fitResult.isValid) prTime=\(fitResult.prTime) beta1=\(fitResult.beta1) sigmaResid=\(fitResult.sigmaResid)")
                 upsertSegmentFitness(segmentId: segId, result: fitResult)
             }
             try? modelContext.save()
@@ -769,6 +811,8 @@ class AppState {
                 ctlToday: ctlToday,
                 tsbToday: tsbToday
             )
+            // DEBUG an6.1 — remove: trace probability per segment
+            NSLog("[DEBUG an6.1] segId=\(segId) name=\(starred.name) ctlToday=\(ctlToday) tsbToday=\(tsbToday) modelValid=\(fitModel.isValid) prob=\(prediction.probability) predValid=\(prediction.isValid)")
 
             let strikeScore = prediction.probability
             let strikeLabel = Self.strikeLabelV2(for: strikeScore)
