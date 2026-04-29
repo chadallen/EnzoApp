@@ -28,6 +28,9 @@ __pycache__/
 # Screen recordings
 *.MP4
 
+# Simulator screenshots
+scripts/screenshots/
+
 # VS Code settings
 .vscode/
 
