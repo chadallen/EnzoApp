@@ -33,7 +33,7 @@ struct SegmentsView: View {
     private var sortedSegments: [SegmentScore] {
         let source = appState.segments.filter { !$0.isGoalSegment }
         switch sortOrder {
-        case .strikeScore:  return source.sorted { $0.strikeScore > $1.strikeScore }
+        case .strikeScore:  return source.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
         case .alphabetical: return source.sorted { $0.name < $1.name }
         case .prDate:       return source.sorted { $0.prDate > $1.prDate }
         }
@@ -56,7 +56,7 @@ struct SegmentsView: View {
     /// All segments (including goal) filtered by searchText. Used only when isSearching.
     private var filteredSegments: [SegmentScore] {
         SegmentScore.filter(appState.segments, by: searchText)
-            .sorted { $0.strikeScore > $1.strikeScore }
+            .sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
     }
 
     var body: some View {
@@ -289,7 +289,7 @@ struct SegmentStrikeRow: View {
 
             Spacer()
 
-            StrikeScoreDonut(score: segment.strikeScore, label: segment.strikeLabel, size: 44)
+            StrikeScoreDonut(score: segment.prProbability ?? segment.strikeScore, label: segment.strikeLabel, size: 44)
         }
         .padding(.vertical, 6)
     }
