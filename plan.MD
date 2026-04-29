@@ -6,6 +6,7 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 
 **Active epic:** EnzoApp-an6 — Segment UI Polish + Data Quality (7 tasks)
 **Also active:** EnzoApp-c16 — Simulator screenshot tooling for Claude UI verification (4 tasks, task 1 done)
+**Also active:** EnzoApp-aqe — idb simulator interaction for end-to-end UI flow testing (4 tasks)
 
 ---
 
