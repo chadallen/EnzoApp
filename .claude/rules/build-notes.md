@@ -85,6 +85,35 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 ---
 
+## UI Interaction (idb)
+
+idb lets Claude drive the simulator — tap, swipe, type — without manual input. Combined with screenshots, this enables end-to-end flow verification.
+
+**Prerequisites** — idb-companion and fb-idb must be installed (one-time, done by Chad). idb binary: `~/.venv/idb312/bin/idb` (Python 3.12 venv — 3.14 is incompatible). Simulator must be booted.
+
+**tap.sh wrapper** — `scripts/tap.sh` resolves the booted simulator UDID automatically and delegates to idb:
+
+```bash
+bash scripts/tap.sh tap <x> <y>                             # tap a point
+bash scripts/tap.sh swipe <x1> <y1> <x2> <y2> [duration]   # swipe between points
+bash scripts/tap.sh type <text>                              # type into focused field
+```
+
+**Coordinate reference** — iPhone 17 simulator logical resolution is 393×852 pt. Center of screen: `196 426`. Common targets: status bar `196 60`, bottom safe area edge `196 820`.
+
+**Flow verification pattern** — Screenshot → tap → screenshot → verify. Always screenshot after each interaction to confirm the result before the next action:
+
+```bash
+bash scripts/screenshot.sh   # capture state
+# Read scripts/screenshots/latest.png to verify
+bash scripts/tap.sh tap 196 426
+bash scripts/screenshot.sh   # capture result
+```
+
+**Error: no booted simulator** — `tap.sh` exits with a clear message if no simulator is booted. Boot with `xcrun simctl boot "iPhone 17"` then launch the app before using idb.
+
+---
+
 ## Prompts
 
 **Playground first** — Use `scripts/enzo_playground.py` to test prompt changes before touching `ClaudeService.swift` or `AppState.swift`. Streams in ~2 seconds. See `scripts/README.md`.
