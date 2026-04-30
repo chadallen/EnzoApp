@@ -69,19 +69,6 @@ Identity is `strava_athlete_id` in Keychain only — no remote user table.
 
 ---
 
-## Prompt Playground
-
-Iterate on Enzo's prompts without building the app. Use this before touching `ClaudeService.swift` or `AppState.swift`.
-
-```bash
-python3 scripts/enzo_playground.py --mode chat --message "What should I do this week?"
-```
-
-Full usage: `scripts/README.md`. Requires `ANTHROPIC_API_KEY` in env.
-When happy with a prompt, paste it into `ClaudeService.swift` → `systemPrompt` or `AppState.swift` → `segmentAssessmentPrompt`.
-
----
-
 ## How to Work
 
 **Starting a session** — Use `/start-session`. It reads this file, `plan.MD`, and beads state to orient and propose a plan.
