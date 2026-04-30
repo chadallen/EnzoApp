@@ -342,7 +342,7 @@ class AppState {
     /// Full v2 sync pipeline:
     ///   1. Fetch & store activities → compute LTHR → update TSS
     ///   2. Build CTL/ATL/TSB daily timeline
-    ///   3. Fetch & sync starred segments
+    ///   3. Fetch & sync starred segments + 90-day recency segments (unioned, de-duped)
     ///   4. Fetch & store segment efforts
     ///   5. Join efforts to fitness values
     ///   6. Fit OLS regression per segment
@@ -439,23 +439,54 @@ class AppState {
             }
             NSLog("[SyncV2] Built \(dailyRows.count) daily fitness rows")
 
-            // Step 3 — Fetch starred segments
+            // Step 3 — Fetch starred segments + 90-day recency segments (unioned, de-duped)
             setSyncProgress("Fetching your segments...")
             let starredFromStrava = try await syncService.fetchStarredSegmentsV2(accessToken: accessToken)
             let starredIds = Set(starredFromStrava.map { $0.id })
 
-            // Upsert current starred segments
+            // Upsert current starred segments (sets isStarred = true)
             for seg in starredFromStrava {
                 upsertStarredSegment(seg)
             }
 
-            // Remove any segments that were unstarred since last sync
-            let existingStarred = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
-            for model in existingStarred where !starredIds.contains(model.segmentId) {
+            // Step 3b — Collect segment IDs from recent (90-day) activity efforts.
+            // These come from the activity summary responses already fetched in Step 1a.
+            // No extra activity API calls — segment efforts are included in the summary.
+            let ninetyDaysAgo = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
+            let recentSegmentIds = SyncService.recentSegmentIds(
+                from: fetchedActivities,
+                cutoff: ninetyDaysAgo
+            )
+            // De-duplicate: only fetch details for recency segments not already starred.
+            let newRecencyIds = recentSegmentIds.subtracting(starredIds)
+            NSLog("[SyncV2] \(recentSegmentIds.count) unique segment IDs from 90-day activities, \(newRecencyIds.count) not already starred")
+
+            setSyncProgress("Fetching recent segment details...")
+            for segId in newRecencyIds {
+                do {
+                    let detail = try await syncService.fetchSegmentDetailV2(
+                        segmentId: segId,
+                        accessToken: accessToken
+                    )
+                    upsertRecencySegment(detail)
+                } catch SyncError.rateLimited {
+                    NSLog("[SyncV2] Rate limited fetching recency segment \(segId) — stopping early")
+                    break
+                } catch {
+                    // Non-fatal: skip segments that fail (deleted, private, etc.)
+                    NSLog("[SyncV2] Skipping recency segment \(segId): \(error)")
+                }
+            }
+
+            // Remove segments that are neither starred nor in the 90-day recency set.
+            let keepIds = starredIds.union(recentSegmentIds)
+            let existingModels = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+            for model in existingModels where !keepIds.contains(model.segmentId) {
                 modelContext.delete(model)
             }
             try? modelContext.save()
-            NSLog("[SyncV2] \(starredFromStrava.count) starred segments synced")
+            let totalSegmentCount = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>()))?.count ?? 0
+            NSLog("[SyncV2] \(starredFromStrava.count) starred + \(newRecencyIds.count) recency-only = \(totalSegmentCount) total segments")
 
             // Step 4 — Fetch segment efforts for each starred segment
             setSyncProgress("Analyzing segments...")
@@ -627,7 +658,8 @@ class AppState {
         }
     }
 
-    /// Upsert one StarredSegmentModel, keyed on segmentId.
+    /// Upsert one StarredSegmentModel from a starred segment response, keyed on segmentId.
+    /// Always sets isStarred = true — this path is only called for Strava-starred segments.
     private func upsertStarredSegment(_ seg: SyncService.StravaStarredSegmentV2) {
         let id = seg.id
         var descriptor = FetchDescriptor<StarredSegmentModel>(predicate: #Predicate { $0.segmentId == id })
@@ -636,12 +668,37 @@ class AppState {
             existing.name = seg.name
             existing.distance = seg.distance
             existing.avgGrade = seg.averageGrade
+            existing.isStarred = true
         } else {
             modelContext.insert(StarredSegmentModel(
                 segmentId: id,
                 name: seg.name,
                 distance: seg.distance,
-                avgGrade: seg.averageGrade
+                avgGrade: seg.averageGrade,
+                isStarred: true
+            ))
+        }
+        try? modelContext.save()
+    }
+
+    /// Upsert one StarredSegmentModel from a segment detail response (recency-only path).
+    /// Sets isStarred = false unless the segment is already in the store as starred.
+    private func upsertRecencySegment(_ seg: SyncService.StravaSegmentDetailV2) {
+        let id = seg.id
+        var descriptor = FetchDescriptor<StarredSegmentModel>(predicate: #Predicate { $0.segmentId == id })
+        descriptor.fetchLimit = 1
+        if let existing = (try? modelContext.fetch(descriptor))?.first {
+            // Update metadata; preserve isStarred — don't demote a starred segment.
+            existing.name = seg.name
+            existing.distance = seg.distance
+            existing.avgGrade = seg.averageGrade
+        } else {
+            modelContext.insert(StarredSegmentModel(
+                segmentId: id,
+                name: seg.name,
+                distance: seg.distance,
+                avgGrade: seg.averageGrade,
+                isStarred: false
             ))
         }
         try? modelContext.save()
