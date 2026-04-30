@@ -4,7 +4,6 @@
 //
 
 import SwiftUI
-import Combine
 
 // MARK: - SyncProgressView
 
@@ -40,10 +39,6 @@ struct SyncProgressView: View {
     // Completion tracking
     @State private var syncHasStarted = false
     @State private var completionFired = false
-
-    // Timers
-    private let secondTick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    private let phaseTick  = Timer.publish(every: 8, on: .main, in: .common).autoconnect()
 
     @State private var elapsed: Int = 0
 
@@ -85,13 +80,19 @@ struct SyncProgressView: View {
             }
             .padding(.horizontal, 40)
         }
-        // Elapsed timer
-        .onReceive(secondTick) { _ in
-            elapsed += 1
+        // Elapsed counter — increments every second
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                elapsed += 1
+            }
         }
-        // Phase cycling timer (fallback when syncProgressMessage is empty)
-        .onReceive(phaseTick) { _ in
-            advancePhase()
+        // Phase cycling (fallback when syncProgressMessage is empty)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                advancePhase()
+            }
         }
         // Start detection + completion detection
         .onChange(of: appState.isSyncing) { _, newValue in
@@ -123,7 +124,8 @@ struct SyncProgressView: View {
             phaseIndex = SyncPhase.almostReady.rawValue
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.8))
             onComplete()
         }
     }
