@@ -9,8 +9,6 @@ import SwiftData
 // It reads from and writes to three persistence layers:
 //
 //   SwiftData (ModelContext)
-//     FitnessSnapshotModel  — monthly fitness history (legacy, kept until UI cutover)
-//     SegmentScoreModel     — segment PRs + strike scores (legacy, kept until UI cutover)
 //     ActivityModel         — per-activity TSS (v2)
 //     DailyFitnessModel     — CTL/ATL/TSB timeline (v2)
 //     StarredSegmentModel   — athlete's starred segments (v2)
@@ -119,11 +117,6 @@ class AppState {
         }
 
         do {
-            let snapshotModels = try modelContext.fetch(
-                FetchDescriptor<FitnessSnapshotModel>(sortBy: [SortDescriptor(\.month)])
-            )
-            let snapshots = snapshotModels.map { $0.toSnapshot() }
-
             let goalModels = try modelContext.fetch(
                 FetchDescriptor<GoalModel>(predicate: #Predicate { $0.isActive })
             )
@@ -134,15 +127,14 @@ class AppState {
 
             let context = AthleteContext.build(
                 name: displayName,
-                snapshots: snapshots,
+                snapshots: [],
                 goalRow: activeGoalRow,
                 lastActivityDate: lastActivityDate
             )
 
-            fitnessSnapshots = snapshots
             athleteContext = context
 
-            NSLog("[Context] Loaded: \(snapshots.count) snapshots, fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
+            NSLog("[Context] Loaded: fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
 
             // Auto-complete onboarding for existing users who already have a goal.
             if activeGoalRow != nil && !hasCompletedOnboarding {
@@ -161,9 +153,9 @@ class AppState {
     /// Fetches segment scores from the local SwiftData store and populates appState.segments.
     /// Marks the goal segment if a goal is active.
     ///
-    /// Tries the v2 path first (StarredSegmentModel + SegmentFitnessModel). If v2 data exists,
-    /// it calls updateSegmentsFromV2Models() so prProbability is always populated after a restart.
-    /// Falls back to the legacy SegmentScoreModel path only when no v2 data is present.
+    /// Uses the v2 path (StarredSegmentModel + SegmentFitnessModel) when data is available,
+    /// calling updateSegmentsFromV2Models() so prProbability is always populated after a restart.
+    /// If no v2 data exists yet, keeps preview data until first sync completes.
     func loadSegments(goalSegmentName: String? = nil) async {
         guard isAuthenticated else { return }
         do {
@@ -197,20 +189,8 @@ class AppState {
                 return
             }
 
-            // Legacy fallback: SegmentScoreModel path (populated by old Phase 1/2 sync).
-            let models = try modelContext.fetch(FetchDescriptor<SegmentScoreModel>())
-            guard !models.isEmpty else {
-                NSLog("[Segments] No segment rows in local store yet — keeping preview data")
-                return
-            }
-            let loaded = models.map { model -> SegmentScore in
-                var score = model.toSegmentScore()
-                score.isGoalSegment = score.name == goalSegmentName
-                return score
-            }
-            segments = loaded.sorted { $0.strikeScore > $1.strikeScore }
-            hasRealSegmentData = true
-            NSLog("[Segments] Loaded \(loaded.count) segments from legacy store")
+            // No v2 data yet — keep preview data until first sync completes.
+            NSLog("[Segments] No segment rows in local store yet — keeping preview data")
         } catch {
             NSLog("[Segments] loadSegments error: \(error)")
         }
@@ -225,7 +205,15 @@ class AppState {
         let weeksRemaining: Int? = daysRemaining.map { $0 / 7 }
 
         let requiredValue = segment.fitnessValueAtPR
-        let requiredLabel = SegmentScorer.requiredFitnessLabel(fitnessValueAtPR: requiredValue)
+        // One tier below PR fitness — you don't need to exactly match your peak to challenge a PR.
+        let prFitnessLabel = AthleteContext.fitnessLabel(for: requiredValue)
+        let requiredLabel: String
+        switch prFitnessLabel {
+        case "Epic":      requiredLabel = "Strong"
+        case "Strong":    requiredLabel = "Building"
+        case "Building":  requiredLabel = "Baseline"
+        default:          requiredLabel = "Recovering"
+        }
         let newGoal = GoalContext(
             segmentName: segment.name,
             requiredFitnessLabel: requiredLabel,
@@ -313,8 +301,6 @@ class AppState {
 
         // Wipe local SwiftData store so next auth gets a clean slate.
         do {
-            try modelContext.delete(model: FitnessSnapshotModel.self)
-            try modelContext.delete(model: SegmentScoreModel.self)
             try modelContext.delete(model: ActivityModel.self)
             try modelContext.delete(model: DailyFitnessModel.self)
             try modelContext.delete(model: StarredSegmentModel.self)
@@ -576,8 +562,6 @@ class AppState {
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)
         UserDefaults.standard.removeObject(forKey: "lastV2SyncDate")
         do {
-            try modelContext.delete(model: FitnessSnapshotModel.self)
-            try modelContext.delete(model: SegmentScoreModel.self)
             try modelContext.delete(model: ActivityModel.self)
             try modelContext.delete(model: DailyFitnessModel.self)
             try modelContext.delete(model: StarredSegmentModel.self)
@@ -588,61 +572,6 @@ class AppState {
             NSLog("[Sync] Failed to wipe local store on reset: \(error)")
         }
         NSLog("[Sync] History reset — local store wiped, next sync will re-fetch from scratch")
-    }
-
-    // MARK: - Private: SwiftData write helpers
-
-    /// Insert-or-update for a fitness snapshot row, keyed on month Date.
-    /// SwiftData doesn't have native upsert semantics, so we fetch first.
-    /// The @Attribute(.unique) on FitnessSnapshotModel.month prevents duplicates
-    /// but doesn't auto-merge — we handle that here manually.
-    private func upsertSnapshot(_ row: FitnessSnapshotRow) {
-        let monthDate = row.monthDate
-        var descriptor = FetchDescriptor<FitnessSnapshotModel>(
-            predicate: #Predicate { $0.month == monthDate }
-        )
-        descriptor.fetchLimit = 1
-        if let existing = (try? modelContext.fetch(descriptor))?.first {
-            // Update all mutable fields — month (the unique key) stays unchanged.
-            existing.fitnessValue    = row.fitnessValue
-            existing.fitnessLabel   = row.fitnessLabel
-            existing.trendDirection = row.trendDirection
-            existing.hoursRidden    = row.hoursRidden ?? 0
-            existing.activityCount  = row.activityCount ?? 0
-            existing.avgEfficiency  = row.avgEfficiency ?? 0
-        } else {
-            modelContext.insert(FitnessSnapshotModel(from: row))
-        }
-        try? modelContext.save()
-    }
-
-    /// Insert-or-update for a segment score row, keyed on Strava segment ID.
-    /// Same fetch-first pattern as upsertSnapshot — keyed on stravaSegmentId.
-    private func upsertSegmentScore(_ row: SegmentScoreRow) {
-        let segId = Int(row.stravaSegmentId)
-        var descriptor = FetchDescriptor<SegmentScoreModel>(
-            predicate: #Predicate { $0.stravaSegmentId == segId }
-        )
-        descriptor.fetchLimit = 1
-        if let existing = (try? modelContext.fetch(descriptor))?.first {
-            // Update all mutable fields — stravaSegmentId (the unique key) stays unchanged.
-            existing.segmentName          = row.segmentName ?? ""
-            existing.prSeconds            = row.prSeconds ?? 0
-            existing.prAchievedAt         = row.prAchievedAt ?? ""
-            existing.fitnessValueAtPr     = row.fitnessValueAtPr ?? 0
-            existing.currentFitnessValue  = row.currentFitnessValue ?? 0
-            existing.trendDirection       = row.trendDirection ?? "flat"
-            existing.lastEffortSeconds    = row.lastEffortSeconds ?? 0
-            existing.lastEffortDate       = row.lastEffortDate ?? ""
-            existing.strikeScore          = row.strikeScore ?? 0
-            existing.strikeLabel          = row.strikeLabel ?? ""
-            existing.distanceMeters       = row.distanceMeters ?? 0
-            existing.elevationDeltaMeters = row.elevationDeltaMeters ?? 0
-            existing.effortsJSON          = row.effortsJSON ?? "[]"
-        } else {
-            modelContext.insert(SegmentScoreModel(from: row))
-        }
-        try? modelContext.save()
     }
 
     // MARK: - Private: v2 SwiftData write helpers
@@ -820,19 +749,31 @@ class AppState {
             // Fetch PR time from the model for display (convert seconds to Int)
             let prSeconds = Int(fitModel.prTime.rounded())
             let lastEffortSeconds: Int
-            // Fetch most recent effort date for display
-            var effortDescriptor = FetchDescriptor<SegmentEffortModel>(
+            // Fetch all efforts for this segment to find the PR date and latest effort.
+            let effortDescriptor = FetchDescriptor<SegmentEffortModel>(
                 predicate: #Predicate { $0.segmentId == segId },
                 sortBy: [SortDescriptor(\.effortDate, order: .reverse)]
             )
-            effortDescriptor.fetchLimit = 1
-            let latestEffort = (try? modelContext.fetch(effortDescriptor))?.first
+            let allSegEfforts = (try? modelContext.fetch(effortDescriptor)) ?? []
+            let latestEffort = allSegEfforts.first
             lastEffortSeconds = latestEffort.map { Int($0.elapsedTime.rounded()) } ?? prSeconds
+
+            // Derive the PR date from the effort with the minimum elapsed time.
+            let prEffort = allSegEfforts.min(by: { $0.elapsedTime < $1.elapsedTime })
+            let prDateString: String
+            if let prEffortDate = prEffort?.effortDate {
+                let fmt = DateFormatter()
+                fmt.dateFormat = "yyyy-MM-dd"
+                fmt.timeZone = TimeZone(identifier: "UTC")
+                prDateString = fmt.string(from: prEffortDate)
+            } else {
+                prDateString = ""
+            }
 
             var score = SegmentScore(
                 name: starred.name,
                 prSeconds: prSeconds,
-                prDate: "",                     // segment PR date not yet stored in v2 models
+                prDate: prDateString,
                 fitnessValueAtPR: fitModel.prCTL / 100.0,  // rough bridge: CTL/100 ≈ 0-1
                 currentFitnessValue: ctlToday / 100.0,
                 trendDirection: "flat",
@@ -860,7 +801,7 @@ class AppState {
         }
     }
 
-    /// Maps a probability value to the standard strike label. Mirrors legacy SegmentScorer labels.
+    /// Maps a probability value to the standard 5-tier strike label.
     static func strikeLabelV2(for probability: Double) -> String {
         switch probability {
         case 0.80...: return "Strike now"

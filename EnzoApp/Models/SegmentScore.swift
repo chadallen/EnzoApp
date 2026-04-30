@@ -1,6 +1,6 @@
 import Foundation
 
-/// A single past effort on a segment. Stored as JSON in SegmentScoreModel.effortsJSON.
+/// A single past effort on a segment. Stored as JSON on SegmentEffortModel records.
 /// Reverse-chronological order (newest first). Capped at 20 per segment during sync.
 struct EffortRecord: Codable, Identifiable {
     let date: String    // "yyyy-MM-dd"
