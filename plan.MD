@@ -4,9 +4,8 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-an6 — Segment UI Polish + Data Quality (7 tasks)
-**Also active:** EnzoApp-c16 — Simulator screenshot tooling for Claude UI verification (4 tasks, task 1 done)
-**Also active:** EnzoApp-aqe — idb simulator interaction for end-to-end UI flow testing (4 tasks)
+**Active epic:** EnzoApp-1tl — legacy model deletion (delete FitnessSnapshotModel, SegmentScoreModel, FitnessCalculator, SegmentScorer)
+**Also active:** EnzoApp-55p.2 — SwiftData UAT on physical device
 
 ---
 
@@ -60,6 +59,14 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
+## Current Status — 2026-04-30 (Session 6)
+
+**Build state:** All commits on `main`, pushed. an6 epic fully closed (7 tasks).
+
+**This session:** iOS UI testing of the an6 epic revealed two bugs fixed after the epic was closed. (1) `SyncService` and `StravaService` were using `URLSession.shared` with a 7-day resource timeout, causing sync to hang indefinitely if a Strava response started but never completed — fixed by adding a configured URLSession with `timeoutIntervalForRequest = 30` / `timeoutIntervalForResource = 60` to both actors (commit d9d7d54). (2) Elevation chart in `SegmentDetailView` was never visible because `elevationDeltaMeters` was hardcoded `nil` in the v2 sync path — fixed by computing `avgGrade × distance / 100` from existing `StarredSegmentModel` fields (commit 4dc7495). Also added `scripts/launch.sh` for autonomous build+install+launch without Xcode/Sweetpad (commit 5133ede). Full idb-driven UI test confirmed: segment list scores, star icons, starred filter, search bar, SegmentDetailView readiness card with probability score and PR date all working correctly. Elevation chart now visible for segments with grade data.
+
+**Next session:** `EnzoApp-1tl` (delete legacy `FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer` — ~30 min). Then `EnzoApp-55p.2` (SwiftData UAT on physical device).
+
 ## Current Status — 2026-04-21 (Session 5)
 
 **Build state:** All commits on `main`, pushed. Tests passing (183 tests).
@@ -95,8 +102,7 @@ Major architectural pivot — 7 commits on `main`:
 | Issue | Notes |
 |---|---|
 | **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
-| **EnzoApp-1tl partial** | SegmentScore v2 fields + SegmentDetailView probability display done. Legacy model deletion (`FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer`) still pending — do first next session. |
+| **EnzoApp-1tl pending** | SegmentScore v2 fields + SegmentDetailView probability display done. Legacy model deletion (`FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer`) still pending — do first next session. |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
-| **Starred segment filter** | `EnzoApp-06k` — rolled back previously, needs reimplementation against v2 sync (now uses starred segment fetch natively). |
-| **Demo jitter removed** | Old `syncPhase2` (which had the jitter) is no longer called — v2 sync has no jitter. |
+| **Starred segment filter** | `EnzoApp-06k` — rolled back previously, needs reimplementation. an6 epic now includes starred filter in SegmentsView (filter bar + `showStarredOnly` state), so 06k may be reducible to closing or a small tweak. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
