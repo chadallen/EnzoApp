@@ -170,58 +170,105 @@ struct SegmentDetailView: View {
     }
 
     private var readinessCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             if let prob = segment.prProbability {
-                // Valid model — show donut + probability + predicted time + range
-                StrikeScoreDonut(score: prob, label: segment.strikeLabel)
-
-                Text("\(Int(prob * 100))%")
-                    .font(.system(.largeTitle, design: .monospaced, weight: .bold))
-                    .foregroundStyle(Color.enzoAccent)
-
-                Text(segment.strikeLabel)
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(strikeColor(for: prob))
-
-                if let predicted = segment.predictedTime, let sigma = segment.predictionSigma {
-                    VStack(spacing: 4) {
-                        Text("Predicted: \(formattedSeconds(predicted))")
-                            .font(.system(.callout, design: .monospaced, weight: .medium))
-                            .foregroundStyle(Color.enzoPrimary)
-                        Text("Range: \(formattedSeconds(predicted - sigma)) – \(formattedSeconds(predicted + sigma))")
-                            .font(.system(.caption, design: .monospaced))
+                // Valid model — lead with probability, then predicted time, then subordinate CTL detail
+                VStack(spacing: 16) {
+                    // Primary: probability score
+                    VStack(spacing: 6) {
+                        Text("\(Int(prob * 100))%")
+                            .font(.system(size: 56, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.enzoAccent)
+                        Text("likely to PR")
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
                             .foregroundStyle(Color.enzoSecondary)
                     }
-                }
 
-                if segment.isExtrapolating {
-                    Text("Outside your training range — estimate is approximate")
-                        .font(.system(.caption, design: .rounded))
+                    // Strike label pill
+                    Text(segment.strikeLabel)
+                        .font(.system(.callout, design: .rounded, weight: .semibold))
+                        .foregroundStyle(strikeColor(for: prob))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(strikeColor(for: prob).opacity(0.12), in: Capsule())
+
+                    // Secondary: predicted time ± 1σ
+                    if let predicted = segment.predictedTime, let sigma = segment.predictionSigma {
+                        VStack(spacing: 4) {
+                            Text("Predicted \(formattedSeconds(predicted))")
+                                .font(.system(.callout, design: .monospaced, weight: .medium))
+                                .foregroundStyle(Color.enzoPrimary)
+                            Text("±\(formattedSeconds(sigma)) range")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(Color.enzoSecondary)
+                        }
+                    }
+
+                    // Extrapolation warning
+                    if segment.isExtrapolating {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Outside your training range — estimate is approximate")
+                                .font(.system(.caption, design: .rounded))
+                        }
                         .foregroundStyle(Color.enzoAmber)
                         .multilineTextAlignment(.center)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .padding(.horizontal)
+
+                // Divider between primary and subordinate sections
+                Rectangle()
+                    .fill(Color.enzoSecondary.opacity(0.12))
+                    .frame(height: 1)
+
+                // Subordinate: CTL/TSB context
+                VStack(spacing: 6) {
+                    if let fallback = segment.naiveFallback {
+                        Text(fallback)
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    Text("Based on \(segment.nEfforts) effort\(segment.nEfforts == 1 ? "" : "s")")
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .padding(.horizontal)
+
             } else {
-                // Invalid model — show naive fallback
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Color.enzoSecondary)
-
-                if let fallback = segment.naiveFallback {
-                    Text(fallback)
-                        .font(.system(.subheadline))
+                // Invalid model — not enough data state
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 32))
                         .foregroundStyle(Color.enzoSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(3)
-                }
 
-                Text(segment.nEfforts < 1 ? "Not enough efforts yet" : "Based on \(segment.nEfforts) effort\(segment.nEfforts == 1 ? "" : "s")")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(Color.enzoSecondary)
+                    Text("Not enough data yet")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(Color.enzoPrimary)
+
+                    if let fallback = segment.naiveFallback {
+                        Text(fallback)
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(Color.enzoSecondary)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
+                    }
+
+                    Text(segment.nEfforts < 1 ? "No efforts recorded yet" : "Based on \(segment.nEfforts) effort\(segment.nEfforts == 1 ? "" : "s")")
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(Color.enzoSecondary.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .padding(.horizontal)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal)
         .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
     }
 
@@ -468,16 +515,26 @@ struct SegmentDetailView: View {
     }
 }
 
-#Preview("Hilly — elevation chart") {
+#Preview("Readiness — valid model") {
+    // previewSegments[4]: "Bolinas Ridge descent" — 84% strike now, no extrapolation
     NavigationStack {
-        SegmentDetailView(segment: SegmentScore.previewSegments[0])
+        SegmentDetailView(segment: SegmentScore.previewSegments[4])
     }
     .environment(AppState())
 }
 
-#Preview("Flat — no elevation") {
+#Preview("Readiness — extrapolating") {
+    // previewSegments[3]: "Pantoll to Rock Spring" — 73% almost there, isExtrapolating=true
     NavigationStack {
-        SegmentDetailView(segment: SegmentScore.previewSegments[1])
+        SegmentDetailView(segment: SegmentScore.previewSegments[3])
+    }
+    .environment(AppState())
+}
+
+#Preview("Readiness — not enough data") {
+    // previewSegments[2]: "Paradise Loop Climb" — prProbability=nil (isValid=false)
+    NavigationStack {
+        SegmentDetailView(segment: SegmentScore.previewSegments[2])
     }
     .environment(AppState())
 }
