@@ -848,7 +848,7 @@ class AppState {
                 strikeScore: strikeScore,
                 strikeLabel: strikeLabel,
                 distanceMeters: starred.distance,
-                elevationDeltaMeters: nil,
+                elevationDeltaMeters: starred.avgGrade > 0 ? starred.distance * starred.avgGrade / 100.0 : nil,
                 effortsJSON: "[]"
             )
             score.isStarred = starred.isStarred
