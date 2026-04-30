@@ -35,7 +35,8 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | 11b | Enzo voice/prompt tuning | ⬜ Pending (EnzoApp-55p.6) |
 | — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | ✅ Done |
 | — | UX Phase J — dark mode + semantic colors | ✅ Done |
-| — | Fitness Algorithm v2 — CTL/TSB + OLS regression (EnzoApp-y69) | 🔄 In progress (1 task left) |
+| — | Fitness Algorithm v2 — CTL/TSB + OLS regression (EnzoApp-y69) | ✅ Done |
+| — | Refocus UI on starred segments (EnzoApp-iue) | 🔄 In progress (3 tasks) |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -59,13 +60,13 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-30 (Session 6)
+## Current Status — 2026-04-30 (Session 7)
 
-**Build state:** All commits on `main`, pushed. an6 epic fully closed (7 tasks).
+**Build state:** All commits on `main`, pushed. Working tree clean.
 
-**This session:** iOS UI testing of the an6 epic revealed two bugs fixed after the epic was closed. (1) `SyncService` and `StravaService` were using `URLSession.shared` with a 7-day resource timeout, causing sync to hang indefinitely if a Strava response started but never completed — fixed by adding a configured URLSession with `timeoutIntervalForRequest = 30` / `timeoutIntervalForResource = 60` to both actors (commit d9d7d54). (2) Elevation chart in `SegmentDetailView` was never visible because `elevationDeltaMeters` was hardcoded `nil` in the v2 sync path — fixed by computing `avgGrade × distance / 100` from existing `StarredSegmentModel` fields (commit 4dc7495). Also added `scripts/launch.sh` for autonomous build+install+launch without Xcode/Sweetpad (commit 5133ede). Full idb-driven UI test confirmed: segment list scores, star icons, starred filter, search bar, SegmentDetailView readiness card with probability score and PR date all working correctly. Elevation chart now visible for segments with grade data.
+**This session:** Code review of the y69 (Fitness Algorithm v2) epic — all algorithm formulas and guards verified correct, strong test coverage confirmed. Two issues found and fixed: (1) `SyncProgressView` imported Combine and used `Timer.publish` / `onReceive` in violation of CLAUDE.md — replaced with two `.task` async loops and `Task @MainActor` for the completion delay (commit 2c598c4). (2) Six `DEBUG an6.1` NSLog traces left in `AppState.swift` from v2 development — removed (commit 3c91c30). Also created new epic `EnzoApp-iue` (Refocus UI on starred segments, 3 tasks) based on product direction discussion: the v2 data layer is already starred-only, the UI framing needs to match.
 
-**Next session:** `EnzoApp-1tl` (delete legacy `FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer` — ~30 min). Then `EnzoApp-55p.2` (SwiftData UAT on physical device).
+**Next session:** `EnzoApp-iue.1` (SegmentsView — remove redundant All/Starred filter, update empty state, add Starred Segments header) and `EnzoApp-iue.2` (ConnectView copy update). Both are P1 and ready. Run `/build-tasks EnzoApp-iue --auto` or work manually.
 
 ## Current Status — 2026-04-21 (Session 5)
 
@@ -102,7 +103,7 @@ Major architectural pivot — 7 commits on `main`:
 | Issue | Notes |
 |---|---|
 | **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
-| **EnzoApp-1tl pending** | SegmentScore v2 fields + SegmentDetailView probability display done. Legacy model deletion (`FitnessSnapshotModel`, `SegmentScoreModel`, `FitnessCalculator`, `SegmentScorer`) still pending — do first next session. |
+| **EnzoApp-iue in progress** | Starred segments UI refocus — 3 tasks open. iue.1 and iue.2 are P1 ready; iue.3 (Find Segments) is P4 backlog blocked on iue.1. |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
 | **Starred segment filter** | `EnzoApp-06k` — rolled back previously, needs reimplementation. an6 epic now includes starred filter in SegmentsView (filter bar + `showStarredOnly` state), so 06k may be reducible to closing or a small tweak. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
