@@ -163,16 +163,11 @@ class AppState {
             // This ensures prProbability is populated even after a restart (not just during sync).
             let starredSegments = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
             let fitnessModels   = (try? modelContext.fetch(FetchDescriptor<SegmentFitnessModel>())) ?? []
-            // DEBUG an6.1 — remove: trace v2 model counts on load
-            NSLog("[DEBUG an6.1] loadSegments: starredSegments=\(starredSegments.count) fitnessModels=\(fitnessModels.count)")
-
             if !starredSegments.isEmpty && !fitnessModels.isEmpty {
                 // V2 data is available — reconstruct prProbability from stored models.
                 let latestDailyFitness = try? modelContext.fetch(
                     FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
                 ).first
-                // DEBUG an6.1 — remove: trace today's fitness on restart load
-                NSLog("[DEBUG an6.1] loadSegments v2: todayFitness date=\(String(describing: latestDailyFitness?.date)) ctl=\(latestDailyFitness?.ctl ?? 0) tsb=\(latestDailyFitness?.tsb ?? 0)")
                 await updateSegmentsFromV2Models(
                     starredSegments: starredSegments,
                     todayFitness: latestDailyFitness
@@ -528,18 +523,12 @@ class AppState {
                 }
             }
             try? modelContext.save()
-            // DEBUG an6.1 — remove: trace effort-fitness join quality
-            let joinedWithFitness = allEfforts.filter { $0.ctlOnDay > 0 }.count
-            NSLog("[DEBUG an6.1] Effort-fitness join: \(joinedWithFitness)/\(allEfforts.count) efforts have non-zero CTL. dailyFitnessRows=\(allDailyFitness.count)")
 
             // Step 6 — Fit regression per segment
             setSyncProgress("Fitting performance models...")
             let latestDailyFitness = (try? modelContext.fetch(
                 FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
             ).first)
-            // DEBUG an6.1 — remove: trace today's CTL/TSB used for probability
-            NSLog("[DEBUG an6.1] Today's fitness: date=\(String(describing: latestDailyFitness?.date)) ctl=\(latestDailyFitness?.ctl ?? 0) tsb=\(latestDailyFitness?.tsb ?? 0)")
-
             for starred in currentStarred {
                 let segId = starred.segmentId
                 var descriptor = FetchDescriptor<SegmentEffortModel>(
@@ -556,8 +545,6 @@ class AppState {
                     )
                 }
                 let fitResult = SegmentOLSSolver.fit(efforts: points)
-                // DEBUG an6.1 — remove: trace OLS result per segment
-                NSLog("[DEBUG an6.1] segId=\(segId) name=\(starred.name) nEfforts=\(fitResult.nEfforts) isValid=\(fitResult.isValid) prTime=\(fitResult.prTime) beta1=\(fitResult.beta1) sigmaResid=\(fitResult.sigmaResid)")
                 upsertSegmentFitness(segmentId: segId, result: fitResult)
             }
             try? modelContext.save()
@@ -807,9 +794,6 @@ class AppState {
                 ctlToday: ctlToday,
                 tsbToday: tsbToday
             )
-            // DEBUG an6.1 — remove: trace probability per segment
-            NSLog("[DEBUG an6.1] segId=\(segId) name=\(starred.name) ctlToday=\(ctlToday) tsbToday=\(tsbToday) modelValid=\(fitModel.isValid) prob=\(prediction.probability) predValid=\(prediction.isValid)")
-
             let strikeScore = prediction.probability
             let strikeLabel = Self.strikeLabelV2(for: strikeScore)
 
