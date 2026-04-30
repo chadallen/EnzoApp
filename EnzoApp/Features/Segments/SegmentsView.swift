@@ -250,7 +250,7 @@ struct SegmentStrikeRow: View {
                     Text(segment.name)
                         .font(.system(.body, design: .rounded, weight: .semibold))
                         .foregroundStyle(Color.enzoPrimary)
-                    if segment.isGoalSegment {
+                    if segment.isGoalSegment || segment.isStarred {
                         Image(systemName: "star.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.enzoAccent)

@@ -20,6 +20,7 @@ struct SegmentScore: Identifiable, Hashable {
     let strikeScore: Double      // 0.0–1.0
     let strikeLabel: String      // "Strike now", "Almost there", "Worth a shot", "Getting there", "Build first"
     var isGoalSegment: Bool = false
+    var isStarred: Bool = false
     var distanceMeters: Double? = nil
     var elevationDeltaMeters: Double? = nil
     var effortsJSON: String = "[]"

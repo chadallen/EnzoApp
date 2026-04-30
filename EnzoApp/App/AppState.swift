@@ -462,7 +462,9 @@ class AppState {
             NSLog("[SyncV2] \(recentSegmentIds.count) unique segment IDs from 90-day activities, \(newRecencyIds.count) not already starred")
 
             setSyncProgress("Fetching recent segment details...")
-            for segId in newRecencyIds {
+            // Cap at 50 recency segments per sync: each fetches ~1 detail + ~N effort pages.
+            // Budget: 50 detail calls + effort calls in Step 4 must stay within 200 req/15 min.
+            for segId in newRecencyIds.prefix(50) {
                 do {
                     let detail = try await syncService.fetchSegmentDetailV2(
                         segmentId: segId,
@@ -488,17 +490,25 @@ class AppState {
             let totalSegmentCount = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>()))?.count ?? 0
             NSLog("[SyncV2] \(starredFromStrava.count) starred + \(newRecencyIds.count) recency-only = \(totalSegmentCount) total segments")
 
-            // Step 4 — Fetch segment efforts for each starred segment
+            // Step 4 — Fetch segment efforts for each segment
             setSyncProgress("Analyzing segments...")
             let currentStarred = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
             for starred in currentStarred {
-                let efforts = try await syncService.fetchSegmentEffortsV2(
-                    segmentId: starred.segmentId,
-                    athleteId: athleteId,
-                    accessToken: accessToken
-                )
-                for effort in efforts {
-                    upsertSegmentEffort(effort, segmentId: starred.segmentId)
+                do {
+                    let efforts = try await syncService.fetchSegmentEffortsV2(
+                        segmentId: starred.segmentId,
+                        athleteId: athleteId,
+                        accessToken: accessToken
+                    )
+                    for effort in efforts {
+                        upsertSegmentEffort(effort, segmentId: starred.segmentId)
+                    }
+                } catch SyncError.rateLimited {
+                    NSLog("[SyncV2] Rate limited fetching efforts for segment \(starred.segmentId) — stopping early")
+                    break
+                } catch {
+                    // Non-fatal: skip segments that fail (deleted, private, etc.)
+                    NSLog("[SyncV2] Skipping segment efforts for \(starred.segmentId): \(error)")
                 }
             }
             NSLog("[SyncV2] Segment efforts stored")
@@ -841,6 +851,7 @@ class AppState {
                 elevationDeltaMeters: nil,
                 effortsJSON: "[]"
             )
+            score.isStarred = starred.isStarred
             // Populate v2 prediction fields from PRPredictor result
             score.prProbability = prediction.isValid ? prediction.probability : nil
             score.predictedTime = prediction.isValid ? prediction.predictedTime : nil
