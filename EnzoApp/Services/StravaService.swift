@@ -68,6 +68,14 @@ struct StravaAthlete: Decodable, Sendable {
 
 actor StravaService {
 
+    // 30s to get first byte; 60s total per resource. Guards against hung responses.
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config)
+    }()
+
     static let redirectURI = "enzo://oauth"
     static let authorizationURL = "https://www.strava.com/oauth/authorize"
     static let tokenURL = "https://www.strava.com/oauth/token"
@@ -148,7 +156,7 @@ actor StravaService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.urlSession.data(for: request)
 
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
@@ -229,7 +237,7 @@ actor StravaService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(params)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.urlSession.data(for: request)
 
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {

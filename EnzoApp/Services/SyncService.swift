@@ -13,6 +13,15 @@ enum SyncError: Error {
 
 actor SyncService {
 
+    // 30s to get first byte; 60s total per resource. Guards against Strava responses
+    // that start arriving but never complete (default URLSession.shared has a 7-day resource timeout).
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config)
+    }()
+
     static let activitiesURLString = "https://www.strava.com/api/v3/athlete/activities"
 
     /// UserDefaults key for the timestamp of the last successful Phase 2 run.
@@ -176,7 +185,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -215,7 +224,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -261,7 +270,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -290,7 +299,7 @@ actor SyncService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
         if http.statusCode == 429 { throw SyncError.rateLimited }
         guard (200..<300).contains(http.statusCode) else {
