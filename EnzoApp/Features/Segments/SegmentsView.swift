@@ -12,6 +12,7 @@ struct SegmentsView: View {
     @State private var sortOrder: SortOrder = .prProbability
     @State private var searchText = ""
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
+    @State private var showFindSegments = false
 
     enum SortOrder: String, CaseIterable {
         case prProbability = "PR Probability"
@@ -109,9 +110,19 @@ struct SegmentsView: View {
                         }
                         .listSectionSeparator(.hidden, edges: .top)
                     }
+
+                    Section {
+                        findMoreSegmentsRow
+                            .listRowBackground(Color.enzoBg)
+                            .listRowSeparator(.hidden)
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .sheet(isPresented: $showFindSegments) {
+                    FindSegmentsView()
+                        .environment(appState)
+                }
             }
         }
         .searchable(text: $searchText, prompt: "Search segments")
@@ -203,6 +214,23 @@ struct SegmentsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.enzoAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var findMoreSegmentsRow: some View {
+        Button {
+            showFindSegments = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.enzoAccent)
+                Text("Find more segments")
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .foregroundStyle(Color.enzoAccent)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 14)
+        }
     }
 
     private var loadingState: some View {
