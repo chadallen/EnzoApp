@@ -9,12 +9,12 @@ enum SegmentNavigation: Hashable {
 
 struct SegmentsView: View {
     @Environment(AppState.self) private var appState
-    @State private var sortOrder: SortOrder = .strikeScore
+    @State private var sortOrder: SortOrder = .prProbability
     @State private var searchText = ""
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
 
     enum SortOrder: String, CaseIterable {
-        case strikeScore = "Strike Score"
+        case prProbability = "PR Probability"
         case alphabetical = "Alphabetical"
         case prDate = "PR Date"
     }
@@ -33,7 +33,7 @@ struct SegmentsView: View {
     private var sortedSegments: [SegmentScore] {
         let source = appState.segments.filter { !$0.isGoalSegment }
         switch sortOrder {
-        case .strikeScore:  return source.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
+        case .prProbability: return source.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
         case .alphabetical: return source.sorted { $0.name < $1.name }
         case .prDate:       return source.sorted { $0.prDate > $1.prDate }
         }

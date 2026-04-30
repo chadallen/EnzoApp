@@ -145,7 +145,9 @@ struct SegmentDetailView: View {
         VStack(spacing: 12) {
             HStack(spacing: 0) {
                 statBlock(value: segment.prFormatted, label: "Current PR", mono: true, color: Color.enzoAccent)
-                statBlock(value: formattedPRDate(segment.prDate), label: "Date set")
+                if !segment.prDate.isEmpty {
+                    statBlock(value: formattedPRDate(segment.prDate), label: "Date set")
+                }
             }
 
             if segment.distanceMeters != nil || segment.elevationDeltaMeters != nil {

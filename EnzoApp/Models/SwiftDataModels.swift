@@ -20,212 +20,6 @@ import SwiftData
 // Switching to it is a one-line change here. That path is available if cross-device
 // sync becomes a requirement in a future version.
 
-// MARK: - FitnessSnapshotModel
-
-/// Persisted monthly fitness summary. One row per calendar month.
-///
-/// Computed by SyncService.computeSnapshots() from Strava activity history.
-/// Never written directly from the UI — always derived from a sync run.
-///
-/// `month` is stored as a UTC Date (midnight on the first of the month).
-/// This replaces the Supabase "yyyy-MM-01" String format — Date is safer
-/// for comparisons and avoids string parsing in FetchDescriptor predicates.
-@Model
-final class FitnessSnapshotModel {
-    /// UTC midnight on the first of the month. Unique constraint enforces one row per month.
-    /// Use FetchDescriptor with `#Predicate { $0.month == monthDate }` to look up a specific month.
-    @Attribute(.unique) var month: Date
-
-    /// Normalized fitness value 0.0–1.0. Computed via percentile normalization (5th/95th)
-    /// across all-time efficiency scores. 1.0 = best month ever, 0.0 = worst.
-    var fitnessValue: Double
-
-    /// Human-readable label mapped from fitnessValue:
-    /// ≥0.85 Epic | 0.65–0.85 Strong | 0.45–0.65 Building | 0.25–0.45 Baseline | <0.25 Recovering
-    var fitnessLabel: String
-
-    /// Trend relative to the prior 4-week window: "up" | "flat" | "down"
-    var trendDirection: String
-
-    /// Total hours ridden in this calendar month (not the rolling window).
-    var hoursRidden: Double
-
-    /// Number of qualifying rides in this calendar month.
-    var activityCount: Int
-
-    /// Average efficiency across the 2-month rolling window used to compute fitnessValue.
-    /// Stored for diagnostics; not displayed in the UI.
-    var avgEfficiency: Double
-
-    init(month: Date, fitnessValue: Double, fitnessLabel: String,
-         trendDirection: String, hoursRidden: Double,
-         activityCount: Int, avgEfficiency: Double) {
-        self.month = month
-        self.fitnessValue = fitnessValue
-        self.fitnessLabel = fitnessLabel
-        self.trendDirection = trendDirection
-        self.hoursRidden = hoursRidden
-        self.activityCount = activityCount
-        self.avgEfficiency = avgEfficiency
-    }
-
-    /// Convenience init from the FitnessSnapshotRow DTO used by SyncService.
-    /// `row.monthDate` converts the "yyyy-MM-dd" String to a UTC Date.
-    convenience init(from row: FitnessSnapshotRow) {
-        self.init(
-            month: row.monthDate,
-            fitnessValue: row.fitnessValue,
-            fitnessLabel: row.fitnessLabel,
-            trendDirection: row.trendDirection,
-            hoursRidden: row.hoursRidden ?? 0,
-            activityCount: row.activityCount ?? 0,
-            avgEfficiency: row.avgEfficiency ?? 0
-        )
-    }
-
-    /// Converts to the FitnessSnapshot domain model used by AppState and views.
-    /// Formats `month` back to "yyyy-MM" string — the format expected by chart/display code.
-    func toSnapshot() -> FitnessSnapshot {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM"
-        f.timeZone = TimeZone(identifier: "UTC")
-        let monthStr = f.string(from: month)
-        return FitnessSnapshot(
-            month: monthStr,
-            label: fitnessLabel,
-            value: fitnessValue,
-            hours: hoursRidden,
-            rides: activityCount,
-            trend: trendDirection
-        )
-    }
-}
-
-// MARK: - SegmentScoreModel
-
-/// Persisted segment PR and strike score. One row per Strava segment.
-///
-/// Computed by SyncService.syncPhase2() from detailed activity responses.
-/// Only segments where the athlete has set a PR (prRank == 1) are stored.
-/// Non-PR efforts update lastEffortSeconds/lastEffortDate on the existing row.
-///
-/// Date fields (prAchievedAt, lastEffortDate) are stored as "yyyy-MM-dd" Strings
-/// because they are only ever displayed — no Date arithmetic is needed on them.
-@Model
-final class SegmentScoreModel {
-    /// Strava's numeric segment ID. Unique constraint enforces one row per segment.
-    /// Stored as Int (not Int64) because SwiftData maps Int to INTEGER in SQLite,
-    /// which is 64-bit on all Apple platforms — no precision loss.
-    @Attribute(.unique) var stravaSegmentId: Int
-
-    var segmentName: String
-
-    /// PR elapsed time in seconds.
-    var prSeconds: Int
-
-    /// Date the PR was set, "yyyy-MM-DD". Used for display and PR age bonus calculation.
-    var prAchievedAt: String
-
-    /// Athlete's normalized fitness value (0.0–1.0) at the time they set this PR.
-    /// Used as the baseline for strike score: how fit do you need to be to beat this?
-    var fitnessValueAtPr: Double
-
-    /// Athlete's current normalized fitness value (0.0–1.0).
-    /// Snapshot at the time of the last Phase 2 sync run.
-    var currentFitnessValue: Double
-
-    /// Current fitness trend direction: "up" | "flat" | "down"
-    var trendDirection: String
-
-    /// Elapsed time of the athlete's most recent effort on this segment, in seconds.
-    /// May equal prSeconds if the PR is also the most recent effort.
-    var lastEffortSeconds: Int
-
-    /// Date of the most recent effort, "yyyy-MM-DD".
-    var lastEffortDate: String
-
-    /// Strike score 0.0–1.0: probability of beating the PR at current fitness.
-    /// Formula: clamp(0.75 + fitnessDelta + prAgeBonus + effortGapModifier, 0, 1)
-    /// At parity → 0.75 ("Almost there"). See SegmentScorer for full formula.
-    var strikeScore: Double
-
-    /// Human-readable label mapped from strikeScore:
-    /// ≥0.80 "Strike now" | 0.65–0.80 "Almost there" | 0.45–0.65 "Worth a shot" |
-    /// 0.25–0.45 "Getting there" | <0.25 "Build first"
-    var strikeLabel: String
-
-    /// Segment distance in meters. Used in SegmentDetailView for display.
-    var distanceMeters: Double
-
-    /// Elevation delta (high - low) in meters. Used for display context.
-    var elevationDeltaMeters: Double
-
-    /// JSON-encoded [EffortRecord] array, newest-first, capped at 20.
-    /// Default "[]" so existing rows migrate cleanly on first launch after schema change.
-    var effortsJSON: String = "[]"
-
-    init(stravaSegmentId: Int, segmentName: String, prSeconds: Int,
-         prAchievedAt: String, fitnessValueAtPr: Double, currentFitnessValue: Double,
-         trendDirection: String, lastEffortSeconds: Int, lastEffortDate: String,
-         strikeScore: Double, strikeLabel: String, distanceMeters: Double,
-         elevationDeltaMeters: Double, effortsJSON: String = "[]") {
-        self.stravaSegmentId = stravaSegmentId
-        self.segmentName = segmentName
-        self.prSeconds = prSeconds
-        self.prAchievedAt = prAchievedAt
-        self.fitnessValueAtPr = fitnessValueAtPr
-        self.currentFitnessValue = currentFitnessValue
-        self.trendDirection = trendDirection
-        self.lastEffortSeconds = lastEffortSeconds
-        self.lastEffortDate = lastEffortDate
-        self.strikeScore = strikeScore
-        self.strikeLabel = strikeLabel
-        self.distanceMeters = distanceMeters
-        self.elevationDeltaMeters = elevationDeltaMeters
-        self.effortsJSON = effortsJSON
-    }
-
-    /// Convenience init from the SegmentScoreRow DTO used by SyncService.
-    convenience init(from row: SegmentScoreRow) {
-        self.init(
-            stravaSegmentId: Int(row.stravaSegmentId),
-            segmentName: row.segmentName ?? "",
-            prSeconds: row.prSeconds ?? 0,
-            prAchievedAt: row.prAchievedAt ?? "",
-            fitnessValueAtPr: row.fitnessValueAtPr ?? 0,
-            currentFitnessValue: row.currentFitnessValue ?? 0,
-            trendDirection: row.trendDirection ?? "flat",
-            lastEffortSeconds: row.lastEffortSeconds ?? 0,
-            lastEffortDate: row.lastEffortDate ?? "",
-            strikeScore: row.strikeScore ?? 0,
-            strikeLabel: row.strikeLabel ?? "",
-            distanceMeters: row.distanceMeters ?? 0,
-            elevationDeltaMeters: row.elevationDeltaMeters ?? 0,
-            effortsJSON: row.effortsJSON ?? "[]"
-        )
-    }
-
-    /// Converts to the SegmentScore domain model used by AppState and views.
-    /// distanceMeters/elevationDeltaMeters are nil-coalesced back to Optional
-    /// because the domain model uses Optional for "not available".
-    func toSegmentScore() -> SegmentScore {
-        SegmentScore(
-            name: segmentName,
-            prSeconds: prSeconds,
-            prDate: prAchievedAt,
-            fitnessValueAtPR: fitnessValueAtPr,
-            currentFitnessValue: currentFitnessValue,
-            trendDirection: trendDirection,
-            lastEffortSeconds: lastEffortSeconds,
-            strikeScore: strikeScore,
-            strikeLabel: strikeLabel,
-            distanceMeters: distanceMeters > 0 ? distanceMeters : nil,
-            elevationDeltaMeters: elevationDeltaMeters != 0 ? elevationDeltaMeters : nil,
-            effortsJSON: effortsJSON
-        )
-    }
-}
-
 // MARK: - GoalModel
 
 /// Persisted user goal. At most one row should have isActive == true at any time.
@@ -319,9 +113,8 @@ final class GoalModel {
 
 // MARK: - Fitness v2 Models
 //
-// These five models replace FitnessSnapshotModel and SegmentScoreModel as part of the
-// Fitness Algorithm v2 overhaul (EnzoApp-y69). The old models remain temporarily until
-// AppState and SyncService are updated to remove all references.
+// Introduced in Fitness Algorithm v2 overhaul (EnzoApp-y69).
+// Replaces the legacy FitnessSnapshotModel + SegmentScoreModel (removed in EnzoApp-1tl).
 //
 // Data flow:
 //   ActivityModel → LTHR → TSS (stored on ActivityModel)
@@ -371,21 +164,25 @@ final class DailyFitnessModel {
     }
 }
 
-/// A segment the athlete has starred on Strava.
-/// Only starred segments appear in Enzo — star a segment in Strava to include it.
-/// Refreshed on every sync; segments that are unstarred are removed.
+/// A segment the athlete has either starred on Strava or ridden in the last 90 days.
+/// Starred segments are refreshed on every sync; non-starred segments that fall outside
+/// the 90-day window are removed on the next sync. `isStarred` distinguishes the source.
 @Model
 final class StarredSegmentModel {
     @Attribute(.unique) var segmentId: Int
     var name: String
     var distance: Double  // meters
     var avgGrade: Double  // percent
+    /// True when the athlete has starred this segment on Strava.
+    /// False for recency-only segments (ridden within 90 days but not starred).
+    var isStarred: Bool
 
-    init(segmentId: Int, name: String, distance: Double, avgGrade: Double) {
+    init(segmentId: Int, name: String, distance: Double, avgGrade: Double, isStarred: Bool = true) {
         self.segmentId = segmentId
         self.name = name
         self.distance = distance
         self.avgGrade = avgGrade
+        self.isStarred = isStarred
     }
 }
 
@@ -477,9 +274,6 @@ extension ModelContainer {
     ///   ModelConfiguration(cloudKitContainerIdentifier: "iCloud.com.enzo.app")
     static let enzo: ModelContainer = {
         let schema = Schema([
-            // Legacy models — removed once AppState/SyncService cutover is complete
-            FitnessSnapshotModel.self,
-            SegmentScoreModel.self,
             // Fitness v2 models (EnzoApp-y69)
             ActivityModel.self,
             DailyFitnessModel.self,
