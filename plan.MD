@@ -4,8 +4,8 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-1tl — legacy model deletion (delete FitnessSnapshotModel, SegmentScoreModel, FitnessCalculator, SegmentScorer)
-**Also active:** EnzoApp-55p.2 — SwiftData UAT on physical device
+**Active epic:** EnzoApp-iue — Refocus UI on starred segments (3 tasks)
+**Also open:** EnzoApp-55p.2 — SwiftData UAT on physical device
 
 ---
 
