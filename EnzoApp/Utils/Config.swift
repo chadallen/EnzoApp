@@ -10,5 +10,5 @@ enum Config {
 
     // MARK: - UI Copy
 
-    static let connectWelcomeText = "Welcome to Enzo, your personal guide to hitting your Strava PRs. Connect your Strava account now."
+    static let connectWelcomeText = "Enzo surfaces PR opportunities for your starred Strava segments. Connect your account to get started."
 }
