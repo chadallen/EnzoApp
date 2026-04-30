@@ -11,6 +11,7 @@ struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .prProbability
     @State private var searchText = ""
+    @State private var showStarredOnly: Bool = false
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
 
     enum SortOrder: String, CaseIterable {
@@ -30,8 +31,10 @@ struct SegmentsView: View {
     }
 
     // Goal segment is shown in the hero card — exclude it from the list below.
+    // When showStarredOnly is true, further narrow to starred segments.
     private var sortedSegments: [SegmentScore] {
-        let source = appState.segments.filter { !$0.isGoalSegment }
+        let base = appState.segments.filter { !$0.isGoalSegment }
+        let source = showStarredOnly ? base.filter { $0.isStarred } : base
         switch sortOrder {
         case .prProbability: return source.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
         case .alphabetical: return source.sorted { $0.name < $1.name }
@@ -53,16 +56,29 @@ struct SegmentsView: View {
 
     private var isSearching: Bool { !searchText.isEmpty }
 
-    /// All segments (including goal) filtered by searchText. Used only when isSearching.
+    /// All segments (including goal) filtered by searchText and starred filter. Used only when isSearching.
     private var filteredSegments: [SegmentScore] {
-        SegmentScore.filter(appState.segments, by: searchText)
+        let candidates = showStarredOnly
+            ? appState.segments.filter { $0.isStarred || $0.isGoalSegment }
+            : appState.segments
+        return SegmentScore.filter(candidates, by: searchText)
             .sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
+    }
+
+    /// Whether any segments exist that can be starred-filtered (used to show the filter control).
+    private var hasStarredSegments: Bool {
+        appState.segments.contains { $0.isStarred || $0.isGoalSegment }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if !isSearching && appState.hasRealSegmentData && !sortedSegments.isEmpty {
-                sortBar
+            if !isSearching && appState.hasRealSegmentData {
+                if hasStarredSegments {
+                    starFilterBar
+                }
+                if !sortedSegments.isEmpty {
+                    sortBar
+                }
             }
 
             // Full-screen spinner only on first load (no data yet).
@@ -73,6 +89,8 @@ struct SegmentsView: View {
                 emptyState
             } else if isSearching {
                 searchResultsList
+            } else if showStarredOnly && sortedSegments.isEmpty {
+                starredEmptyState
             } else {
                 if isSyncing {
                     syncBanner
@@ -148,6 +166,59 @@ struct SegmentsView: View {
                 .scrollContentBackground(.hidden)
             }
         }
+    }
+
+    private var starFilterBar: some View {
+        HStack(spacing: 0) {
+            Button {
+                showStarredOnly = false
+            } label: {
+                Text("All")
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(showStarredOnly ? Color.enzoSecondary : Color.enzoPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(showStarredOnly ? Color.clear : Color.enzoAccent.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showStarredOnly = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                    Text("Starred")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                .foregroundStyle(showStarredOnly ? Color.enzoPrimary : Color.enzoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(showStarredOnly ? Color.enzoAccent.opacity(0.12) : Color.clear, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(Color.enzoBg)
+    }
+
+    private var starredEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "star")
+                .font(.system(size: 32))
+                .foregroundStyle(Color.enzoSecondary)
+            Text("No starred segments")
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.enzoPrimary)
+                .padding(.top, 2)
+            Text("Star a segment from its detail page to find it here.")
+                .font(.system(.subheadline))
+                .foregroundStyle(Color.enzoSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var sortBar: some View {
