@@ -11,7 +11,6 @@ struct SegmentsView: View {
     @Environment(AppState.self) private var appState
     @State private var sortOrder: SortOrder = .prProbability
     @State private var searchText = ""
-    @State private var showStarredOnly: Bool = false
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
 
     enum SortOrder: String, CaseIterable {
@@ -31,14 +30,12 @@ struct SegmentsView: View {
     }
 
     // Goal segment is shown in the hero card — exclude it from the list below.
-    // When showStarredOnly is true, further narrow to starred segments.
     private var sortedSegments: [SegmentScore] {
         let base = appState.segments.filter { !$0.isGoalSegment }
-        let source = showStarredOnly ? base.filter { $0.isStarred } : base
         switch sortOrder {
-        case .prProbability: return source.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
-        case .alphabetical: return source.sorted { $0.name < $1.name }
-        case .prDate:       return source.sorted { $0.prDate > $1.prDate }
+        case .prProbability: return base.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
+        case .alphabetical: return base.sorted { $0.name < $1.name }
+        case .prDate:       return base.sorted { $0.prDate > $1.prDate }
         }
     }
 
@@ -56,26 +53,15 @@ struct SegmentsView: View {
 
     private var isSearching: Bool { !searchText.isEmpty }
 
-    /// All segments (including goal) filtered by searchText and starred filter. Used only when isSearching.
+    /// All segments (including goal) filtered by searchText. Used only when isSearching.
     private var filteredSegments: [SegmentScore] {
-        let candidates = showStarredOnly
-            ? appState.segments.filter { $0.isStarred || $0.isGoalSegment }
-            : appState.segments
-        return SegmentScore.filter(candidates, by: searchText)
+        return SegmentScore.filter(appState.segments, by: searchText)
             .sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
-    }
-
-    /// Whether any segments exist that can be starred-filtered (used to show the filter control).
-    private var hasStarredSegments: Bool {
-        appState.segments.contains { $0.isStarred || $0.isGoalSegment }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             if !isSearching && appState.hasRealSegmentData {
-                if hasStarredSegments {
-                    starFilterBar
-                }
                 if !sortedSegments.isEmpty {
                     sortBar
                 }
@@ -89,8 +75,6 @@ struct SegmentsView: View {
                 emptyState
             } else if isSearching {
                 searchResultsList
-            } else if showStarredOnly && sortedSegments.isEmpty {
-                starredEmptyState
             } else {
                 if isSyncing {
                     syncBanner
@@ -168,62 +152,9 @@ struct SegmentsView: View {
         }
     }
 
-    private var starFilterBar: some View {
-        HStack(spacing: 0) {
-            Button {
-                showStarredOnly = false
-            } label: {
-                Text("All")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(showStarredOnly ? Color.enzoSecondary : Color.enzoPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(showStarredOnly ? Color.clear : Color.enzoAccent.opacity(0.12), in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                showStarredOnly = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 10))
-                    Text("Starred")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                }
-                .foregroundStyle(showStarredOnly ? Color.enzoPrimary : Color.enzoSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(showStarredOnly ? Color.enzoAccent.opacity(0.12) : Color.clear, in: Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .background(Color.enzoBg)
-    }
-
-    private var starredEmptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "star")
-                .font(.system(size: 32))
-                .foregroundStyle(Color.enzoSecondary)
-            Text("No starred segments")
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.enzoPrimary)
-                .padding(.top, 2)
-            Text("Star a segment from its detail page to find it here.")
-                .font(.system(.subheadline))
-                .foregroundStyle(Color.enzoSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     private var sortBar: some View {
         HStack {
-            Text("Explore more segments")
+            Text("Starred Segments")
                 .font(.system(.caption, design: .rounded, weight: .semibold))
                 .foregroundStyle(Color.enzoSecondary)
                 .textCase(.uppercase)
@@ -294,14 +225,14 @@ struct SegmentsView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "figure.outdoor.cycle")
+            Image(systemName: "star")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.enzoSecondary)
-            Text("Sync to see your segments")
+            Text("Star segments on Strava first")
                 .font(.system(.headline, design: .rounded, weight: .semibold))
                 .foregroundStyle(Color.enzoPrimary)
                 .padding(.top, 4)
-            Text("Enzo will rank your PR opportunities once your ride history loads.")
+            Text("Segments you've starred on Strava will appear here once you sync.")
                 .font(.system(.subheadline))
                 .foregroundStyle(Color.enzoSecondary)
                 .multilineTextAlignment(.center)
