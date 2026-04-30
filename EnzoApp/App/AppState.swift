@@ -853,6 +853,93 @@ class AppState {
         }
     }
 
+    // MARK: - Segment discovery
+
+    /// A frequently-ridden segment that the athlete has not yet starred on Strava.
+    /// Surfaced by `findSegmentsToConsider()` after a v2 sync.
+    struct SuggestedSegment: Identifiable, Hashable {
+        let segmentId: Int
+        let name: String
+        let effortCount: Int
+        let bestTimeSeconds: Int   // minimum elapsed time across all stored efforts
+
+        var id: Int { segmentId }
+    }
+
+    /// Queries the local SwiftData store for segments ridden 3+ times that are not starred.
+    ///
+    /// Delegates to `buildSuggestedSegments(segmentModels:effortRecords:)` so the algorithm
+    /// is testable without SwiftData.
+    ///
+    /// No network calls. Read-only. Safe to call any time after loadContext().
+    func findSegmentsToConsider() -> [SuggestedSegment] {
+        let allSegmentModels = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+        let allEfforts = (try? modelContext.fetch(FetchDescriptor<SegmentEffortModel>())) ?? []
+
+        let segmentInputs = allSegmentModels.map {
+            SegmentInput(segmentId: $0.segmentId, name: $0.name, isStarred: $0.isStarred)
+        }
+        let effortInputs = allEfforts.map {
+            EffortInput(segmentId: $0.segmentId, elapsedTime: $0.elapsedTime)
+        }
+        return Self.buildSuggestedSegments(segmentModels: segmentInputs, effortRecords: effortInputs)
+    }
+
+    // MARK: - Segment discovery inputs (for testability)
+
+    /// Minimal segment descriptor used by the pure suggestion builder.
+    struct SegmentInput {
+        let segmentId: Int
+        let name: String
+        let isStarred: Bool
+    }
+
+    /// Minimal effort descriptor used by the pure suggestion builder.
+    struct EffortInput {
+        let segmentId: Int
+        let elapsedTime: Double
+    }
+
+    /// Pure function — builds the list of unstarred-but-frequent suggestions.
+    ///
+    /// Algorithm:
+    ///   1. Collect all segment IDs where isStarred == true.
+    ///   2. Group effort records by segmentId, skipping starred segments.
+    ///   3. Keep groups with count >= 3.
+    ///   4. Join with segmentModels to get the segment name; skip if no name found.
+    ///   5. Return sorted by effortCount descending.
+    static func buildSuggestedSegments(
+        segmentModels: [SegmentInput],
+        effortRecords: [EffortInput]
+    ) -> [SuggestedSegment] {
+        let starredIds = Set(segmentModels.filter { $0.isStarred }.map { $0.segmentId })
+        let nameById = Dictionary(segmentModels.map { ($0.segmentId, $0.name) },
+                                  uniquingKeysWith: { first, _ in first })
+
+        var effortsBySegment: [Int: [Double]] = [:]
+        for effort in effortRecords {
+            guard !starredIds.contains(effort.segmentId) else { continue }
+            effortsBySegment[effort.segmentId, default: []].append(effort.elapsedTime)
+        }
+
+        var suggestions: [SuggestedSegment] = []
+        for (segId, times) in effortsBySegment {
+            guard times.count >= 3 else { continue }
+            guard let name = nameById[segId] else { continue }
+            let bestTime = times.min() ?? 0
+            suggestions.append(SuggestedSegment(
+                segmentId: segId,
+                name: name,
+                effortCount: times.count,
+                bestTimeSeconds: Int(bestTime.rounded())
+            ))
+        }
+
+        return suggestions.sorted { $0.effortCount > $1.effortCount }
+    }
+
+    // MARK: - Private helpers
+
     /// Maps a probability value to the standard 5-tier strike label.
     static func strikeLabelV2(for probability: Double) -> String {
         switch probability {
