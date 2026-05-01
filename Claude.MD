@@ -4,6 +4,7 @@ Enzo is a personal iOS cycling companion. It connects to Strava, computes a rela
 
 Product spec: `PRD.md`. Build status and what to work on next: `plan.MD`.
 Build gotchas: `.claude/rules/build-notes.md` — check before making changes in any area covered there.
+Design system: `docs/enzo-design.md` — color tokens, typography, components, layout rules.
 
 ---
 
@@ -43,10 +44,10 @@ Read the relevant skill file before starting that type of work.
 
 | Task | Read |
 |---|---|
-| Building any view | `skills/swift-design.MD` |
-| Writing UI copy or Enzo responses | `skills/enzo-voice.MD` |
-| Architecture decisions or new files | `skills/swift-patterns.MD` |
-| Logic, services, data transformation | `skills/testing.md` |
+| Building any view | `docs/enzo-design.md` + global `swift-design` skill |
+| Writing UI copy or Enzo responses | `skills/enzo-voice/skill.MD` |
+| Architecture decisions or new files | global `swift-patterns` skill |
+| Logic, services, data transformation | `skills/testing/skill.md` |
 | Testing a UI flow end-to-end | Use `ios-ui-test` skill (global) |
 
 ---
@@ -55,15 +56,18 @@ Read the relevant skill file before starting that type of work.
 
 All derived data is stored on-device via SwiftData. No remote backend. Models live in `EnzoApp/Models/SwiftDataModels.swift`:
 
-- `FitnessSnapshotModel` — monthly fitness history, keyed on month Date (unique)
-- `SegmentScoreModel` — segment PRs + strike scores, keyed on stravaSegmentId (unique)
+- `ActivityModel` — one Strava cycling activity, TSS computed on ingest, keyed on stravaId (unique)
+- `DailyFitnessModel` — CTL/ATL/TSB values, one row per calendar day, keyed on date (unique)
+- `StarredSegmentModel` — segments starred on Strava or ridden within 90 days, keyed on segmentId (unique)
+- `SegmentEffortModel` — one effort per segment ride, keyed on stravaEffortId (unique)
+- `SegmentFitnessModel` — per-segment OLS regression state (β coefficients, σ, PR time), keyed on segmentId (unique)
 - `GoalModel` — active/historical goals, isActive flag, one active at a time
 
 **Container:** `ModelContainer.enzo` (shared singleton in SwiftDataModels.swift)
 **Access:** `AppState.modelContext` (mainContext, @MainActor)
-**Upsert pattern:** fetch-first by unique key, update fields or insert new — see `AppState.upsertSnapshot()` and `upsertSegmentScore()`
-**Wipe on reset:** `AppState.resetSyncHistory()` deletes all FitnessSnapshotModel + SegmentScoreModel rows
-**Wipe on disconnect:** `AppState.disconnect()` deletes all three model types
+**Upsert pattern:** fetch-first by unique key, update fields or insert new
+**Wipe on reset:** `AppState.resetSyncHistory()` deletes all models except GoalModel
+**Wipe on disconnect:** `AppState.disconnect()` deletes all six model types
 
 Identity is `strava_athlete_id` in Keychain only — no remote user table.
 

@@ -54,27 +54,25 @@ See `CLAUDE.md` for hard rules on each layer.
 
 ### Fitness Model
 
-HR-based ride efficiency — more ground per heartbeat = fitter. Implemented in `Utils/FitnessCalculator.swift`.
+CTL/ATL/TSB Performance Management Chart. TSS computed per activity from power (when `device_watts == true`) with HR fallback using LTHR (95th percentile of avg HR across 20–90 min rides). CTL = 42-day EMA of daily TSS (fitness). ATL = 7-day EMA (fatigue). TSB = CTL_yesterday − ATL_yesterday (form/readiness). Implemented in `Utils/FitnessV2Calculator.swift` and `Utils/DailyFitnessBuilder.swift`.
 
-**User-facing fitness labels** (from continuous 0.0–1.0 internal value):
+**User-facing fitness labels** (used in Enzo conversation only — not shown as standalone UI):
 
-| fitness_value | Label |
+| Label | Meaning |
 |---|---|
-| > 0.85 | Epic |
-| 0.65 – 0.85 | Strong |
-| 0.45 – 0.65 | Building |
-| 0.25 – 0.45 | Baseline |
-| < 0.25 | Recovering |
+| Epic | Peak CTL relative to athlete's history |
+| Strong | High CTL, positive form |
+| Building | CTL trending up |
+| Baseline | Typical CTL for this athlete |
+| Recovering | CTL below baseline or declining |
 
-Trend direction: rate of change over most recent 4 weeks vs prior 4 weeks. Threshold: ±0.008. See `FitnessCalculator.trendThreshold`.
+### Segment PR Probability
 
-### Segment Strike Score
+Per-segment OLS regression: `elapsed_time = β₀ + β₁·CTL + β₂·TSB`. Fit from athlete's own effort history via normal equations (`simd_double3x3`). Output: `P(PR) = Φ((prTime − ŷ) / σ)` — a 0–100% probability displayed directly in the UI. Implemented in `Utils/SegmentRegression.swift` and `Utils/PRPredictor.swift`.
 
-Implemented in `Utils/SegmentScorer.swift`. Formula: `clamp(0.75 + fitnessDelta + prAgeBonus + effortGapModifier, 0, 1)`. At fitness parity → 0.75 ("Almost there").
+**User-facing strike labels** (derived from PR probability):
 
-**User-facing strike labels:**
-
-| strike_score | Label |
+| probability | Label |
 |---|---|
 | ≥ 0.80 | Strike now |
 | 0.65 – 0.80 | Almost there |
@@ -82,11 +80,16 @@ Implemented in `Utils/SegmentScorer.swift`. Formula: `clamp(0.75 + fitnessDelta 
 | 0.25 – 0.45 | Getting there |
 | < 0.25 | Build first |
 
+When a segment has insufficient effort history for a valid model, Enzo shows a plain-language fallback: "PR set when CTL was X. Your current CTL is Y."
+
 ### SwiftData Models
 
-Implemented in `EnzoApp/Models/SwiftDataModels.swift`. Three models:
-- `FitnessSnapshotModel` — monthly fitness history, keyed on month Date
-- `SegmentScoreModel` — segment PRs + strike scores, keyed on stravaSegmentId
+Implemented in `EnzoApp/Models/SwiftDataModels.swift`. Six models:
+- `ActivityModel` — one Strava cycling activity, TSS computed on ingest
+- `DailyFitnessModel` — CTL/ATL/TSB per calendar day (one row per day, no gaps)
+- `StarredSegmentModel` — segments starred on Strava or ridden within 90 days
+- `SegmentEffortModel` — one effort per segment ride, with CTL/TSB at effort time
+- `SegmentFitnessModel` — per-segment OLS regression state (coefficients, σ, bounds)
 - `GoalModel` — active/historical goals, one active at a time
 
 ---
@@ -102,18 +105,19 @@ Strava "Authorization Callback Domain" must be `oauth` (not `localhost`).
 
 ### Sync Strategy
 
-**Phase 1** — Activity list + HR (fast, ~5 API calls):
-1. Fetch all activities paginated at 200/page via `GET /athlete/activities`
-2. Filter to cycling sport types; exclude rides < 30 min or without HR data
-3. Compute monthly efficiency snapshots in-memory
-4. Write to SwiftData; discard raw activity data
+**Phase 1** — Activity list + fitness timeline:
+1. Fetch activities paginated at 100/page via `GET /athlete/activities` (3-year lookback, max 300 rides)
+2. Filter to cycling sport types (Ride, VirtualRide, GravelRide, MountainBikeRide, EMountainBikeRide)
+3. Compute TSS per activity (power if available, else HR); estimate LTHR from 95th percentile of qualifying rides
+4. Build CTL/ATL/TSB timeline day-by-day; write to SwiftData; discard raw activity data
 
-**Phase 2** — Segment effort extraction (background, 1 call per activity):
-1. For each activity, fetch `GET /activities/{id}?include_all_efforts=true`
-2. Extract segment efforts; use `pr_rank == 1` to identify PRs (`athlete_pr_effort` is not populated by the API)
-3. Compute strike scores; write to SwiftData; discard raw data
+**Phase 2** — Segment effort fetch (per starred segment):
+1. Fetch starred segments via `GET /segments/starred`
+2. For each starred segment, fetch all efforts via `GET /segments/{id}/all_efforts` (3-year window)
+3. Join efforts to fitness timeline (CTL/TSB on effort date − 1 day)
+4. Fit OLS regression; write `SegmentFitnessModel` to SwiftData; discard raw effort data
 
-**Rate limits:** 200 req/15 min, 2000/day. `phase2ActivityLimit = 25` — do not raise without Chad's instruction. Incremental sync: `lastPhase2SyncTimestamp` in UserDefaults.
+**Rate limits:** 200 req/15 min, 2000/day. Incremental sync: `lastV2SyncDate` in UserDefaults.
 
 **Ongoing sync:** Manual only for beta. Strava webhooks deferred to Step 12.
 
@@ -123,7 +127,7 @@ Strava "Authorization Callback Domain" must be `oauth` (not `localhost`).
 
 Implemented in `Services/ClaudeService.swift`. Streaming via `AsyncStream`. System prompt establishes the Enzo persona — see `ClaudeService.systemPrompt`.
 
-**Current readiness labels in system prompt:** Strike now, Almost there, Worth a shot, Getting there, Build first. (Note: `skills/enzo-voice.MD` still has old labels — fix before Step 11b.)
+**Current readiness labels in system prompt:** Strike now, Almost there, Worth a shot, Getting there, Build first. Fitness labels: Epic, Strong, Building, Baseline, Recovering. (Note: fitness labels in the system prompt are v1 holdovers — updating them to reflect CTL/TSB context is EnzoApp-55p.6.)
 
 **Segment chat flow:** User taps "Ask Enzo" on a segment → `AppState.segmentAssessmentPrompt()` generates the opening message → `AppState.sendSegmentMessage()` streams response with multi-turn history support. Chat is session-scoped (cleared on view disappear).
 
@@ -158,7 +162,7 @@ Tap any non-goal segment's "Set this goal" button. Previous goal deactivated. No
 
 ## 8. Navigation Structure
 
-Single NavigationStack in `MainTabView`. No tabs.
+Single `NavigationStack` at the app root. No tabs.
 
 ```
 MainTabView (NavigationStack)
@@ -182,14 +186,15 @@ Settings via gear icon → SettingsSheet (modal)
 
 ## 10. Fitness Computation Detail
 
-Implemented — see `Utils/FitnessCalculator.swift` and `Utils/SegmentScorer.swift`.
+Implemented — see `Utils/FitnessV2Calculator.swift`, `Utils/DailyFitnessBuilder.swift`, `Utils/SegmentRegression.swift`, `Utils/PRPredictor.swift`.
 
-**Confirmed tuning constants:**
-- Elevation multiplier: `0.01` (100m climbing ≈ 1km flat)
-- Gravel surface bonus: `1.15`
-- Minimum ride duration: `30 minutes`
-- Trend threshold: `±0.008`
-- Strike score base at fitness parity: `0.75`
+**Key constants:**
+- CTL time constant: 42 days
+- ATL time constant: 7 days
+- LTHR estimation: 95th percentile of avg HR across 20–90 min rides (requires ≥10 qualifying rides)
+- TSS cap: 400 per activity (above = sensor error)
+- Extrapolation guard: warn when today's CTL/TSB is outside `[ctlMin × 0.9, ctlMax × 1.1]` or `[tsbMin − 20, tsbMax + 20]`
+- Minimum efforts for valid regression: 1 (models with <3 efforts have σ = 0, deterministic result)
 
 ---
 

@@ -120,7 +120,7 @@ These should feel like Enzo talking, not a system message:
 | Sync in progress | *"Enzo is reading your rides..."* |
 | Sync complete | (no message — just transition) |
 | No segment data yet | *"Enzo will find your best opportunities once your rides sync."* |
-| Supabase write failed | *"Couldn't save — will retry shortly."* |
+| SwiftData write failed | *"Couldn't save — will retry shortly."* |
 | No HR data on rides | *"Some rides are missing heart rate data — fitness estimates may be less accurate."* |
 
 ---
@@ -150,10 +150,11 @@ Your job:
 - Never make them feel bad for gaps, missed rides, or changed goals.
 
 Rules:
-- Always use their actual numbers. Never give advice that could apply to anyone.
-- Fitness is HR-based. Don't reference power, FTP, or watts unless the athlete brings it up.
+- Always use their actual numbers and labels. Never give advice that could apply to anyone.
+- Fitness is described using these labels only: Epic, Strong, Building, Baseline, Recovering.
+- Segment readiness uses: Strike now, Almost there, Worth a shot, Getting there, Build first.
 - Frame everything relative to their personal history and their goal.
-- Use fitness labels (Peak shape, Strong base, Building, Coming back) naturally in conversation.
+- Don't reference power, FTP, or watts unless the athlete brings it up.
 - A suggestion is not a plan. Make that clear when offering workouts.
 
 Format:
