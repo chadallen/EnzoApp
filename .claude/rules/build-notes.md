@@ -18,26 +18,13 @@ Gotchas and decisions that could trip you up. Check before making changes in the
 
 ## Secrets & Config
 
-**xcconfig `//` stripping** — `//` in xcconfig values is treated as a comment. URLs break. Fix:
+**xcconfig `//` stripping** — `//` in xcconfig values is treated as a comment. Any URL value will break. Fix: split the URL using `$()` which expands to an empty string:
 ```
-SUPABASE_HOST = hizswbzxwfxddocryvci.supabase.co
-SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
+MY_HOST = example.com
+MY_URL = https:/$()/$(MY_HOST)
 ```
-`$()` expands to empty string. Already applied to both xcconfig files.
 
 **Info.plist** — Explicit plist at repo root with `$(VARIABLE)` substitution. `GENERATE_INFOPLIST_FILE = NO`. Custom keys only work here — `INFOPLIST_KEY_*` in xcconfig silently drops them.
-
----
-
-## Supabase
-
-**REST API, no SDK** — `SupabaseService` uses `URLSession` directly. Every request needs `apikey` + `Authorization: Bearer <anon key>` headers.
-
-**Upserts** — All upserts use `POST` with `Prefer: resolution=merge-duplicates,return=representation` AND `?on_conflict=<col>` in the URL. Without `on_conflict`, Supabase ignores the hint and returns 409. Without `return=representation`, upserts return 204 with no body and decoding fails.
-
-**RLS** — Disabled on all tables (dev). Add policies before App Store submission.
-
-**Integration test** — Gated on `export SUPABASE_INTEGRATION_TESTS=1` before running xcodebuild. The `VAR=value xcodebuild` prefix doesn't reach the simulator.
 
 ---
 
@@ -53,13 +40,13 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 ## Fitness & Scoring
 
-**Fitness model** — `value: Double` (0.0–1.0, internal). Labels: Epic / Strong / Building / Baseline / Recovering. Percentile normalization (5th/95th) in `SyncService.computeSnapshots`. Trend threshold: 0.008.
+**Fitness model** — CTL/ATL/TSB (Performance Management Chart). TSS computed per activity from power (`avgWatts`, only when `device_watts == true`) with HR fallback (`avgHeartRate / LTHR`)². LTHR = 95th percentile of average HR across 20–90 min rides (requires ≥10 qualifying rides; stored in UserDefaults `athleteLTHR`). FTP stored in UserDefaults `athleteFTP` (user-entered). CTL = 42-day EMA of daily TSS. ATL = 7-day EMA. TSB = CTL_yesterday − ATL_yesterday. One `DailyFitnessModel` row per calendar day — never skip rest days.
 
-**Strike score formula** — `clamp(0.75 + fitnessDelta + prAgeBonus + effortGapModifier, 0, 1)`. At parity → 0.75 ("Almost there"). 5-tier labels: Strike now (≥0.80) / Almost there (0.65) / Worth a shot (0.45) / Getting there (0.25) / Build first (<0.25).
+**PR probability** — Per-segment OLS regression: `elapsed_time = β₀ + β₁·CTL + β₂·TSB`. Fit via normal equations using `simd_double3x3.inverse` (no LAPACK). `P(PR) = Φ((prTime − ŷ) / σ)`. Implemented in `SegmentRegression.swift` + `PRPredictor.swift`. `isValid = false` when β₁ > 0 (wrong sign), matrix is singular, or no efforts. Shows naive fallback when invalid: "PR set when CTL was X. Your current CTL is Y."
 
-**Demo jitter** — `SyncService.syncPhase2` applies ±0.25 deterministic jitter seeded from `segId`. Tagged "DEMO — Remove before shipping." Remove this before any real user testing or App Store submission.
+**Strike labels** — Derived from `prProbability` in `AppState.strikeLabelV2()`: Strike now (≥0.80) / Almost there (0.65) / Worth a shot (0.45) / Getting there (0.25) / Build first (<0.25).
 
-**lastEffortSeconds** — Correctly populated via `latestEffortMap` (first occurrence in newest-first activity loop). Was always equal to `prSeconds` before the readiness differentiation session fix.
+**lastEffortSeconds** — Populated from the most recent `SegmentEffortModel` for the segment (newest effortDate). Distinct from `prSeconds` — the PR may not be the most recent effort.
 
 ---
 
@@ -67,7 +54,7 @@ SUPABASE_URL = https:/$()/$(SUPABASE_HOST)
 
 **Dark mode** — Fully supported as of Phase J (commit 62e1d1f). `Color+Enzo.swift` uses `UIColor { traits in }` adaptive closures for bg/card/primary/secondary. Fixed tokens (accent, goal, amber, chart colors) are identical in both modes. `enzoUserBubble` is always a dark surface — always pair with `.white` text, never `Color.enzoPrimary`. The forced `.preferredColorScheme(.light)` was removed from `EnzoAppApp.swift`.
 
-**Navigation** — `MainTabView` owns the `NavigationStack`. `SegmentsView` does not wrap itself. `navigationDestination(for: SegmentScore.self)` in SegmentsView works because it's inside the ancestor NavigationStack. Tabs were removed in the Segment-Focused Redesign — `SegmentsView` is now the single content view inside the stack.
+**Navigation** — Single `NavigationStack` at the app root. `SegmentsView` is the sole content view — no tabs. Uses typed navigation values: `navigationDestination(for: SegmentNavigation.self)` where `SegmentNavigation` is an enum (`detail(SegmentScore)` / `detailWithChat(SegmentScore)`). Supplementary flows (Find Segments, Settings) use `.sheet`.
 
 **loadContext() placement** — Only called from `RootView.task` (once per launch). `generateLookahead()` and `generateBriefing()` were removed in the Segment-Focused Redesign — Claude responses are now scoped to individual segments via `sendSegmentMessage()`.
 
@@ -118,8 +105,8 @@ bash scripts/screenshot.sh   # capture result
 
 **Playground first** — Use `scripts/enzo_playground.py` to test prompt changes before touching `ClaudeService.swift` or `AppState.swift`. Streams in ~2 seconds. See `scripts/README.md`.
 
-**Stale labels in enzo-voice.MD** — System prompt section still has old fitness labels (Peak shape, Strong base...) and old readiness labels (No brainer, Worth a shot, Not quite ready). Fix before any prompt work.
+**Fitness labels in system prompt** — `ClaudeService.swift` system prompt still uses v1 fitness labels (Epic, Strong, Building, Baseline, Recovering). ADR-0009 retired these in favour of PR probability %. Updating the prompt is EnzoApp-55p.6 — use playground (`scripts/enzo_playground.py`) before touching `ClaudeService.swift`.
 
-**segmentAssessmentPrompt in AppState** — The static func that generates the opening Enzo prompt when "Ask Enzo" is tapped on a segment. Needs tuning via playground (`scripts/enzo_playground.py`) before shipping. `GoalSettingView` and its `strikeLabelColor()` were deleted in the Segment-Focused Redesign.
+**segmentAssessmentPrompt in AppState** — Static func that generates the opening Enzo prompt when "Ask Enzo" is tapped. Needs tuning via playground before shipping.
 
 **NSLog not print()** — When running via Sweetpad, `print()` doesn't appear in the iOS log stream. Use `NSLog()` for anything you need to see via `log stream --predicate 'process == "EnzoApp"'`.
