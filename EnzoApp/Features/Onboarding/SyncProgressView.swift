@@ -95,6 +95,12 @@ struct SyncProgressView: View {
             }
         }
         // Start detection + completion detection
+        .onAppear {
+            // If sync was already running when this view appeared (long sync), mark started now.
+            // This view only appears during onboarding sync, so syncHasStarted is always valid here.
+            if appState.isSyncing { syncHasStarted = true }
+            checkCompletion()
+        }
         .onChange(of: appState.isSyncing) { _, newValue in
             if newValue { syncHasStarted = true }
             checkCompletion()
