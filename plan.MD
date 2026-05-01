@@ -4,8 +4,8 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-iue — Refocus UI on starred segments (3 tasks)
-**Also open:** EnzoApp-55p.2 — SwiftData UAT on physical device
+**Active epic:** none — EnzoApp-iue complete
+**Also open:** EnzoApp-55p.6 — Enzo voice/prompt tuning (P2)
 
 ---
 
@@ -36,7 +36,8 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | — | Segment UX Improvements (EnzoApp-75h, 14 tasks) | ✅ Done |
 | — | UX Phase J — dark mode + semantic colors | ✅ Done |
 | — | Fitness Algorithm v2 — CTL/TSB + OLS regression (EnzoApp-y69) | ✅ Done |
-| — | Refocus UI on starred segments (EnzoApp-iue) | 🔄 In progress (3 tasks) |
+| — | Refocus UI on starred segments (EnzoApp-iue) | ✅ Done |
+| — | SwiftData UAT — simulator + device smoke test (EnzoApp-55p.2) | ✅ Done |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -60,13 +61,13 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-30 (Session 7)
+## Current Status — 2026-04-30 (Session 8)
 
 **Build state:** All commits on `main`, pushed. Working tree clean.
 
-**This session:** Code review of the y69 (Fitness Algorithm v2) epic — all algorithm formulas and guards verified correct, strong test coverage confirmed. Two issues found and fixed: (1) `SyncProgressView` imported Combine and used `Timer.publish` / `onReceive` in violation of CLAUDE.md — replaced with two `.task` async loops and `Task @MainActor` for the completion delay (commit 2c598c4). (2) Six `DEBUG an6.1` NSLog traces left in `AppState.swift` from v2 development — removed (commit 3c91c30). Also created new epic `EnzoApp-iue` (Refocus UI on starred segments, 3 tasks) based on product direction discussion: the v2 data layer is already starred-only, the UI framing needs to match.
+**This session:** Completed EnzoApp-iue epic (all 3 tasks via `/build-tasks --auto`): removed the misleading All/Starred filter from SegmentsView (iue.1), updated ConnectView copy to mention starred segments (iue.2), and built the Find Segments discovery feature surfacing frequently-ridden unstarred segments (iue.3, with 10 tests). Also ran SwiftData UAT (55p.2) via ios-ui-test on simulator — all 5 steps passed. During UAT discovered and fixed a real bug: `SyncProgressView` would get permanently stuck on long first-syncs because `syncHasStarted` was never set when `isSyncing` was already true when the view appeared (commit 772d5a6, closed EnzoApp-aeh). Also established that NSLog is only readable via Sweetpad's terminal panel (not via `log stream` on iOS 26 simulator). New iPhone setup assisted — Sweetpad is the launch path, not `xcrun simctl launch`.
 
-**Next session:** `EnzoApp-iue.1` (SegmentsView — remove redundant All/Starred filter, update empty state, add Starred Segments header) and `EnzoApp-iue.2` (ConnectView copy update). Both are P1 and ready. Run `/build-tasks EnzoApp-iue --auto` or work manually.
+**Next session:** `EnzoApp-55p.6` (Enzo voice/prompt tuning — fix stale labels in enzo-voice.MD, tune segmentAssessmentPrompt via playground). Or tackle the first-sync performance bug (sequential SwiftData upserts with 200+ activities) if that becomes a blocking issue on real device.
 
 ## Current Status — 2026-04-21 (Session 5)
 
@@ -102,8 +103,7 @@ Major architectural pivot — 7 commits on `main`:
 
 | Issue | Notes |
 |---|---|
-| **Device UAT pending** | `55p.2` — 5-step SwiftData checklist on physical device not yet run. |
-| **EnzoApp-iue in progress** | Starred segments UI refocus — 3 tasks open. iue.1 and iue.2 are P1 ready; iue.3 (Find Segments) is P4 backlog blocked on iue.1. |
 | **`enzo-voice.MD` stale labels** | Skill has old fitness + readiness label names. Fix as part of `55p.6` (prompt tuning). |
-| **Starred segment filter** | `EnzoApp-06k` — rolled back previously, needs reimplementation. an6 epic now includes starred filter in SegmentsView (filter bar + `showStarredOnly` state), so 06k may be reducible to closing or a small tweak. |
+| **First-sync performance** | 200+ activities causes very long sync (10+ min on device) due to sequential SwiftData upserts in `upsertActivityModel` and `upsertDailyFitness` loops. Tracked as open bug — not blocking beta. |
+| **NSLog on iOS 26 simulator** | Only visible in Sweetpad's terminal panel. `log stream` redacts message bodies. Always launch via Sweetpad, not `xcrun simctl launch`. |
 | **Step 12: Strava webhooks** | Not needed for beta. |
