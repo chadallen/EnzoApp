@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 /// Returns the tier color for a given strike score.
-/// Used by StrikeScoreDonut, SegmentStrikeRow, and HeroSegmentCard.
+/// Used by StrikeScoreDonut and SegmentStrikeRow.
 func strikeColor(for score: Double) -> Color {
     switch score {
     case 0.80...:       return .enzoGoal
@@ -15,7 +15,7 @@ func strikeColor(for score: Double) -> Color {
 /// Donut chart visualizing a strike score (0.0–1.0).
 ///
 /// Compact (size ≤ 56): center shows the score number. Used in list rows.
-/// Hero (size > 56): center shows score + label. Used in SegmentDetailView and HeroSegmentCard.
+/// Hero (size > 56): center shows score + label. Used in SegmentDetailView.
 struct StrikeScoreDonut: View {
     let score: Double
     let label: String

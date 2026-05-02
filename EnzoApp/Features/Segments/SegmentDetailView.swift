@@ -5,12 +5,6 @@ struct SegmentDetailView: View {
     let segment: SegmentScore
     var autoStartChat: Bool = false
     @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
-
-    // Goal-setting state
-    @State private var hasTargetDate = false
-    @State private var targetDate = Calendar.current.date(byAdding: .weekOfYear, value: 6, to: Date()) ?? Date()
-    @State private var showGoalToast = false
 
     // Enzo chat state — session-scoped, cleared on view disappear
     @State private var messages: [ArcMessage] = []
@@ -40,12 +34,6 @@ struct SegmentDetailView: View {
 
                         if !segment.efforts.isEmpty {
                             effortHistoryCard
-                        }
-
-                        if segment.isGoalSegment {
-                            goalBadge
-                        } else {
-                            goalSettingCard
                         }
 
                         // Ask Enzo button — shown until the first message is sent
@@ -100,23 +88,6 @@ struct SegmentDetailView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
-        .overlay(alignment: .top) {
-            if showGoalToast {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark")
-                        .font(.system(.caption, weight: .semibold))
-                    Text("Goal set")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                }
-                .foregroundStyle(Color.enzoPrimary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.enzoCard, in: Capsule())
-                .padding(.top, 12)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: showGoalToast)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
         .task {
@@ -129,16 +100,9 @@ struct SegmentDetailView: View {
     // MARK: - Subviews
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if segment.isGoalSegment {
-                Label("Goal segment", systemImage: "star.fill")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.enzoAccent)
-            }
-            Text(segment.name)
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                .foregroundStyle(Color.enzoPrimary)
-        }
+        Text(segment.name)
+            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            .foregroundStyle(Color.enzoPrimary)
     }
 
     private var statsCard: some View {
@@ -374,60 +338,6 @@ struct SegmentDetailView: View {
 
     private func formattedTime(_ seconds: Int) -> String {
         String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
-
-    private var goalBadge: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Color.enzoAccent)
-            Text("This is your current goal")
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.enzoAccent)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.enzoAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var goalSettingCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Toggle(isOn: $hasTargetDate) {
-                Text("Set a target date")
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.enzoPrimary)
-            }
-            .tint(Color.enzoAccent)
-
-            if hasTargetDate {
-                DatePicker(
-                    "Target date",
-                    selection: $targetDate,
-                    in: Date()...,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.compact)
-                .foregroundStyle(Color.enzoPrimary)
-            }
-
-            Button {
-                appState.setGoal(segment, targetDate: hasTargetDate ? targetDate : nil)
-                showGoalToast = true
-                Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    dismiss()
-                }
-            } label: {
-                Text("Set this goal")
-                    .font(.system(.body, design: .rounded, weight: .bold))
-                    .foregroundStyle(Color.enzoBg)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.enzoAccent, in: RoundedRectangle(cornerRadius: 14))
-            }
-        }
-        .padding()
-        .background(Color.enzoCard, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var askEnzoButton: some View {

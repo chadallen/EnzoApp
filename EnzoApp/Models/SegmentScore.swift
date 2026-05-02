@@ -19,7 +19,6 @@ struct SegmentScore: Identifiable, Hashable {
     let lastEffortSeconds: Int
     let strikeScore: Double      // 0.0–1.0
     let strikeLabel: String      // "Strike now", "Almost there", "Worth a shot", "Getting there", "Build first"
-    var isGoalSegment: Bool = false
     var isStarred: Bool = false
     var distanceMeters: Double? = nil
     var elevationDeltaMeters: Double? = nil
@@ -83,7 +82,6 @@ struct SegmentScore: Identifiable, Hashable {
                 lastEffortSeconds: 401,
                 strikeScore: 0.18,
                 strikeLabel: "Build first",
-                isGoalSegment: true,
                 distanceMeters: 2736,
                 elevationDeltaMeters: 101,
                 effortsJSON: #"[{"date":"2026-03-15","seconds":401},{"date":"2025-12-02","seconds":389},{"date":"2025-08-10","seconds":342},{"date":"2025-06-04","seconds":371}]"#

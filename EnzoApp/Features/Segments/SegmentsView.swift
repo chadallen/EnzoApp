@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-/// Navigation value used by SegmentsView and HeroSegmentCard.
+/// Navigation value used by SegmentsView.
 enum SegmentNavigation: Hashable {
     case detail(SegmentScore)
     case detailWithChat(SegmentScore)
@@ -12,7 +12,6 @@ struct SegmentsView: View {
     @State private var sortOrder: SortOrder = .prProbability
     @State private var searchText = ""
     @AppStorage("hasSeenSegmentHint") private var hasSeenSegmentHint = false
-    @State private var showFindSegments = false
 
     enum SortOrder: String, CaseIterable {
         case prProbability = "PR Probability"
@@ -20,19 +19,13 @@ struct SegmentsView: View {
         case prDate = "PR Date"
     }
 
-    private var heroSegment: SegmentScore? {
-        appState.segments.first(where: { $0.isGoalSegment })
-    }
-
     private var showHintCard: Bool {
         !hasSeenSegmentHint &&
-        appState.hasRealSegmentData &&
-        heroSegment == nil
+        appState.hasRealSegmentData
     }
 
-    // Goal segment is shown in the hero card — exclude it from the list below.
     private var sortedSegments: [SegmentScore] {
-        let base = appState.segments.filter { !$0.isGoalSegment }
+        let base = appState.segments
         switch sortOrder {
         case .prProbability: return base.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
         case .alphabetical: return base.sorted { $0.name < $1.name }
@@ -54,7 +47,7 @@ struct SegmentsView: View {
 
     private var isSearching: Bool { !searchText.isEmpty }
 
-    /// All segments (including goal) filtered by searchText. Used only when isSearching.
+    /// All segments filtered by searchText. Used only when isSearching.
     private var filteredSegments: [SegmentScore] {
         return SegmentScore.filter(appState.segments, by: searchText)
             .sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
@@ -81,12 +74,6 @@ struct SegmentsView: View {
                     syncBanner
                 }
                 List {
-                    if let goal = heroSegment {
-                        HeroSegmentCard(segment: goal)
-                            .listRowBackground(Color.enzoBg)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    }
                     if showHintCard {
                         segmentHintCard
                             .listRowBackground(Color.enzoBg)
@@ -110,19 +97,9 @@ struct SegmentsView: View {
                         }
                         .listSectionSeparator(.hidden, edges: .top)
                     }
-
-                    Section {
-                        findMoreSegmentsRow
-                            .listRowBackground(Color.enzoBg)
-                            .listRowSeparator(.hidden)
-                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .sheet(isPresented: $showFindSegments) {
-                    FindSegmentsView()
-                        .environment(appState)
-                }
             }
         }
         .searchable(text: $searchText, prompt: "Search segments")
@@ -196,7 +173,7 @@ struct SegmentsView: View {
                 Text("Tap a segment to see your readiness.")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.enzoPrimary)
-                Text("Star one to make it your target.")
+                Text("Star segments on Strava to track them here.")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(Color.enzoSecondary)
             }
@@ -214,23 +191,6 @@ struct SegmentsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.enzoAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var findMoreSegmentsRow: some View {
-        Button {
-            showFindSegments = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color.enzoAccent)
-                Text("Find more segments")
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(Color.enzoAccent)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 14)
-        }
     }
 
     private var loadingState: some View {
@@ -280,7 +240,7 @@ struct SegmentStrikeRow: View {
                     Text(segment.name)
                         .font(.system(.body, design: .rounded, weight: .semibold))
                         .foregroundStyle(Color.enzoPrimary)
-                    if segment.isGoalSegment || segment.isStarred {
+                    if segment.isStarred {
                         Image(systemName: "star.fill")
                             .font(.system(size: 10))
                             .foregroundStyle(Color.enzoAccent)

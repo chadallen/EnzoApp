@@ -21,7 +21,7 @@ struct AthleteContextTests {
         #expect(AthleteContext.fitnessLabel(for: 0.00) == "Recovering")
     }
 
-    // MARK: - build(name:snapshots:goalRow:lastActivityDate:)
+    // MARK: - build(name:snapshots:lastActivityDate:)
 
     private static let sampleSnapshots: [FitnessSnapshot] = [
         FitnessSnapshot(month: "2024-01", label: "Baseline",  value: 0.30, hours: 10, rides: 5,  trend: "flat"),
@@ -36,7 +36,6 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: Self.sampleSnapshots,
-            goalRow: nil,
             lastActivityDate: nil
         )
         #expect(ctx.currentFitnessLabel == "Baseline")
@@ -49,7 +48,6 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: Self.sampleSnapshots,
-            goalRow: nil,
             lastActivityDate: nil
         )
         #expect(ctx.peakFitnessLabel == "Epic")
@@ -61,7 +59,6 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: Self.sampleSnapshots,
-            goalRow: nil,
             lastActivityDate: nil
         )
         #expect(ctx.totalActivities == 5 + 10 + 14 + 8 + 6)   // 43
@@ -73,7 +70,6 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: Self.sampleSnapshots,
-            goalRow: nil,
             lastActivityDate: threeDaysAgo
         )
         #expect(ctx.daysSinceLastRide >= 3)
@@ -85,7 +81,6 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: Self.sampleSnapshots,
-            goalRow: nil,
             lastActivityDate: nil
         )
         #expect(ctx.daysSinceLastRide == 0)
@@ -96,39 +91,11 @@ struct AthleteContextTests {
         let ctx = AthleteContext.build(
             name: "Chad",
             snapshots: [],
-            goalRow: nil,
             lastActivityDate: nil
         )
         #expect(ctx.currentFitnessLabel == "Recovering")
         #expect(ctx.currentFitnessValue == 0.0)
         #expect(ctx.totalActivities == 0)
-    }
-
-    @Test("build restores goal from GoalRow")
-    func buildRestoresGoal() {
-        let row = GoalRow(
-            id: UUID(),
-            userId: UUID(),
-            rawDescription: "Hawk Hill PR",
-            claudeInterpretation: nil,
-            goalType: "segment_pr",
-            targetSegmentId: 123,
-            targetSegmentName: "Hawk Hill",
-            targetDate: nil,
-            targetValue: nil,
-            requiredFitnessLabel: "Strong",
-            requiredFitnessValue: 0.70,
-            isActive: true
-        )
-        let ctx = AthleteContext.build(
-            name: "Chad",
-            snapshots: Self.sampleSnapshots,
-            goalRow: row,
-            lastActivityDate: nil
-        )
-        #expect(ctx.goal.segmentName == "Hawk Hill")
-        #expect(ctx.goal.requiredFitnessLabel == "Strong")
-        #expect(abs(ctx.goal.requiredFitnessValue - 0.70) < 0.001)
     }
 
     // MARK: - contextPayload(snapshots:segments:)
@@ -152,16 +119,6 @@ struct AthleteContextTests {
             segments: []
         )
         #expect(json.contains("\"Chad\""))
-    }
-
-    @Test("contextPayload includes goal segment when goal is set")
-    func contextPayloadIncludesGoal() {
-        let json = AthleteContext.preview.contextPayload(
-            snapshots: FitnessSnapshot.previewSnapshots,
-            segments: []
-        )
-        #expect(json.contains("Hawk Hill"))
-        #expect(json.contains("segment_pr"))
     }
 
     @Test("contextPayload fitness_history is chronologically ordered")
