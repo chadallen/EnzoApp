@@ -239,7 +239,7 @@ Recommendation: do option 1 in v0.1 (template version-stamp costs nothing) and d
 
 ### 2. Stale global copies will shadow the plugin
 
-The current README explicitly tells users to `cp -r .claude/skills/* ~/.claude/skills/` for global access. Anyone who followed that advice has copies of every command and agent at `~/.claude/skills/start-session/`, `~/.claude/agents/code-reviewer.MD`, etc. After plugin migration, the plugin installs to `~/.claude/plugins/cache/claude-workflow/<version>/`.
+The current README explicitly tells users to `cp -r .claude/skills/* ~/.claude/skills/` for global access. Anyone who followed that advice has copies of every command and agent at `~/.claude/skills/start-session/`, `~/.claude/agents/code-reviewer.MD`, etc. After plugin migration, the plugin installs to its own cache directory under `~/.claude/` (exact path is an implementation detail — not publicly documented, don't rely on it).
 
 Both will load. Plugin skills are namespaced (`/claude-workflow:start-session`) so they technically don't collide — but the user's stale `/start-session` from `~/.claude/skills/` still works, and points at the old code. Same for agents. The user will think they're on the new version and silently be running the old one.
 
@@ -249,12 +249,24 @@ First step in the migration README has to be: "If you previously copied this rep
 
 `SessionStart` runs `bd prime --stealth` automatically, unsandboxed, with the user's privileges. That's fine for a known maintainer, known command. Two failure modes worth knowing about:
 
-- **Compromised maintainer / bad release.** A future malicious release (or a hijacked GitHub account) could swap the hook command for anything. Hook scripts have no signing, no verification, no sandbox. Auto-update is *off* by default for community-hosted plugins (only Anthropic-maintained marketplaces auto-update), which softens this — but users who explicitly enable auto-update inherit the risk.
+- **Compromised maintainer / bad release.** A future malicious release (or a hijacked GitHub account) could swap the hook command for anything. Hook scripts have no signing, no verification, no sandbox. Plugins are cached locally and don't auto-fetch from remote on session start, so a user has to explicitly run `/plugin update` to pull a new version — that's the soft mitigation. But once they do, the new hook command runs unsandboxed on the next session.
 - **The autonomous-walk-away mode (`/build-tasks --auto`) makes blast radius worse.** Whatever a hook runs in that mode happens unobserved.
 
 Mitigations: tell users to pin to a tag (`/plugin install …@v0.1.0`), document "review the hook diff on every plugin update," eventually code-sign. None of these are migration blockers, but the threat model is qualitatively new vs. the current "you cloned a git repo, you can read the files" model.
 
-### 4. Uninstall semantics
+### 4. `/plugin update` may not actually update
+
+There are open Claude Code issues (anthropics/claude-code#15642 and #29071) reporting that `/plugin update` runs `git fetch` against the remote but does not fast-forward the local clone — so the cache stays on the old commit even after the user explicitly tries to update. `CLAUDE_PLUGIN_ROOT` then points at a stale version with no obvious signal that the update silently no-op'd.
+
+Practical consequences for this workflow:
+
+- A user who runs `/plugin update` after a bug fix may keep hitting the bug.
+- Security fixes (especially to hook commands, see risk #3) won't reach users who think they updated.
+- Debugging "did the update apply?" becomes part of every support conversation.
+
+Workaround until the upstream issues are fixed: tell users in the README to `/plugin uninstall claude-workflow && /plugin install …@<tag>` for upgrades rather than `/plugin update`. Ugly but reliable. Re-evaluate when the issues close.
+
+### 5. Uninstall semantics
 
 Good news / bad news:
 
@@ -263,7 +275,7 @@ Good news / bad news:
 
 Document it in the README: "Uninstalling removes the workflow commands but leaves your project state in place. Delete `CLAUDE.md`, `plan.MD`, and `.beads/` manually if you're done with the workflow."
 
-### 5. Auto-namespacing is a real UX shift
+### 6. Auto-namespacing is a real UX shift
 
 Plugin commands and skills get prefixed with the plugin name: `/claude-workflow:start-session` instead of `/start-session`. This prevents collisions across plugins (good) but also means every command in the README, every reference in `CLAUDE.example.md`, every muscle-memory keystroke gets longer.
 
@@ -274,7 +286,7 @@ Options:
 
 Worth deciding before publishing — flip-flopping later breaks every existing reference.
 
-### 6. Beads as a runtime prerequisite
+### 7. Beads as a runtime prerequisite
 
 Plugins can't install external CLIs. If `bd` isn't on PATH, the `SessionStart` hook fails on every session. Specific failure modes to handle:
 
@@ -282,13 +294,13 @@ Plugins can't install external CLIs. If `bd` isn't on PATH, the `SessionStart` h
 - **Cross-machine sync.** A user installs the plugin on their Mac (has `bd`), syncs their Claude config to a Linux box (no `bd`). Same fix above handles it.
 - **Beads itself is alpha.** The `--stealth` flag is a Beads-specific contract. If Beads renames it, every consumer breaks at SessionStart simultaneously. Pin the documented Beads version range in the README's Requirements section.
 
-### 7. Hidden coupling between agents and skill names
+### 8. Hidden coupling between agents and skill names
 
 Per CLAUDE.example.md: "The `implementer` and `code-reviewer` agents automatically invoke a language skill at the start of each task based on the files being touched." The agents reference language skills *by name* in their prompts. If the plugin renames or removes a skill, the agents silently stop matching — no compile-time error, just degraded behavior on TS/Python/iOS work.
 
 Worth a smoke-test in CI: boot each agent against representative file types and assert the right skill loads. Cheap insurance.
 
-### 8. Language-skill backlog
+### 9. Language-skill backlog
 
 Once published, every user wants their language. TS/Python/iOS today; tomorrow Rust, Go, Java, Ruby, Kotlin, PHP. You either:
 
@@ -298,7 +310,7 @@ Once published, every user wants their language. TS/Python/iOS today; tomorrow R
 
 No urgency for v0.1 but worth a stance in the README so PR authors aren't surprised.
 
-### 9. Cosmetic / mechanical
+### 10. Cosmetic / mechanical
 
 - **`.MD` vs `.md` casing.** Current repo is inconsistent. Fix during the move; Linux is case-sensitive and discovery may be picky.
 - **Marketplace vs. direct git install.** Direct install (`/plugin install <git-url>@<tag>`) is fine for v0.1. Marketplace is the eventual right answer for discoverability and version listings — defer until there's actual demand.
@@ -308,7 +320,7 @@ No urgency for v0.1 but worth a stance in the README so PR authors aren't surpri
 
 - **7-day cache grace period on updates.** When a plugin updates mid-session, the old version stays cached for 7 days. Existing sessions keep running against the old version; new sessions get the new one. Mid-flight breaking-change risk is much smaller than I initially worried.
 - **Plugin skills are namespaced.** Collisions with other plugins' commands/skills are essentially eliminated by construction (the trade-off being risk #5 above).
-- **Auto-update is off by default for community plugins.** Users have to opt in per marketplace, so most won't be on the bleeding edge unless they want to be.
+- **No auto-fetch on session start.** Plugins load from a local cache; updates require an explicit `/plugin update`. So mid-flight breaking changes can't ambush an active user.
 
 ---
 
