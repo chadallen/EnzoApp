@@ -5,12 +5,17 @@ struct SegmentDetailView: View {
     let segment: SegmentScore
     var autoStartChat: Bool = false
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     // Enzo chat state — session-scoped, cleared on view disappear
     @State private var messages: [ArcMessage] = []
     @State private var inputText = ""
     @State private var isStreaming = false
     @State private var streamingText = ""
+
+    // Unstar state
+    @State private var showUnstarConfirm = false
+    @State private var isUnstarring = false
 
     private func formattedSeconds(_ seconds: Double) -> String {
         let s = Int(seconds.rounded())
@@ -90,6 +95,32 @@ struct SegmentDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.enzoBg, for: .navigationBar)
+        .toolbar {
+            if segment.isStarred {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showUnstarConfirm = true
+                    } label: {
+                        if isUnstarring {
+                            ProgressView()
+                                .tint(Color.enzoSecondary)
+                        } else {
+                            Image(systemName: "star.slash")
+                                .foregroundStyle(Color.enzoSecondary)
+                        }
+                    }
+                    .disabled(isUnstarring)
+                }
+            }
+        }
+        .alert("Remove from your segments?", isPresented: $showUnstarConfirm) {
+            Button("Remove", role: .destructive) {
+                Task { await unstarAndDismiss() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will unstar it on Strava too.")
+        }
         .task {
             if autoStartChat {
                 await askEnzo()
@@ -382,6 +413,14 @@ struct SegmentDetailView: View {
         return output.string(from: date)
     }
 
+    // MARK: - Unstar
+
+    private func unstarAndDismiss() async {
+        isUnstarring = true
+        await appState.unstarSegment(segment.segmentId)
+        dismiss()
+    }
+
     // MARK: - Enzo messaging
 
     private func askEnzo() async {
@@ -445,6 +484,17 @@ struct SegmentDetailView: View {
     // previewSegments[2]: "Paradise Loop Climb" — prProbability=nil (isValid=false)
     NavigationStack {
         SegmentDetailView(segment: SegmentScore.previewSegments[2])
+    }
+    .environment(AppState())
+}
+
+#Preview("Starred — unstar button visible") {
+    // previewSegments[4] with isStarred=true to show the toolbar unstar button
+    var starred = SegmentScore.previewSegments[4]
+    starred.isStarred = true
+    starred.segmentId = 12345
+    return NavigationStack {
+        SegmentDetailView(segment: starred)
     }
     .environment(AppState())
 }

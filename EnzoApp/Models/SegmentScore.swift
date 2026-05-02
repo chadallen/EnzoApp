@@ -20,6 +20,8 @@ struct SegmentScore: Identifiable, Hashable {
     let strikeScore: Double      // 0.0–1.0
     let strikeLabel: String      // "Strike now", "Almost there", "Worth a shot", "Getting there", "Build first"
     var isStarred: Bool = false
+    /// Strava segment ID — used to call star/unstar APIs. 0 for preview/legacy data.
+    var segmentId: Int = 0
     var distanceMeters: Double? = nil
     var elevationDeltaMeters: Double? = nil
     var effortsJSON: String = "[]"
