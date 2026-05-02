@@ -779,6 +779,7 @@ class AppState {
                 effortsJSON: "[]"
             )
             score.isStarred = starred.isStarred
+            score.segmentId = starred.segmentId
             // Populate v2 prediction fields from PRPredictor result
             score.prProbability = prediction.isValid ? prediction.probability : nil
             score.predictedTime = prediction.isValid ? prediction.predictedTime : nil
