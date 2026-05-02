@@ -468,6 +468,66 @@ class AppState {
         isSyncing = false
     }
 
+    // MARK: - Star / Unstar
+
+    /// Stars a segment on Strava and flips `isStarred` in the local store.
+    /// Rebuilds the in-memory segment list on success. No-ops if the segment is not
+    /// in the local store (edge case — segment was never synced).
+    func starSegment(_ segmentId: Int) async {
+        await setSegmentStarred(segmentId, starred: true)
+    }
+
+    /// Unstars a segment on Strava and flips `isStarred` in the local store.
+    /// Rebuilds the in-memory segment list on success. No-ops if the segment is not
+    /// in the local store (edge case — segment was never synced).
+    func unstarSegment(_ segmentId: Int) async {
+        await setSegmentStarred(segmentId, starred: false)
+    }
+
+    private func setSegmentStarred(_ segmentId: Int, starred: Bool) async {
+        guard isAuthenticated else {
+            NSLog("[Star] Not authenticated — aborting")
+            return
+        }
+
+        do {
+            try await stravaService.refreshTokenIfNeeded()
+            guard let accessToken = KeychainHelper.load(for: KeychainHelper.stravaAccessToken) else {
+                NSLog("[Star] No access token — aborting")
+                return
+            }
+
+            try await syncService.starSegment(segmentId: segmentId, starred: starred, accessToken: accessToken)
+
+            // Update local store
+            var descriptor = FetchDescriptor<StarredSegmentModel>(
+                predicate: #Predicate { $0.segmentId == segmentId }
+            )
+            descriptor.fetchLimit = 1
+            guard let model = (try? modelContext.fetch(descriptor))?.first else {
+                NSLog("[Star] Segment \(segmentId) not in local store — no-op")
+                return
+            }
+            model.isStarred = starred
+            try? modelContext.save()
+
+            // Rebuild in-memory segment list so UI reflects the change immediately
+            let allStarred = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+            let latestDailyFitness = try? modelContext.fetch(
+                FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+            ).first
+            await updateSegmentsFromV2Models(starredSegments: allStarred, todayFitness: latestDailyFitness)
+
+            NSLog("[Star] Segment \(segmentId) starred=\(starred)")
+        } catch let error as SyncError {
+            NSLog("[Star] SyncError starring segment \(segmentId): \(error)")
+        } catch let error as StravaError {
+            NSLog("[Star] StravaError starring segment \(segmentId): \(error)")
+        } catch {
+            NSLog("[Star] Error starring segment \(segmentId): \(error)")
+        }
+    }
+
     /// Clears sync history and wipes the local SwiftData store so the next sync re-fetches from scratch.
     func resetSyncHistory() {
         UserDefaults.standard.removeObject(forKey: SyncService.lastPhase2SyncKey)

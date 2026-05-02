@@ -15,7 +15,7 @@ actor SyncService {
 
     // 30s to get first byte; 60s total per resource. Guards against Strava responses
     // that start arriving but never complete (default URLSession.shared has a 7-day resource timeout).
-    private static let urlSession: URLSession = {
+    private static let defaultURLSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
@@ -33,9 +33,12 @@ actor SyncService {
     // data-fetching and computation layer: fetch from Strava, return rows.
     // This keeps SyncService as a testable actor with no SwiftData dependency.
     private let stravaService: StravaService
+    // Injected at init so tests can supply a mock URLSession without network access.
+    private let urlSession: URLSession
 
-    init(stravaService: StravaService) {
+    init(stravaService: StravaService, urlSession: URLSession = defaultURLSession) {
         self.stravaService = stravaService
+        self.urlSession = urlSession
     }
 
     // MARK: - v2 Response types (ephemeral — never persisted)
@@ -185,7 +188,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await Self.urlSession.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -224,7 +227,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await Self.urlSession.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -270,7 +273,7 @@ actor SyncService {
             var request = URLRequest(url: url)
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await Self.urlSession.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
             if http.statusCode == 429 { throw SyncError.rateLimited }
             guard (200..<300).contains(http.statusCode) else {
@@ -287,6 +290,31 @@ actor SyncService {
         return results
     }
 
+    // MARK: - Star / Unstar
+
+    /// Stars or unstars a segment on Strava via PUT /segments/{id}/starred.
+    /// Body: {"starred": true|false}. Returns on success; throws SyncError on failure.
+    /// The response body (DetailedSegment) is ignored — callers react to success/failure only.
+    func starSegment(segmentId: Int, starred: Bool, accessToken: String) async throws {
+        let urlString = "\(Self.segmentBaseURLString)/\(segmentId)/starred"
+        guard let url = URL(string: urlString) else {
+            throw SyncError.fetchFailed("Invalid star segment URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["starred": starred])
+
+        let (_, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
+        if http.statusCode == 429 { throw SyncError.rateLimited }
+        guard (200..<300).contains(http.statusCode) else {
+            throw SyncError.fetchFailed("HTTP \(http.statusCode)")
+        }
+    }
+
     /// Fetches details for a single segment by ID from GET /segments/{id}.
     /// Used for the recency-only segment upsert path — only called when the segment
     /// is not already in the starred set.
@@ -299,7 +327,7 @@ actor SyncService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await Self.urlSession.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
         if http.statusCode == 429 { throw SyncError.rateLimited }
         guard (200..<300).contains(http.statusCode) else {
