@@ -144,6 +144,31 @@ Notes on what's *not* in the manifest:
 
 ---
 
+## Future: LSP integration (out of scope for v0.1)
+
+The plugin spec supports declaring LSP servers (`tsserver`, `pyright`, `sourcekit-lsp`, etc.). Worth a deliberate "not yet" rather than silence — it's the obvious next question once you're already shipping language-aware tooling.
+
+**Skills and LSPs are not substitutes; they cover different surfaces.**
+
+| | LSP server | Language skill |
+|---|---|---|
+| Source of truth | The compiler / language toolchain | The team's conventions |
+| Updates when | Code changes | You change your mind about how to write code |
+| Strong at | Types, diagnostics, find-usages, real refactors | Style, idioms, "we don't do X here" |
+| Wrong tool for | "Prefer Result over throwing" | "What's the type of this expression" |
+
+Today the `implementer` and `code-reviewer` agents load a skill (prose conventions) and then act with grep-and-pattern-match semantics. They have no compiler view of the code. Adding LSPs would let those agents query `tsserver` for the actual type of a symbol before changing it, or pull real diagnostics after an edit instead of waiting for a build to fail. Strict upgrade, no overlap with what the skills already do.
+
+**Why not in v0.1:**
+
+- **Per-language runtime prerequisite, multiplied.** Beads-as-prerequisite is one binary on PATH. LSPs add one *per language* — `tsserver`, `pyright` (or `pylsp`), `sourcekit-lsp`. Each has its own install story and version drift. Same hook-time `command -v` check pattern, but now N of them.
+- **Scope.** v0.1 is already shipping a state-bootstrapping plugin with a hook trust model and a namespace UX shift. "Also we run language servers" is a separable concern.
+- **Skill content stays the same regardless.** Whether or not you add LSPs later, the existing TS/Python/iOS skills don't need to change — they're orthogonal. So adding LSPs is purely additive future work, not a migration item.
+
+**v0.2+ shape, sketched:** declare the LSP servers in `plugin.json`, ship a hook-time check that warns if any are missing, update the `implementer` agent's prompt to mention "use available LSP tools to verify types/diagnostics before and after edits." Skills stay exactly as they are.
+
+---
+
 ## Doc-by-doc proposal
 
 ### `README.md` — major rewrite
