@@ -9,7 +9,7 @@ Evaluating whether to repackage [chadallen/claude-workflow](https://github.com/c
 - Yes — it's a clean fit. The repo is already a coherent bundle of commands, agents, language skills, and hooks meant to be reused across projects. That's exactly the plugin shape.
 - Migration is mostly mechanical: add `.claude-plugin/plugin.json`, split today's `skills/` directory into `commands/` (the `/`-invoked ones) vs `skills/` (the auto-invoked language ones), add a `hooks/hooks.json` for the Beads `SessionStart` / `PreCompact` hooks.
 - Doc cost is moderate. The README's whole install/setup narrative needs a rewrite — `git clone … your-project-path` becomes `/plugin install …`, and the "copy to global" footgun goes away. `CLAUDE.example.md` and `PRD.md` need light edits only.
-- The biggest substantive risk isn't the package format — it's that `/init-project` *bootstraps state* into the consumer's repo (CLAUDE.md, plan.MD, .beads/). That state forks at install time and has no clean upgrade story. Plan for this before v0.1 instead of after.
+- The biggest substantive risk: `/init-project` materialises plugin templates (CLAUDE.md, plan.MD, .beads/) into the consumer's repo. Without an upgrade path, those files silently rot as the plugin evolves. The recommended fix is a schema-migration-on-startup runner (managed regions inside user files, version-stamp headers, ordered idempotent migrations, dirty-tree guard). Roughly a week of engineering, but it's the difference between a plugin that ages well and one that breaks every existing project on every release. Build it before v0.1.
 - Plugin commands and skills are **auto-namespaced** (`/claude-workflow:start-session`, not `/start-session`). That's a real UX shift, not a cosmetic one. Worth aliasing or accepting upfront.
 
 ---
@@ -162,7 +162,7 @@ Today the `implementer` and `code-reviewer` agents load a skill (prose conventio
 **Why not in v0.1:**
 
 - **Per-language runtime prerequisite, multiplied.** Beads-as-prerequisite is one binary on PATH. LSPs add one *per language* — `tsserver`, `pyright` (or `pylsp`), `sourcekit-lsp`. Each has its own install story and version drift. Same hook-time `command -v` check pattern, but now N of them.
-- **Scope.** v0.1 is already shipping a state-bootstrapping plugin with a hook trust model and a namespace UX shift. "Also we run language servers" is a separable concern.
+- **Scope.** v0.1 is already shipping a plugin with a migration runner, a hook trust model, and a namespace UX shift. "Also we run language servers" is a separable concern.
 - **Skill content stays the same regardless.** Whether or not you add LSPs later, the existing TS/Python/iOS skills don't need to change — they're orthogonal. So adding LSPs is purely additive future work, not a migration item.
 
 **v0.2+ shape, sketched:** declare the LSP servers in `plugin.json`, ship a hook-time check that warns if any are missing, update the `implementer` agent's prompt to mention "use available LSP tools to verify types/diagnostics before and after edits." Skills stay exactly as they are.
@@ -220,22 +220,40 @@ Lift the "pieces" + conceptual content out of README into a longer-form doc; kee
 
 ## Risks
 
-Severity ordered. The first two could meaningfully change scope or sequencing; the rest are "know about it before shipping."
+Severity ordered. Risks are real but largely mitigable; the first is the one that warrants real engineering before v0.1 ships.
 
-### 1. Per-project state coupling — the real risk
+### 1. Per-project state coupling — solvable, but needs a migration runner
 
-`/init-project` doesn't just register commands. It *forks state* into the consumer's repo: `CLAUDE.md`, `plan.MD`, `.beads/` all get materialised from plugin templates and then live there forever, owned by the user. The plugin and the consumer's files diverge from minute one.
+`/init-project` doesn't just register commands. It *forks state* into the consumer's repo: `CLAUDE.md`, `plan.MD`, `.beads/` all get materialised from plugin templates and then live there forever, owned by the user. Without intervention, the plugin and the consumer's files diverge from minute one.
 
-That's fine until v0.2 ships with a different `CLAUDE.md` shape — a renamed convention, a new section, a tweaked commit format, a different hook command. Every project that ran `/init-project` against v0.1 keeps the old shape. Agents in those projects keep emitting v0.1-style commits, reading v0.1-style plans, against a plugin that's moved on. Nothing crashes — it just rots silently.
+The failure mode: v0.2 ships with a different `CLAUDE.md` shape — a renamed section, a new field, a tweaked commit format. Every project that ran `/init-project` against v0.1 keeps the old shape. Agents in those projects keep emitting v0.1-style commits, reading v0.1-style plans, against a plugin that's moved on. Nothing crashes — it just rots silently.
 
-This is fundamentally different from a plugin that only provides commands. You're a *bootstrapper*, and bootstrappers age badly. Options:
+**Recommended approach: schema-migration-on-startup.** The `SessionStart` hook runs a fast check (read version stamp, compare to plugin version, exit if matched). On mismatch, it runs ordered, idempotent migrations to bring the user's files up to current. This is the same pattern as Rails migrations, framework upgrade scripts, or how editor extensions evolve their config files. Well-understood pattern, well-understood pitfalls.
 
-- **Version-stamp the templates.** `<!-- claude-workflow v0.1.0 -->` header in the generated CLAUDE.md so a future `/migrate-project --sync` can detect drift and offer to rebase user customisations. Cheap to add now; expensive to retrofit later.
-- **Make `/migrate-project` re-runnable as a template-sync.** Diff the user's CLAUDE.md against the current plugin template, three-way merge. Real engineering work.
-- **Move runtime conventions out of CLAUDE.md and into the plugin.** Have agents read commit-format / hook-contract / etc. from the plugin itself, so updates propagate without touching user files. Architecturally cleaner, biggest scope.
-- **Accept the fork. Document it.** "Your CLAUDE.md is yours. Manual migration on plugin upgrade." Honest, ships fastest, worst UX.
+Three things to get right or it bites:
 
-Recommendation: do option 1 in v0.1 (template version-stamp costs nothing) and defer the rest until you've felt the pain on a second project.
+- **Managed regions, not whole-file ownership.** Don't let the plugin own all of `CLAUDE.md` — users add their own sections (project-specific notes, custom prompts) and the migration will fight them. Mark plugin-owned slots:
+  ```markdown
+  <!-- claude-workflow:begin commit-format -->
+  Conventional Commits, lower-case, no period.
+  <!-- claude-workflow:end -->
+  ```
+  Migration only touches content between markers. Everything outside is the user's. Collapses surprise factor and conflict surface in one move.
+
+- **Version-stamp + ordered migrations.** Each managed file gets a header `<!-- claude-workflow v0.2.0 -->`. Plugin keeps a numbered migration list (`001-rename-conventions.ts`, `002-add-beads-priority-field.ts`) and runs only the ones the user hasn't applied. Difference between "works for v0.1 → v0.2" and "works for any old version → current" — matters the moment there's more than one user.
+
+- **Dirty-tree guard + visible commits.** Two non-negotiables:
+  - If user has uncommitted changes in a file you'd touch, refuse and print: "Plugin v0.2 wants to update CLAUDE.md. You have uncommitted changes there — stash or commit first."
+  - Migrations land as a separate, well-named git commit (`chore: migrate workflow files from v0.1 → v0.2`). Never silent. The user can `git show` it, revert it, review what moved.
+
+Costs to budget for:
+
+- **Migration code is forever.** Once v0.2 ships a migration, you maintain it. Removing old migrations means users on truly ancient versions can't upgrade. Standard schema-migration discipline.
+- **Hook latency.** SessionStart runs every session. The "no migration needed" path needs to be sub-100ms (read header, compare versions, exit). The "actually migrating" path can be slower because it's rare.
+- **Test burden.** Every release: "given a v(N-1) repo, does migration produce valid v(N) state?" CI needs fixtures of old repo shapes. Skipping this once = breaking everyone simultaneously.
+- **plan.md "always exists" assumption.** Some users will delete it intentionally. Need an opt-out — a `.claude-workflow/disabled` marker or a frontmatter flag — or the migration will keep re-creating files they killed on purpose.
+
+Roughly a week of work to do well, plus ongoing per-release migration code. With this in place, the "bootstrapper" framing largely goes away — you're not seeding state and walking away, you're actively maintaining it across versions. Without it, you're shipping a project that ages badly the moment it has a second user. Strong recommendation: build the migration runner before v0.1.
 
 ### 2. Stale global copies will shadow the plugin
 
@@ -328,7 +346,8 @@ No urgency for v0.1 but worth a stance in the README so PR authors aren't surpri
 
 1. Verify plugin manifest spec against current Claude Code docs (resolve the open questions above).
 2. Branch, restructure files, add `plugin.json` + `hooks/hooks.json`, normalise casing.
-3. Rewrite README install/setup sections; leave conceptual sections alone.
-4. Touch up `CLAUDE.example.md` ("Skills" → "Commands"; hooks-provided-by-plugin note).
-5. Smoke test: install into a fresh project, run `/init-project`, run `/start-session`, confirm hooks fire and `bd prime --stealth` runs.
-6. Tag `v0.1.0`, publish.
+3. **Build the migration runner** (risk #1): managed-region markers in template files, version-stamp headers, migration script invoked by SessionStart hook, dirty-tree guard, ordered migration list (empty for v0.1, but the harness exists). CI fixtures for "v(N-1) repo → migrate → v(N) repo."
+4. Rewrite README install/setup sections; leave conceptual sections alone.
+5. Touch up `CLAUDE.example.md` ("Skills" → "Commands"; hooks-provided-by-plugin note; document managed regions).
+6. Smoke test: install into a fresh project, run `/init-project`, run `/start-session`, confirm hooks fire, `bd prime --stealth` runs, and migration check exits clean on a current-version repo.
+7. Tag `v0.1.0`, publish.
