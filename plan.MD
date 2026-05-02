@@ -61,13 +61,13 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-04-30 (Session 8)
+## Current Status — 2026-05-01 (Session 9)
 
 **Build state:** All commits on `main`, pushed. Working tree clean.
 
-**This session:** Completed EnzoApp-iue epic (all 3 tasks via `/build-tasks --auto`): removed the misleading All/Starred filter from SegmentsView (iue.1), updated ConnectView copy to mention starred segments (iue.2), and built the Find Segments discovery feature surfacing frequently-ridden unstarred segments (iue.3, with 10 tests). Also ran SwiftData UAT (55p.2) via ios-ui-test on simulator — all 5 steps passed. During UAT discovered and fixed a real bug: `SyncProgressView` would get permanently stuck on long first-syncs because `syncHasStarted` was never set when `isSyncing` was already true when the view appeared (commit 772d5a6, closed EnzoApp-aeh). Also established that NSLog is only readable via Sweetpad's terminal panel (not via `log stream` on iOS 26 simulator). New iPhone setup assisted — Sweetpad is the launch path, not `xcrun simctl launch`.
+**This session:** Planning and requirements only — no code written. Designed the Starred Segments UX Overhaul (EnzoApp-2ml): main list shows starred segments only, new Add Segments page for discovering/starring unstarred recency segments, star/unstar syncs to Strava API, goal segment concept removed entirely. Created epic EnzoApp-2ml with 6 tasks (2ml.1–6). Also set `EDITOR=code --wait` in `~/.claude/settings.json` for VS Code prompt editing. Updated CLAUDE.md skills table to remove deleted skills (swift-design, swift-patterns, testing) and point to ios-developer + ios-ux-design.
 
-**Next session:** `EnzoApp-55p.6` (Enzo voice/prompt tuning — fix stale labels in enzo-voice.MD, tune segmentAssessmentPrompt via playground). Or tackle the first-sync performance bug (sequential SwiftData upserts with 200+ activities) if that becomes a blocking issue on real device.
+**Next session:** `EnzoApp-2ml.1` (Remove goal segment concept — first task in the new epic, unblocks everything else). Run `/build-tasks EnzoApp-2ml --auto` to execute all 6 tasks autonomously.
 
 ## Current Status — 2026-04-21 (Session 5)
 

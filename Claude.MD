@@ -44,11 +44,12 @@ Read the relevant skill file before starting that type of work.
 
 | Task | Read |
 |---|---|
-| Building any view | `docs/enzo-design.md` + global `swift-design` skill |
+| Building any view | `docs/enzo-design.md` + `ios-ux-design` skill (global) |
 | Writing UI copy or Enzo responses | `skills/enzo-voice/skill.MD` |
-| Architecture decisions or new files | global `swift-patterns` skill |
-| Logic, services, data transformation | `skills/testing/skill.md` |
-| Testing a UI flow end-to-end | Use `ios-ui-test` skill (global) |
+| Architecture decisions or new files | `ios-developer` skill (global) |
+| Logic, services, data transformation | Read existing code in the affected area |
+| Testing a UI flow end-to-end | `ios-ui-test` skill (global) |
+| iOS-specific features, native patterns, App Store | `ios-developer` skill (global) |
 
 ---
 
