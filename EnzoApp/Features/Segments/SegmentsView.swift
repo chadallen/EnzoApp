@@ -25,7 +25,7 @@ struct SegmentsView: View {
     }
 
     private var sortedSegments: [SegmentScore] {
-        let base = appState.segments
+        let base = appState.segments.filter { $0.isStarred }
         switch sortOrder {
         case .prProbability: return base.sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
         case .alphabetical: return base.sorted { $0.name < $1.name }
@@ -47,9 +47,10 @@ struct SegmentsView: View {
 
     private var isSearching: Bool { !searchText.isEmpty }
 
-    /// All segments filtered by searchText. Used only when isSearching.
+    /// All starred segments filtered by searchText. Used only when isSearching.
     private var filteredSegments: [SegmentScore] {
-        return SegmentScore.filter(appState.segments, by: searchText)
+        let starred = appState.segments.filter { $0.isStarred }
+        return SegmentScore.filter(starred, by: searchText)
             .sorted { ($0.prProbability ?? $0.strikeScore) > ($1.prProbability ?? $1.strikeScore) }
     }
 
@@ -216,11 +217,11 @@ struct SegmentsView: View {
             Image(systemName: "star")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.enzoSecondary)
-            Text("Star segments on Strava first")
+            Text("No starred segments yet")
                 .font(.system(.headline, design: .rounded, weight: .semibold))
                 .foregroundStyle(Color.enzoPrimary)
                 .padding(.top, 4)
-            Text("Segments you've starred on Strava will appear here once you sync.")
+            Text("Tap Add Segments to pick from recently ridden segments.")
                 .font(.system(.subheadline))
                 .foregroundStyle(Color.enzoSecondary)
                 .multilineTextAlignment(.center)
