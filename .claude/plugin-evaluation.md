@@ -420,8 +420,9 @@ No urgency for v0.1 but worth a stance in the README so PR authors aren't surpri
 
 1. Verify plugin manifest spec against current Claude Code docs (resolve the open questions above).
 2. Branch, restructure files, add `plugin.json` + `hooks/hooks.json`, normalise casing.
-3. **Build the migration runner** (risk #1): managed-region markers in template files, version-stamp headers, migration script invoked by SessionStart hook, dirty-tree guard, ordered migration list (empty for v0.1, but the harness exists). CI fixtures for "v(N-1) repo → migrate → v(N) repo."
-4. Rewrite README install/setup sections; leave conceptual sections alone.
-5. Touch up `CLAUDE.example.md` ("Skills" → "Commands"; hooks-provided-by-plugin note; document managed regions).
-6. Smoke test: install into a fresh project, run `/init-project`, run `/start-session`, confirm hooks fire, `bd prime --stealth` runs, and migration check exits clean on a current-version repo.
-7. Tag `v0.1.0`, publish.
+3. **Conventions split** (risk #1, Part A): trim `CLAUDE.example.md` to project-only content; move workflow conventions into a plugin-internal `docs/conventions.md`; update `start-session`, `build-tasks`, `implementer`, `code-reviewer` to read workflow conventions from the plugin doc instead of CLAUDE.md.
+4. **Decide command shape:** merge `/init-project` and `/migrate-project` into one `/setup-project`, or rename `/migrate-project` → `/adopt-project`. Update both to emit version-stamp headers and managed-region markers. Drop the now-obsolete "URL contains claude-workflow" check.
+5. **Build the migration runner** (risk #1, Part B): migration script invoked by SessionStart hook, dirty-tree guard, ordered migration list (empty for v0.1, but the harness exists). CI fixtures for "v(N-1) repo → migrate → v(N) repo."
+6. Rewrite README install/setup sections; leave conceptual sections alone.
+7. Smoke test: install into a fresh project, run `/setup-project` on greenfield and on an existing repo, run `/start-session`, confirm hooks fire, `bd prime --stealth` runs, and migration check exits clean on a current-version repo.
+8. Tag `v0.1.0`, publish.
