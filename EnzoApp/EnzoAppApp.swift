@@ -48,6 +48,7 @@ struct RootView: View {
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @State private var showSettings = false
+    @State private var showAddSegments = false
 
     var body: some View {
         NavigationStack {
@@ -64,6 +65,9 @@ struct MainTabView: View {
             SettingsSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showAddSegments) {
+            AddSegmentsView()
+        }
     }
 
     private var topBar: some View {
@@ -72,6 +76,15 @@ struct MainTabView: View {
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(Color.enzoPrimary)
             Spacer()
+            Button {
+                showAddSegments = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(.title3))
+                    .foregroundStyle(Color.enzoAccent)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
             Button {
                 showSettings = true
             } label: {
