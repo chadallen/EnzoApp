@@ -1,14 +1,5 @@
 import Foundation
 
-struct GoalContext {
-    let segmentName: String
-    let requiredFitnessLabel: String   // "Strong", "Epic", etc.
-    let requiredFitnessValue: Double   // 0.0–1.0 internal
-    let targetDate: Date?
-    let weeksRemaining: Int?
-    let daysRemaining: Int?
-}
-
 struct AthleteContext {
     let name: String
     let yearsActive: Int
@@ -19,7 +10,6 @@ struct AthleteContext {
     let peakFitnessLabel: String
     let peakFitnessMonth: String
     let daysSinceLastRide: Int
-    let goal: GoalContext
 
     // MARK: - Fitness label utility
 
@@ -35,18 +25,16 @@ struct AthleteContext {
 
     // MARK: - Factory: build from local store data
 
-    /// Assembles a live AthleteContext from fetched snapshots and an optional goal row.
+    /// Assembles a live AthleteContext from fetched snapshots.
     /// Pure function — no network, fully testable.
     ///
     /// - Parameters:
     ///   - name: Athlete display name.
     ///   - snapshots: All fetched FitnessSnapshot rows, any order.
-    ///   - goalRow: Active GoalRow, or nil if no goal is set.
     ///   - lastActivityDate: Most recent qualifying ride date, used for days_since_last_ride.
     static func build(
         name: String,
         snapshots: [FitnessSnapshot],
-        goalRow: GoalRow?,
         lastActivityDate: Date?
     ) -> AthleteContext {
         let sorted = snapshots.sorted { $0.month < $1.month }
@@ -80,45 +68,6 @@ struct AthleteContext {
             return max(days, 0)
         }()
 
-        // Reconstruct GoalContext from persisted GoalRow, or use a placeholder.
-        let goal: GoalContext = {
-            guard let row = goalRow,
-                  let segmentName = row.targetSegmentName else {
-                return GoalContext(
-                    segmentName: "",
-                    requiredFitnessLabel: currentLabel,
-                    requiredFitnessValue: currentValue,
-                    targetDate: nil,
-                    weeksRemaining: nil,
-                    daysRemaining: nil
-                )
-            }
-            let requiredValue = row.requiredFitnessValue ?? currentValue
-            let requiredLabel = row.requiredFitnessLabel ?? fitnessLabel(for: requiredValue)
-            var targetDate: Date? = nil
-            var weeksRemaining: Int? = nil
-            var daysRemaining: Int? = nil
-            if let dateStr = row.targetDate {
-                let f = DateFormatter()
-                f.dateFormat = "yyyy-MM-dd"
-                f.timeZone = TimeZone(identifier: "UTC")
-                targetDate = f.date(from: dateStr)
-                if let td = targetDate {
-                    let days = max(0, Calendar.current.dateComponents([.day], from: Date(), to: td).day ?? 0)
-                    daysRemaining = days
-                    weeksRemaining = days / 7
-                }
-            }
-            return GoalContext(
-                segmentName: segmentName,
-                requiredFitnessLabel: requiredLabel,
-                requiredFitnessValue: requiredValue,
-                targetDate: targetDate,
-                weeksRemaining: weeksRemaining,
-                daysRemaining: daysRemaining
-            )
-        }()
-
         return AthleteContext(
             name: name,
             yearsActive: yearsActive,
@@ -128,8 +77,7 @@ struct AthleteContext {
             trendDirection: currentTrend,
             peakFitnessLabel: peakLabel,
             peakFitnessMonth: peakMonth,
-            daysSinceLastRide: daysSinceLastRide,
-            goal: goal
+            daysSinceLastRide: daysSinceLastRide
         )
     }
 
@@ -144,22 +92,13 @@ struct AthleteContext {
         trendDirection: "up",
         peakFitnessLabel: "Epic",
         peakFitnessMonth: "August 2025",
-        daysSinceLastRide: 3,
-        goal: GoalContext(
-            segmentName: "Hawk Hill",
-            requiredFitnessLabel: "Strong",
-            requiredFitnessValue: 0.70,
-            targetDate: nil,
-            weeksRemaining: nil,
-            daysRemaining: nil
-        )
+        daysSinceLastRide: 3
     )
 
     static let previewBriefing = """
 You peaked last August — 30 hours in a month, your best in years. September dropped \
 off sharply, which happens. You've been Recovering since the new year but you're \
-trending up now. Hawk Hill needs you at Strong, so there's real ground to cover — \
-but your history shows you can move fitness fast when you're consistent.
+trending up now.
 """
 
     static let previewLookahead = """
@@ -192,17 +131,6 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
     // Builds the JSON string sent to Claude with each user message.
     // Matches the structure in spec Section 5.
     func contextPayload(snapshots: [FitnessSnapshot], segments: [SegmentScore]) -> String {
-        var goalDict: [String: Any] = [
-            "type": "segment_pr",
-            "segment_name": goal.segmentName,
-            "required_fitness_label": goal.requiredFitnessLabel,
-            "current_fitness_label": currentFitnessLabel,
-            "has_date": goal.targetDate != nil
-        ]
-        if let weeks = goal.weeksRemaining {
-            goalDict["weeks_remaining"] = weeks
-        }
-
         let fitnessHistory: [[String: Any]] = snapshots.sorted { $0.month < $1.month }.map { s in
             [
                 "month": s.month,
@@ -231,8 +159,7 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
                 "current_fitness": AthleteContext.fitnessLabel(for: seg.currentFitnessValue),
                 "trend_direction": seg.trendDirection,
                 "strike_score": seg.strikeScore,
-                "strike_label": seg.strikeLabel,
-                "is_goal_segment": seg.isGoalSegment
+                "strike_label": seg.strikeLabel
             ]
         }
 
@@ -243,7 +170,6 @@ When you're ready, aim for two or three rides this week. Nothing heroic. Just ge
                 "current_fitness_label": currentFitnessLabel,
                 "trend_direction": trendDirection
             ] as [String: Any],
-            "goal": goalDict,
             "fitness_history": fitnessHistory,
             "top_segments": topSegments,
             "recent_weeks": [[String: Any]](),   // populated in Step 10 (webhooks)

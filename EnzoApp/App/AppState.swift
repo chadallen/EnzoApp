@@ -14,7 +14,6 @@ import SwiftData
 //     StarredSegmentModel   — athlete's starred segments (v2)
 //     SegmentEffortModel    — per-effort data for starred segments (v2)
 //     SegmentFitnessModel   — OLS regression model per segment (v2)
-//     GoalModel             — active/historical goals, written by setGoal()
 //
 //   Keychain
 //     Strava OAuth tokens (access, refresh, expiry) and athlete ID
@@ -48,7 +47,6 @@ class AppState {
         didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
     }
     // True while loadContext() is running to resolve whether onboarding is needed.
-    // Prevents the gate from flashing GoalSettingView for existing users on first launch.
     var isResolvingOnboarding: Bool = false
     // True from startOnboardingSync() until SyncProgressView's onComplete fires.
     // Distinct from isSyncing so manual syncs (SettingsSheet) don't re-trigger onboarding screen.
@@ -108,7 +106,7 @@ class AppState {
 
     // MARK: - Context loading
 
-    /// Fetches fitness snapshots, user profile, and active goal from local SwiftData store,
+    /// Fetches fitness snapshots and user profile from local SwiftData store,
     /// then builds a live AthleteContext. No-ops gracefully if not authenticated.
     func loadContext() async {
         guard isAuthenticated else {
@@ -116,165 +114,51 @@ class AppState {
             return
         }
 
-        do {
-            let goalModels = try modelContext.fetch(
-                FetchDescriptor<GoalModel>(predicate: #Predicate { $0.isActive })
-            )
-            let activeGoalRow = goalModels.first?.toGoalRow()
+        let displayName = UserDefaults.standard.string(forKey: "athleteDisplayName") ?? "Athlete"
+        let lastActivityDate = UserDefaults.standard.object(forKey: "lastActivityDate") as? Date
 
-            let displayName = UserDefaults.standard.string(forKey: "athleteDisplayName") ?? "Athlete"
-            let lastActivityDate = UserDefaults.standard.object(forKey: "lastActivityDate") as? Date
+        let context = AthleteContext.build(
+            name: displayName,
+            snapshots: [],
+            lastActivityDate: lastActivityDate
+        )
 
-            let context = AthleteContext.build(
-                name: displayName,
-                snapshots: [],
-                goalRow: activeGoalRow,
-                lastActivityDate: lastActivityDate
-            )
+        athleteContext = context
 
-            athleteContext = context
+        NSLog("[Context] Loaded: fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
 
-            NSLog("[Context] Loaded: fitness=\(context.currentFitnessLabel), trend=\(context.trendDirection)")
+        // Load real segment scores from local store (no-op if store is empty).
+        await loadSegments()
 
-            // Auto-complete onboarding for existing users who already have a goal.
-            if activeGoalRow != nil && !hasCompletedOnboarding {
-                hasCompletedOnboarding = true
-                NSLog("[Onboarding] Existing user — marking onboarding complete")
-            }
-
-            // Load real segment scores from local store (no-op if store is empty).
-            await loadSegments(goalSegmentName: activeGoalRow?.targetSegmentName)
-        } catch {
-            NSLog("[Context] loadContext error: \(error)")
-        }
         isResolvingOnboarding = false
     }
 
     /// Fetches segment scores from the local SwiftData store and populates appState.segments.
-    /// Marks the goal segment if a goal is active.
     ///
     /// Uses the v2 path (StarredSegmentModel + SegmentFitnessModel) when data is available,
     /// calling updateSegmentsFromV2Models() so prProbability is always populated after a restart.
     /// If no v2 data exists yet, keeps preview data until first sync completes.
-    func loadSegments(goalSegmentName: String? = nil) async {
+    func loadSegments() async {
         guard isAuthenticated else { return }
-        do {
-            // V2 path: use StarredSegmentModel + SegmentFitnessModel when available.
-            // This ensures prProbability is populated even after a restart (not just during sync).
-            let starredSegments = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
-            let fitnessModels   = (try? modelContext.fetch(FetchDescriptor<SegmentFitnessModel>())) ?? []
-            if !starredSegments.isEmpty && !fitnessModels.isEmpty {
-                // V2 data is available — reconstruct prProbability from stored models.
-                let latestDailyFitness = try? modelContext.fetch(
-                    FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-                ).first
-                await updateSegmentsFromV2Models(
-                    starredSegments: starredSegments,
-                    todayFitness: latestDailyFitness
-                )
-                // Mark goal segment after updateSegmentsFromV2Models has populated segments.
-                if let goalName = goalSegmentName {
-                    segments = segments.map { seg in
-                        var updated = seg
-                        updated.isGoalSegment = seg.name == goalName
-                        return updated
-                    }
-                }
-                NSLog("[Segments] Loaded \(starredSegments.count) segments from v2 store with prProbability")
-                return
-            }
-
-            // No v2 data yet — keep preview data until first sync completes.
-            NSLog("[Segments] No segment rows in local store yet — keeping preview data")
-        } catch {
-            NSLog("[Segments] loadSegments error: \(error)")
-        }
-    }
-
-    // MARK: - Goal setting
-
-    func setGoal(_ segment: SegmentScore, targetDate: Date?) {
-        let daysRemaining: Int? = targetDate.map { date in
-            max(0, Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0)
-        }
-        let weeksRemaining: Int? = daysRemaining.map { $0 / 7 }
-
-        let requiredValue = segment.fitnessValueAtPR
-        // One tier below PR fitness — you don't need to exactly match your peak to challenge a PR.
-        let prFitnessLabel = AthleteContext.fitnessLabel(for: requiredValue)
-        let requiredLabel: String
-        switch prFitnessLabel {
-        case "Epic":      requiredLabel = "Strong"
-        case "Strong":    requiredLabel = "Building"
-        case "Building":  requiredLabel = "Baseline"
-        default:          requiredLabel = "Recovering"
-        }
-        let newGoal = GoalContext(
-            segmentName: segment.name,
-            requiredFitnessLabel: requiredLabel,
-            requiredFitnessValue: requiredValue,
-            targetDate: targetDate,
-            weeksRemaining: weeksRemaining,
-            daysRemaining: daysRemaining
-        )
-
-        athleteContext = AthleteContext(
-            name: athleteContext.name,
-            yearsActive: athleteContext.yearsActive,
-            totalActivities: athleteContext.totalActivities,
-            currentFitnessLabel: athleteContext.currentFitnessLabel,
-            currentFitnessValue: athleteContext.currentFitnessValue,
-            trendDirection: athleteContext.trendDirection,
-            peakFitnessLabel: athleteContext.peakFitnessLabel,
-            peakFitnessMonth: athleteContext.peakFitnessMonth,
-            daysSinceLastRide: athleteContext.daysSinceLastRide,
-            goal: newGoal
-        )
-
-        segments = segments.map { seg in
-            var updated = seg
-            updated.isGoalSegment = seg.name == segment.name
-            return updated
-        }
-
-        // Deactivate all existing active goals, then insert the new one.
-        do {
-            let activeGoals = try modelContext.fetch(
-                FetchDescriptor<GoalModel>(predicate: #Predicate { $0.isActive })
+        // V2 path: use StarredSegmentModel + SegmentFitnessModel when available.
+        // This ensures prProbability is populated even after a restart (not just during sync).
+        let starredSegments = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
+        let fitnessModels   = (try? modelContext.fetch(FetchDescriptor<SegmentFitnessModel>())) ?? []
+        if !starredSegments.isEmpty && !fitnessModels.isEmpty {
+            // V2 data is available — reconstruct prProbability from stored models.
+            let latestDailyFitness = try? modelContext.fetch(
+                FetchDescriptor<DailyFitnessModel>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+            ).first
+            await updateSegmentsFromV2Models(
+                starredSegments: starredSegments,
+                todayFitness: latestDailyFitness
             )
-            activeGoals.forEach { $0.isActive = false }
-            let goal = GoalModel(
-                rawDescription: segment.name,
-                goalType: "segment_pr",
-                targetSegmentName: segment.name,
-                targetDate: targetDate,
-                requiredFitnessLabel: requiredLabel,
-                requiredFitnessValue: requiredValue,
-                isActive: true
-            )
-            modelContext.insert(goal)
-            try modelContext.save()
-            NSLog("[Goal] Saved goal '\(segment.name)' to local store")
-        } catch {
-            NSLog("[Goal] Failed to save goal: \(error)")
+            NSLog("[Segments] Loaded \(starredSegments.count) segments from v2 store with prProbability")
+            return
         }
-    }
 
-    func goalReactionStream(for segment: SegmentScore) async -> AsyncStream<String> {
-        let prompt = AppState.goalReactionPrompt(segment: segment, athleteContext: athleteContext)
-        let context = athleteContext.contextPayload(snapshots: fitnessSnapshots, segments: segments)
-        return await claudeService.stream(userMessage: prompt, context: context)
-    }
-
-    /// Pure function — builds the Enzo prompt for reacting to a newly selected goal segment.
-    /// Extracted for testability.
-    static func goalReactionPrompt(segment: SegmentScore, athleteContext: AthleteContext) -> String {
-        let fitnessAtPRLabel = AthleteContext.fitnessLabel(for: segment.fitnessValueAtPR)
-        return "I want to set \(segment.name) as my PR goal. " +
-               "I set that PR (\(segment.prFormatted)) on \(segment.prDate) " +
-               "when I was at \(fitnessAtPRLabel) fitness. " +
-               "My current fitness is \(athleteContext.currentFitnessLabel), trending \(athleteContext.trendDirection). " +
-               "React to this goal choice — be honest about where I stand and whether a target date makes sense."
+        // No v2 data yet — keep preview data until first sync completes.
+        NSLog("[Segments] No segment rows in local store yet — keeping preview data")
     }
 
     // MARK: - Authentication
@@ -301,7 +185,6 @@ class AppState {
             try modelContext.delete(model: StarredSegmentModel.self)
             try modelContext.delete(model: SegmentEffortModel.self)
             try modelContext.delete(model: SegmentFitnessModel.self)
-            try modelContext.delete(model: GoalModel.self)
             try modelContext.save()
         } catch {
             NSLog("[Auth] Failed to wipe local store on disconnect: \(error)")
@@ -851,91 +734,6 @@ class AppState {
             hasRealSegmentData = true
             NSLog("[SyncV2] Updated \(newSegments.count) segments in-memory")
         }
-    }
-
-    // MARK: - Segment discovery
-
-    /// A frequently-ridden segment that the athlete has not yet starred on Strava.
-    /// Surfaced by `findSegmentsToConsider()` after a v2 sync.
-    struct SuggestedSegment: Identifiable, Hashable {
-        let segmentId: Int
-        let name: String
-        let effortCount: Int
-        let bestTimeSeconds: Int   // minimum elapsed time across all stored efforts
-
-        var id: Int { segmentId }
-    }
-
-    /// Queries the local SwiftData store for segments ridden 3+ times that are not starred.
-    ///
-    /// Delegates to `buildSuggestedSegments(segmentModels:effortRecords:)` so the algorithm
-    /// is testable without SwiftData.
-    ///
-    /// No network calls. Read-only. Safe to call any time after loadContext().
-    func findSegmentsToConsider() -> [SuggestedSegment] {
-        let allSegmentModels = (try? modelContext.fetch(FetchDescriptor<StarredSegmentModel>())) ?? []
-        let allEfforts = (try? modelContext.fetch(FetchDescriptor<SegmentEffortModel>())) ?? []
-
-        let segmentInputs = allSegmentModels.map {
-            SegmentInput(segmentId: $0.segmentId, name: $0.name, isStarred: $0.isStarred)
-        }
-        let effortInputs = allEfforts.map {
-            EffortInput(segmentId: $0.segmentId, elapsedTime: $0.elapsedTime)
-        }
-        return Self.buildSuggestedSegments(segmentModels: segmentInputs, effortRecords: effortInputs)
-    }
-
-    // MARK: - Segment discovery inputs (for testability)
-
-    /// Minimal segment descriptor used by the pure suggestion builder.
-    struct SegmentInput {
-        let segmentId: Int
-        let name: String
-        let isStarred: Bool
-    }
-
-    /// Minimal effort descriptor used by the pure suggestion builder.
-    struct EffortInput {
-        let segmentId: Int
-        let elapsedTime: Double
-    }
-
-    /// Pure function — builds the list of unstarred-but-frequent suggestions.
-    ///
-    /// Algorithm:
-    ///   1. Collect all segment IDs where isStarred == true.
-    ///   2. Group effort records by segmentId, skipping starred segments.
-    ///   3. Keep groups with count >= 3.
-    ///   4. Join with segmentModels to get the segment name; skip if no name found.
-    ///   5. Return sorted by effortCount descending.
-    static func buildSuggestedSegments(
-        segmentModels: [SegmentInput],
-        effortRecords: [EffortInput]
-    ) -> [SuggestedSegment] {
-        let starredIds = Set(segmentModels.filter { $0.isStarred }.map { $0.segmentId })
-        let nameById = Dictionary(segmentModels.map { ($0.segmentId, $0.name) },
-                                  uniquingKeysWith: { first, _ in first })
-
-        var effortsBySegment: [Int: [Double]] = [:]
-        for effort in effortRecords {
-            guard !starredIds.contains(effort.segmentId) else { continue }
-            effortsBySegment[effort.segmentId, default: []].append(effort.elapsedTime)
-        }
-
-        var suggestions: [SuggestedSegment] = []
-        for (segId, times) in effortsBySegment {
-            guard times.count >= 3 else { continue }
-            guard let name = nameById[segId] else { continue }
-            let bestTime = times.min() ?? 0
-            suggestions.append(SuggestedSegment(
-                segmentId: segId,
-                name: name,
-                effortCount: times.count,
-                bestTimeSeconds: Int(bestTime.rounded())
-            ))
-        }
-
-        return suggestions.sorted { $0.effortCount > $1.effortCount }
     }
 
     // MARK: - Private helpers

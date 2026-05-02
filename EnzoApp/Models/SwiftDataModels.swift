@@ -20,97 +20,6 @@ import SwiftData
 // Switching to it is a one-line change here. That path is available if cross-device
 // sync becomes a requirement in a future version.
 
-// MARK: - GoalModel
-
-/// Persisted user goal. At most one row should have isActive == true at any time.
-///
-/// Written by AppState.setGoal() when the user picks a target segment.
-/// The previous active goal is deactivated (isActive = false) before inserting a new one.
-/// Goals are never hard-deleted — the history is preserved for future reference.
-///
-/// Currently only "segment_pr" goals are supported, but goalType is stored
-/// as a String to allow future expansion without a schema migration.
-@Model
-final class GoalModel {
-    /// The user's goal in plain English — currently always the segment name.
-    var rawDescription: String
-
-    /// Optional Enzo-generated interpretation of the goal. Reserved for future use.
-    var claudeInterpretation: String?
-
-    /// Goal category. Currently always "segment_pr".
-    var goalType: String
-
-    /// Optional Strava segment ID. Not always populated — segment lookup is by name.
-    var targetSegmentId: Int?
-
-    /// Name of the target Strava segment. Primary key for goal matching in loadSegments().
-    var targetSegmentName: String
-
-    /// Optional target date. Shown in GoalSettingView countdown if set.
-    var targetDate: Date?
-
-    /// Optional aspirational target time in seconds. Reserved for future use.
-    var targetValue: Double?
-
-    /// Fitness label required to beat this PR (e.g. "Strong").
-    /// Derived from fitnessValueAtPR on the segment at the time of goal creation.
-    var requiredFitnessLabel: String
-
-    /// Normalized fitness value (0.0–1.0) required to beat this PR.
-    var requiredFitnessValue: Double
-
-    /// True for the current active goal. Only one row should be active at a time.
-    /// AppState.setGoal() deactivates all active goals before inserting a new one.
-    var isActive: Bool
-
-    /// Timestamp of goal creation. Not displayed; useful for debugging goal history.
-    var createdAt: Date
-
-    init(rawDescription: String, goalType: String, targetSegmentName: String,
-         targetDate: Date?, requiredFitnessLabel: String, requiredFitnessValue: Double,
-         isActive: Bool) {
-        self.rawDescription = rawDescription
-        self.claudeInterpretation = nil
-        self.goalType = goalType
-        self.targetSegmentId = nil
-        self.targetSegmentName = targetSegmentName
-        self.targetDate = targetDate
-        self.targetValue = nil
-        self.requiredFitnessLabel = requiredFitnessLabel
-        self.requiredFitnessValue = requiredFitnessValue
-        self.isActive = isActive
-        self.createdAt = Date()
-    }
-
-    /// Converts to GoalRow so AthleteContext.build() can remain unchanged.
-    /// GoalRow was originally the Supabase DTO; it's now just a plain struct bridge
-    /// between the SwiftData model and the AthleteContext factory.
-    func toGoalRow() -> GoalRow {
-        var targetDateStr: String? = nil
-        if let date = targetDate {
-            let f = DateFormatter()
-            f.dateFormat = "yyyy-MM-dd"
-            f.timeZone = TimeZone(identifier: "UTC")
-            targetDateStr = f.string(from: date)
-        }
-        return GoalRow(
-            id: nil,
-            userId: nil,
-            rawDescription: rawDescription,
-            claudeInterpretation: claudeInterpretation,
-            goalType: goalType,
-            targetSegmentId: targetSegmentId.map { Int64($0) },
-            targetSegmentName: targetSegmentName,
-            targetDate: targetDateStr,
-            targetValue: targetValue,
-            requiredFitnessLabel: requiredFitnessLabel,
-            requiredFitnessValue: requiredFitnessValue,
-            isActive: isActive
-        )
-    }
-}
-
 // MARK: - Fitness v2 Models
 //
 // Introduced in Fitness Algorithm v2 overhaul (EnzoApp-y69).
@@ -280,8 +189,6 @@ extension ModelContainer {
             StarredSegmentModel.self,
             SegmentEffortModel.self,
             SegmentFitnessModel.self,
-            // Unchanged
-            GoalModel.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {

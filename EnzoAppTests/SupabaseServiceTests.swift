@@ -117,35 +117,3 @@ struct SegmentScoreRowTests {
     }
 }
 
-// MARK: - GoalRow unit tests
-
-@Suite("GoalRow")
-struct GoalRowTests {
-
-    @Test("encodes to snake_case column names")
-    func codingKeysAreSnakeCase() throws {
-        let row = GoalRow(
-            id: nil,
-            userId: nil,
-            rawDescription: "PR Hawk Hill",
-            claudeInterpretation: nil,
-            goalType: "segment_pr",
-            targetSegmentId: nil,
-            targetSegmentName: "Hawk Hill",
-            targetDate: nil,
-            targetValue: nil,
-            requiredFitnessLabel: "Strong",
-            requiredFitnessValue: 0.70,
-            isActive: true
-        )
-        let data = try JSONEncoder().encode(row)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-
-        #expect(json["raw_description"] as? String == "PR Hawk Hill")
-        #expect(json["goal_type"] as? String == "segment_pr")
-        #expect(json["target_segment_name"] as? String == "Hawk Hill")
-        #expect(json["required_fitness_label"] as? String == "Strong")
-        #expect(json["required_fitness_value"] as? Double == 0.70)
-        #expect(json["is_active"] as? Bool == true)
-    }
-}

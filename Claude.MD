@@ -62,13 +62,11 @@ All derived data is stored on-device via SwiftData. No remote backend. Models li
 - `StarredSegmentModel` — segments starred on Strava or ridden within 90 days, keyed on segmentId (unique)
 - `SegmentEffortModel` — one effort per segment ride, keyed on stravaEffortId (unique)
 - `SegmentFitnessModel` — per-segment OLS regression state (β coefficients, σ, PR time), keyed on segmentId (unique)
-- `GoalModel` — active/historical goals, isActive flag, one active at a time
-
 **Container:** `ModelContainer.enzo` (shared singleton in SwiftDataModels.swift)
 **Access:** `AppState.modelContext` (mainContext, @MainActor)
 **Upsert pattern:** fetch-first by unique key, update fields or insert new
-**Wipe on reset:** `AppState.resetSyncHistory()` deletes all models except GoalModel
-**Wipe on disconnect:** `AppState.disconnect()` deletes all six model types
+**Wipe on reset:** `AppState.resetSyncHistory()` deletes all five model types
+**Wipe on disconnect:** `AppState.disconnect()` deletes all five model types
 
 Identity is `strava_athlete_id` in Keychain only — no remote user table.
 
