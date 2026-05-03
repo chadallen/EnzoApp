@@ -124,15 +124,7 @@ Notes on what's *not* in the manifest:
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bd prime --stealth" }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "*",
-        "hooks": [
-          { "type": "command", "command": "bd prime --stealth" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/migrate.sh" }
         ]
       }
     ]
@@ -141,6 +133,8 @@ Notes on what's *not* in the manifest:
 ```
 
 (Hook entries take a `type` — `command` is the right choice here. Other types: `http`, `mcp_tool`, `prompt`, `agent`. All hooks from user/project/plugin sources execute together; precedence for blocking decisions is `deny > defer > ask > allow`.)
+
+**What's intentionally not in `hooks/hooks.json`:** the `bd prime --stealth` SessionStart and PreCompact hooks. `bd init` writes those into the consumer's `.claude/settings.json` as a side effect — verified in the EnzoApp repo at `.claude/settings.json:3-24`. The plugin shouldn't duplicate them, both because Beads owns its own lifecycle contract and because both sources would fire and run `bd prime` twice per session. Instead, `/setup-project` shells out to `bd init` (see the merged-command section below) and lets Beads register its own hooks.
 
 ---
 
@@ -262,6 +256,7 @@ Either way, both commands need:
 - **Stop writing workflow-conventions content into CLAUDE.md** (per the CLAUDE.example.md split above). The output should contain only project facts plus markers.
 - **Drop the "URL contains claude-workflow" stop check.** That guards against the user forgetting to set their own remote when the workflow was distributed by clone. With plugin install, the user's project already has its own remote — the check is dead.
 - **Two-commits-is-normal needs to be documented.** `/migrate-project`'s key principles already note that `bd init` auto-commits. The SessionStart migration runner needs to know about this too — it can't assume "one commit per migration."
+- **Shell out to `bd init` for Beads setup.** `bd init` writes its own `SessionStart` and `PreCompact` hooks (`bd prime --stealth`) directly into the consumer's `.claude/settings.json`, plus the `.beads/` directory, the `bd` git hooks (`pre-commit`, `pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`), and `.beads/config.yaml`. The merged setup command should detect whether `.beads/` exists and run `bd init` if not — letting Beads own its own lifecycle rather than the plugin reinventing it. Keeps the plugin's `hooks/hooks.json` focused on plugin-owned concerns (the migration runner) and avoids the double-prime problem if both sources ship the same hook.
 
 ### `/start-session` — minor
 
