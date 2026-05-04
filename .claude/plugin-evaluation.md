@@ -266,9 +266,20 @@ Currently reads `plan.MD` and stops if it doesn't exist with a "run /init-projec
 
 References `bd doctor` only working in server mode and skips in embedded — that's a Beads detail, not a plugin concern. Unchanged.
 
-### `/create-tasks`, `/build-tasks`, `/adr` — no changes
+### `/create-tasks` and `/build-tasks` — UX shift away from intermediate planning files
 
-These read project state and create tasks/commits/ADRs. They don't write to the structured user files we've been talking about. Just need the namespace prefix in their docs (`/claude-workflow:create-tasks` etc.).
+The current pattern of writing a long `proposal.md` / `plan.MD` and asking the user to review it is clunky in practice — the user has to find the file, open it, scan it, and rarely actually does. Replace with a chat-native flow:
+
+- **No intermediate planning file.** `/create-tasks` writes directly to Beads, no `proposal.md` step. The conversation is the working surface; Beads is the durable record.
+- **Render created issues inline in `bd show` shape.** After creation, print a compact summary (`id  priority  title  blocks/depends`) so the user sees exactly what was written without leaving chat. If the user wants full detail on a specific issue, they can ask and Claude runs `bd show <id>` inline.
+- **React to free-text edits.** *"Drop bug-25, bump bug-26 to P1"* → Claude executes `bd close bug-25 --reason "..."` and `bd update bug-26 --priority 1` in the same turn. No second confirmation loop.
+- **Human-keystroke gate between `/create-tasks` and `/build-tasks`.** Enforced architecturally — they're separate slash commands, each requires explicit user invocation. The "review pause" is the gap between commands; no status flag or approval marker needed.
+- **`/create-tasks` must never auto-invoke `/build-tasks`.** Resist the temptation to chain them ("you've created tasks, want me to start building?"). That collapses one keystroke into the gate for both.
+- **`--auto` mode bypasses the gate by design.** Document in README that `/build-tasks --auto` skips the review pause — that's the trade the user opts into when they pass `--auto`.
+
+### `/adr` — no changes
+
+Reads project state and writes ADR files. Doesn't touch the structured user files this evaluation has been concerned with. Just needs the namespace prefix in docs (`/claude-workflow:adr`).
 
 ### `implementer` and `code-reviewer` agents — small
 
