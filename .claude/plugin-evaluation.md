@@ -1,16 +1,19 @@
 # claude-workflow → Plugin: Evaluation & Proposal
 
-Evaluating whether to repackage [chadallen/claude-workflow](https://github.com/chadallen/claude-workflow) as a Claude Code plugin, and what doc/structure work that implies.
+Evaluating whether to repackage [chadallen/claude-workflow](https://github.com/chadallen/claude-workflow) as a Claude Code plugin, and what the resulting plugin should look like.
 
 ---
 
 ## TL;DR
 
-- Yes — it's a clean fit. The repo is already a coherent bundle of commands, agents, language skills, and hooks meant to be reused across projects. That's exactly the plugin shape.
-- Migration is mostly mechanical: add `.claude-plugin/plugin.json`, split today's `skills/` directory into `commands/` (the `/`-invoked ones) vs `skills/` (the auto-invoked language ones), add a `hooks/hooks.json` for the Beads `SessionStart` / `PreCompact` hooks.
-- Doc cost is moderate. The README's whole install/setup narrative needs a rewrite — `git clone … your-project-path` becomes `/plugin install …`, and the "copy to global" footgun goes away. `CLAUDE.example.md` and `PRD.md` need light edits only.
-- The biggest substantive risk: `/init-project` materialises plugin templates (CLAUDE.md, plan.MD, .beads/) into the consumer's repo. Without an upgrade path, those files silently rot as the plugin evolves. The recommended fix is a schema-migration-on-startup runner (managed regions inside user files, version-stamp headers, ordered idempotent migrations, dirty-tree guard). Roughly a week of engineering, but it's the difference between a plugin that ages well and one that breaks every existing project on every release. Build it before v0.1.
-- Plugin commands and skills are **auto-namespaced** (`/claude-workflow:start-session`, not `/start-session`). That's a real UX shift, not a cosmetic one. Worth aliasing or accepting upfront.
+- Yes — it's a clean fit, and the design simplifies dramatically once you commit to a *"plugin manages no files in the user's repo"* rule.
+- The plugin's surface is six elements: a SessionStart hook (injects conventions into context) and five slash commands (`/start-session`, `/end-session`, `/create-tasks`, `/build-tasks`, `/adr`).
+- Workflow conventions live inside the plugin (`docs/conventions.md`), prepended to context every session via the SessionStart hook — same pattern as `bd prime`. They never get materialized into user files, so they never go stale.
+- The bootstrap commands (`/init-project`, `/migrate-project`) go away. Their only valuable function — turning a PRD into a starter set of Beads issues — gets absorbed into `/create-tasks`, which now accepts a path: `/create-tasks PRD.md`. `bd init` runs automatically on first invocation if `.beads/` is missing.
+- `/start-session` becomes a trampoline: it checks state and tells the user what's next ("install bd," "no tasks; write a PRD," "here's ready work"). One command, four states, always points at the right next step.
+- `plan.MD` is killed. "Current status" lives in a designated Beads issue.
+- Risk #1 (per-project state coupling) from the previous draft collapses to a paragraph, because there are no plugin-managed files in user repos to drift. The proposed migration runner is no longer needed.
+- Auto-namespacing (`/<plugin-name>:start-session`) is still a real UX shift. Otherwise, doc cost is light: the README install flow needs a rewrite, and that's most of it.
 
 ---
 
@@ -39,10 +42,10 @@ claude-workflow/
 
 Install model today: clone the whole repo into a project path, files land in `.claude/skills/` and `.claude/agents/`. Optional `cp -r` to `~/.claude/skills/` for global use.
 
-Two things to notice:
+Two structural notes:
 
 1. Eight of the ten `skills/` entries are user-invoked (`/start-session`, `/build-tasks`, …). In Claude Code plugin terms those are **slash commands**, not Skills. Three are auto-invoked by `implementer` / `code-reviewer` based on file type (`typescript-developer`, `python-developer`, `ios-developer`). Those *are* Skills.
-2. Hooks are referenced in `CLAUDE.example.md` ("Both `SessionStart` and `PreCompact` hooks must use `bd prime --stealth`") but there's no hook config file in the repo — `/init-project` and `/migrate-project` install them into the consuming project. Under a plugin, those should ship from the plugin itself.
+2. Hooks are referenced in `CLAUDE.example.md` ("Both `SessionStart` and `PreCompact` hooks must use `bd prime --stealth`") but there's no hook config file in the repo — `/init-project` and `/migrate-project` install them into the consuming project. Under the plugin model, the `bd prime` hooks come from `bd init` (Beads writes them itself when initialized) and the plugin's own SessionStart hook handles conventions injection.
 
 ---
 
@@ -53,8 +56,6 @@ claude-workflow/
 ├── .claude-plugin/
 │   └── plugin.json
 ├── commands/
-│   ├── init-project.md
-│   ├── migrate-project.md
 │   ├── start-session.md
 │   ├── end-session.md
 │   ├── create-tasks.md
@@ -68,27 +69,28 @@ claude-workflow/
 │   ├── python-developer/SKILL.md
 │   └── ios-developer/SKILL.md
 ├── hooks/
-│   └── hooks.json
-├── templates/
-│   ├── CLAUDE.example.md
-│   └── PRD.example.md
-├── README.md
-└── docs/
-    ├── workflow.md       # the conceptual "pieces" section, lifted out of README
-    └── plugin.md         # plugin-specific install / version notes
+│   └── hooks.json              # SessionStart hook for conventions injection
+├── scripts/
+│   └── inject-conventions.sh   # reads docs/conventions.md, prepends to context
+├── docs/
+│   ├── conventions.md          # plugin-internal: workflow rules, commit format, etc.
+│   ├── plugin.md               # plugin developer notes
+│   └── workflow.md             # optional: longer-form conceptual doc
+└── README.md
 ```
 
 Notes:
 
+- **No `templates/` directory.** The plugin doesn't ship CLAUDE.md or PRD.md templates. Built-in `/init` already produces a project-aware CLAUDE.md before the user installs the plugin. PRDs are user-authored content the plugin reads on demand — not something to template.
+- **No `init-project.md` or `migrate-project.md` commands.** Their only valuable function (PRD → Beads ingestion) absorbs into `/create-tasks`. `bd init` happens automatically when `/create-tasks` is run against an uninitialized repo.
 - Filename casing normalises to `.md` (current repo mixes `.MD` and `.md`).
-- `CLAUDE.example.md` and `PRD.md` move under `templates/` — they're content the plugin's `/init-project` command writes into the user's project, not docs the plugin itself ships at root.
-- Drop `/clear` from the commands list — that's a built-in Claude Code command, not part of this workflow.
+- Plugin name when published needs to be **kebab-case, no spaces or dots** (e.g., `loop-fork-pizza`). The `fork.pizza` domain can live in `homepage` and branding; the manifest name has to match the plugin spec's validation rule.
 
 ---
 
 ## Manifest sketch
 
-Per the current plugin spec, only `name` is required; everything else is optional metadata. Auto-discovery handles `commands/`, `agents/`, `skills/`, `hooks/hooks.json` if you use the conventional layout, so the manifest stays small.
+Per the plugin spec, only `name` is required; everything else is optional. Auto-discovery handles `commands/`, `agents/`, `skills/`, `hooks/hooks.json` if you use the conventional layout, so the manifest stays small.
 
 `.claude-plugin/plugin.json`:
 
@@ -110,10 +112,10 @@ Per the current plugin spec, only `name` is required; everything else is optiona
 
 Notes on what's *not* in the manifest:
 
-- **No `requirements.external` field exists.** Beads-as-prerequisite has to be documented in the README and enforced at hook-runtime (the hook script does `command -v bd` and prints an install hint if missing). The manifest can't gate install on a binary being present.
-- **`userConfig`** is available if you want to prompt the user at enable time for things like a default LTHR, default branch name, or remote-marketplace URL — skipping for v0.1.
+- **No `requirements.external` field exists.** Beads-as-prerequisite has to be documented in the README and enforced at hook-runtime + slash-command-runtime (see `/start-session` trampoline below). The manifest can't gate install on a binary being present.
+- **`userConfig`** is available if you want to prompt the user at enable time for things like a default branch name — skipping for v0.1.
 - **`dependencies`** is for plugin-to-plugin deps with semver constraints. Not relevant here unless you spin language skills out into companion plugins later.
-- **Versioning choice**: with `"version": "0.1.0"` set, consumers only get updates when you bump the field. Omit `version` and every commit to your default branch becomes an update. Recommendation: keep an explicit version — better upgrade discipline.
+- **Version is explicit, not omitted.** With `"version": "0.1.0"` set, consumers only get updates when you bump the field. Omit `version` and every commit to your default branch becomes an update — strict upgrade discipline disappears.
 
 `hooks/hooks.json`:
 
@@ -124,7 +126,7 @@ Notes on what's *not* in the manifest:
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/migrate.sh" }
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/inject-conventions.sh" }
         ]
       }
     ]
@@ -132,9 +134,12 @@ Notes on what's *not* in the manifest:
 }
 ```
 
-(Hook entries take a `type` — `command` is the right choice here. Other types: `http`, `mcp_tool`, `prompt`, `agent`. All hooks from user/project/plugin sources execute together; precedence for blocking decisions is `deny > defer > ask > allow`.)
+The hook script reads `${CLAUDE_PLUGIN_ROOT}/docs/conventions.md` and prepends it to context. Same shape as `bd prime`, just with workflow conventions instead of Beads state. The script should also do a `command -v bd` check and print a soft install hint if Beads is missing — exits 0 to avoid blocking the session.
 
-**What's intentionally not in `hooks/hooks.json`:** the `bd prime --stealth` SessionStart and PreCompact hooks. `bd init` writes those into the consumer's `.claude/settings.json` as a side effect — verified in the EnzoApp repo at `.claude/settings.json:3-24`. The plugin shouldn't duplicate them, both because Beads owns its own lifecycle contract and because both sources would fire and run `bd prime` twice per session. Instead, `/setup-project` shells out to `bd init` (see the merged-command section below) and lets Beads register its own hooks.
+**Two things intentionally not in `hooks/hooks.json`:**
+
+1. **`bd prime --stealth` hooks.** `bd init` writes these into the consumer's `.claude/settings.json` directly. Plugin shouldn't duplicate them — Beads owns its own lifecycle, and double-priming runs `bd prime` twice per session.
+2. **A migration runner.** No plugin-managed files in user repos means nothing to migrate. The previous draft included a SessionStart-driven migration script for managed-region content in CLAUDE.md / plan.MD; that's gone now.
 
 ---
 
@@ -156,8 +161,8 @@ Today the `implementer` and `code-reviewer` agents load a skill (prose conventio
 **Why not in v0.1:**
 
 - **Per-language runtime prerequisite, multiplied.** Beads-as-prerequisite is one binary on PATH. LSPs add one *per language* — `tsserver`, `pyright` (or `pylsp`), `sourcekit-lsp`. Each has its own install story and version drift. Same hook-time `command -v` check pattern, but now N of them.
-- **Scope.** v0.1 is already shipping a plugin with a migration runner, a hook trust model, and a namespace UX shift. "Also we run language servers" is a separable concern.
-- **Skill content stays the same regardless.** Whether or not you add LSPs later, the existing TS/Python/iOS skills don't need to change — they're orthogonal. So adding LSPs is purely additive future work, not a migration item.
+- **Scope.** v0.1 is already shipping a plugin with a hook trust model and a namespace UX shift. "Also we run language servers" is a separable concern.
+- **Skill content stays the same regardless.** Whether or not you add LSPs later, the existing TS/Python/iOS skills don't need to change — they're orthogonal. So adding LSPs is purely additive future work.
 
 **v0.2+ shape, sketched:** declare the LSP servers in `plugin.json`, ship a hook-time check that warns if any are missing, update the `implementer` agent's prompt to mention "use available LSP tools to verify types/diagnostics before and after edits." Skills stay exactly as they are.
 
@@ -167,268 +172,235 @@ Today the `implementer` and `code-reviewer` agents load a skill (prose conventio
 
 ### `README.md` — major rewrite
 
-The current README is split into "the pieces", "the skills", "first time setup", and "getting started / how to use." The structural assumption throughout is *clone-into-your-project*. That has to change.
+The current README is built around clone-into-your-project. That has to go. The new install flow:
 
-Concrete edits:
+```
+1. /init                       (Claude Code built-in → CLAUDE.md)
+2. /plugin install <source>
+3. /start-session              (tells you "install bd")
+4. brew install beads          (or platform equivalent)
+5. /start-session              (tells you "write a PRD or describe work")
+6. write PRD.md
+7. /create-tasks PRD.md        (auto-runs bd init, ingests PRD)
+8. /start-session              (shows ready work)
+9. /build-tasks
+```
+
+The user never has to remember the right next command — `/start-session` always tells them. Same pattern as `git status`.
+
+Concrete README edits:
 
 | Section | Action |
 |---|---|
-| Top tagline / "let's create the world…" | Keep. |
-| "The short version" | Replace `git clone … your-project-path` with `/plugin install chadallen/claude-workflow` (or whatever the marketplace URL is). Remove the "you don't need to clone" footnote later in the file — it's no longer the alternative, it's the only mode. |
-| "The pieces" | Keep. Light edit: clarify that `CLAUDE.example.md` is now a template *inside the plugin* that `/init-project` materialises into the user's repo. |
-| "The skills" table | Rename heading to "Commands" for the `/`-invoked entries. Keep the language skills as a separate "Skills" table with a one-line note that these are auto-invoked, not user-invoked. **Note**: plugin commands are automatically prefixed (`/claude-workflow:start-session`). Decide whether to document the namespaced form, alias, or accept the longer command names. |
-| "Want these skills available in all your projects?" callout | **Delete.** Plugin install is global by default; per-project copying is the obsolete model. |
-| "First time setup for newbies" | Rewrite. Steps become: (1) install Claude Code, (2) install Beads, (3) `/plugin install …`. Drop the `git clone` and `cp -r` instructions entirely. |
-| "Getting started" | Update to call out that `/init-project` and `/migrate-project` are the entry points after install — no clone step. |
-| "How to use" | Mostly unchanged; the workflow loop (`/start-session` → `/build-tasks` → `/end-session`) doesn't change. |
+| Top tagline | Keep. |
+| "The short version" | Replace with the install flow above. |
+| "The pieces" | Keep, but trim — the plugin no longer materializes templates. |
+| "The skills" table | Rename to "Commands." Note the namespace prefix (`/<plugin-name>:start-session`). Keep language skills as a separate "Skills" table noting they're auto-invoked. |
+| "Want these skills available in all your projects?" callout | **Delete.** Plugin install is global by default. |
+| "First time setup for newbies" | Rewrite around the install flow above. |
+| "Getting started" | Update — entry point is `/start-session`, which trampolines to the right next step. |
+| "How to use" | Mostly unchanged; the `/start-session` → `/build-tasks` → `/end-session` loop is the same. |
 
-Add a new short section: **Requirements** — Beads (`bd`) must be on PATH; the plugin's hooks invoke it directly.
+Add: **Requirements** section — Beads (`bd`) on PATH, with install instructions per platform.
+Add: **Versioning** section — semver, what counts as breaking (renaming a command, changing hook contracts).
 
-Add: **Versioning** — semver, what counts as breaking (renaming a command, changing hook contracts, changing CLAUDE.md template structure that consuming projects already imported).
+### `CLAUDE.example.md` — section deleted
 
-### `CLAUDE.example.md` — needs splitting, not just edits
+Was: a template the plugin would ship and `/init-project` would materialize. Now: not a thing. Built-in `/init` produces CLAUDE.md before the plugin is installed, and the plugin never touches it. Workflow conventions that previously lived in this template move into the plugin's `docs/conventions.md`, injected via SessionStart hook.
 
-This file becomes a template the plugin ships under `templates/` and `/init-project` writes into a consumer project. After reading the current content end-to-end, the changes are bigger than originally framed.
+### `PRD.md` — user-authored, not shipped
 
-The template today mixes two kinds of content in one file:
+PRDs are user content the plugin consumes. Plugin doesn't ship a template; the user writes one and points `/create-tasks` at it. The repo's existing `PRD.md` (a generic product-requirements scaffold) can become an optional reference doc in the README — *"here's a starting structure, but write whatever you want."*
 
-| Project-owned (stays in user's CLAUDE.md) | Plugin-owned (should leave the user's repo) |
-|---|---|
-| What This Is, Stack, Commands, Tests, Key Conventions | "Beads CLI: All bd commands use --json" |
-| | "Commit format: `<message> (<task-id>)`" |
-| | "Hook commands: bd prime --stealth, not bd prime" |
-| | "plan.MD Current Status: only one entry ever exists" |
-| | "CLAUDE.md target length: under 80 lines" |
-| | "scratch.md is always in .gitignore, never read" |
-| | The Workflow / Agents / Task Tracking sections |
+### New: `docs/conventions.md`
 
-The right-column content is workflow rules, not project facts. They're in the user's CLAUDE.md today only because that's the file Claude auto-loads — there's no other channel to get them in front of every session. Under the plugin model that channel exists (skill descriptions, hook scripts, plugin-internal docs that skills read on demand), so they should move out.
+Plugin-internal. Holds the workflow rules that previously lived in the user's `CLAUDE.md`:
 
-Concrete edits:
+- Beads CLI usage (`--json` flag, etc.)
+- Commit format (`<message> (<task-id>)`)
+- Hook commands (`bd prime --stealth`, not `bd prime`)
+- "scratch.md is always in .gitignore, never read"
+- The Workflow / Agents / Task Tracking sections from today's `CLAUDE.example.md`
 
-- **Split the template.** `templates/CLAUDE.example.md` keeps only project-owned content (What This Is, Stack, Commands, Tests, Key Conventions). The Workflow / Agents / Workflow Conventions / Task Tracking sections move into a plugin-internal doc (`docs/conventions.md` or similar) that the relevant skills read directly when they need to.
-- **Update every skill that says "see CLAUDE.md for X."** A grep pass is needed: `start-session.md`, `build-tasks.md`, `implementer.MD`, `code-reviewer.MD` all reference CLAUDE.md for things like the test command, lint command, or commit format. Test command and lint command stay (those are project facts). Commit format and the bd CLI conventions move — skills should read them from the plugin's own conventions doc.
-- **Final line "`Skills: …`" → "`Commands: …`"** to match new terminology. (Was already noted; still applies.)
-
-Why this matters: this is the architectural fix that makes risk #1 (state coupling) tractable. If conventions stay in the user's CLAUDE.md, every plugin convention change requires a migration — even a typo fix. If conventions live in the plugin, they update with the plugin and never drift. The migration runner only handles real schema changes, not convention churn.
-
-### `PRD.md` (template) — no changes
-
-It's a generic product-requirements template. Move to `templates/PRD.example.md` and leave the content alone. `/init-project` already copies it over.
+Loaded into context every session by the SessionStart hook. When you change the rules in v0.2, every project running the new plugin version gets the new rules on next session — no migration required, nothing in user files to update.
 
 ### New: `docs/plugin.md`
 
-Short doc, plugin-specific concerns that don't belong in the user-facing README:
+Plugin developer notes:
 
-- How to develop the plugin locally (`/plugin install ./path/to/checkout` if supported, or symlinking into `~/.claude/plugins/`).
+- Local development (`/plugin install ./path/to/checkout` if supported, or symlinking).
 - Version contract: what changes break consumers, how to deprecate a command.
-- How `/init-project` and `/migrate-project` interact with the plugin's templates directory (paths inside the plugin install vs. files written into the user repo).
+- Auto-namespacing implications for command references.
 
 ### New: `docs/workflow.md` (optional)
 
-Lift the "pieces" + conceptual content out of README into a longer-form doc; keep README focused on install + quick reference. Only worth doing if README starts pushing past ~250 lines after the rewrite.
+Lift the conceptual content out of README into a longer-form doc; keep README focused on install + quick reference. Only worth doing if README starts pushing past ~250 lines after the rewrite.
 
 ---
 
-## Skill-by-skill changes for the plugin transition
+## Skill-by-skill changes
 
-The skills in the current repo are mature — most need only mechanical updates (path adjustments, version stamping, reading conventions from the new location). Two need real rework. Catalogued here so the work can be scoped before v0.1.
+### `/init-project` and `/migrate-project` — deleted
 
-### `/init-project` and `/migrate-project` — collapse into one command, OR clearly disambiguate
+Both go away in the plugin. Their valuable function — turning a PRD into a starter set of Beads issues — gets absorbed into `/create-tasks PRD.md`. `bd init` happens transparently on first `/create-tasks` if `.beads/` is missing.
 
-The two commands today have substantial overlap and a real naming problem under the plugin model:
+What this drops: hand-written CLAUDE.md scaffolding (built-in `/init` does this), plan.MD scaffolding (no longer a file), template materialization (no templates), the "URL contains claude-workflow" stop check (irrelevant under plugin install).
 
-- `/init-project` — assumes greenfield, requires PRD.md, errors if `.claude/` doesn't exist, builds from `CLAUDE.example.md` template.
-- `/migrate-project` — handles existing projects, much more interactive, 12 steps including content merge and ADR backfill. Currently the more sophisticated of the two.
-- **The new SessionStart migration runner** (risk #1 mitigation) is *also* called migration. Three things share one word.
+### `/start-session` — trampoline
 
-Two ways out:
+Promotes from "minor" to a real responsibility. The slash command checks state and tells the user what's next:
 
-1. **Merge into one `/setup-project` (or keep `/init-project`)** that detects state and branches. Greenfield is just "nothing exists yet" — same code path with no merging to do. User doesn't have to know which command applies. Frees the word "migrate" for the upgrade runner.
-2. **Keep both but rename `/migrate-project` → `/adopt-project`.** Smaller code change, clearer intent. Same naming benefit.
+| State | Output |
+|---|---|
+| `bd` not installed | "Install Beads: `brew install beads`. Then re-run." |
+| `bd` installed, no `.beads/` or no issues | "No tasks yet. `/create-tasks PRD.md`, or describe work." |
+| Tasks exist | "N issues open, M ready: …" + summary of ready work |
 
-Recommendation: option 1. The two skills already share most of their work (template-driven CLAUDE.md, plan.MD scaffold, `bd init`, hook setup, gitignore, commit). Maintaining two near-duplicates is more cost than the conditional logic to detect state.
+One command, three states, always tells you what's next. Same pattern as `git status` — bootstrap and steady-state use the same command.
 
-Either way, both commands need:
+The SessionStart hook (separate from the slash command) handles automatic conventions injection — fires every session whether or not the user types `/start-session`.
 
-- **Emit version-stamp headers** on every managed file: `<!-- claude-workflow v0.1.0 -->`.
-- **Emit managed-region markers** around plugin-owned content: `<!-- claude-workflow:begin <slot-name> -->` / `<!-- claude-workflow:end -->`. These are what the SessionStart migration runner needs to safely update content later without touching user additions.
-- **Stop writing workflow-conventions content into CLAUDE.md** (per the CLAUDE.example.md split above). The output should contain only project facts plus markers.
-- **Drop the "URL contains claude-workflow" stop check.** That guards against the user forgetting to set their own remote when the workflow was distributed by clone. With plugin install, the user's project already has its own remote — the check is dead.
-- **Two-commits-is-normal needs to be documented.** `/migrate-project`'s key principles already note that `bd init` auto-commits. The SessionStart migration runner needs to know about this too — it can't assume "one commit per migration."
-- **Shell out to `bd init` for Beads setup.** `bd init` writes its own `SessionStart` and `PreCompact` hooks (`bd prime --stealth`) directly into the consumer's `.claude/settings.json`, plus the `.beads/` directory, the `bd` git hooks (`pre-commit`, `pre-push`, `post-merge`, `post-checkout`, `prepare-commit-msg`), and `.beads/config.yaml`. The merged setup command should detect whether `.beads/` exists and run `bd init` if not — letting Beads own its own lifecycle rather than the plugin reinventing it. Keeps the plugin's `hooks/hooks.json` focused on plugin-owned concerns (the migration runner) and avoids the double-prime problem if both sources ship the same hook.
+### `/end-session` — small
 
-### `/start-session` — minor
+References `bd doctor` only working in server mode and skips in embedded — that's a Beads detail, not a plugin concern. Update: also write a current-status summary to a designated Beads issue (replaces the old `plan.MD` update step). Otherwise unchanged.
 
-Currently reads `plan.MD` and stops if it doesn't exist with a "run /init-project or /migrate-project" message. Update that error to reference the (possibly merged) setup command. Otherwise unchanged.
+### `/create-tasks` — absorbs PRD ingestion + chat-native UX
 
-### `/end-session` — minor
+The biggest behavioral change in the plugin. Replaces `proposal.md` / `plan.MD` writing with a chat-native flow:
 
-References `bd doctor` only working in server mode and skips in embedded — that's a Beads detail, not a plugin concern. Unchanged.
-
-### `/create-tasks` and `/build-tasks` — UX shift away from intermediate planning files
-
-The current pattern of writing a long `proposal.md` / `plan.MD` and asking the user to review it is clunky in practice — the user has to find the file, open it, scan it, and rarely actually does. Replace with a chat-native flow:
-
-- **No intermediate planning file.** `/create-tasks` writes directly to Beads, no `proposal.md` step. The conversation is the working surface; Beads is the durable record.
-- **Render created issues inline in `bd show` shape.** After creation, print a compact summary (`id  priority  title  blocks/depends`) so the user sees exactly what was written without leaving chat. If the user wants full detail on a specific issue, they can ask and Claude runs `bd show <id>` inline.
+- **Accepts a source path:** `/create-tasks PRD.md` for bulk PRD ingestion; `/create-tasks` (no args) uses recent chat context.
+- **Auto-runs `bd init`** if `.beads/` is missing — transparently. The user doesn't need to know it's bootstrapping Beads on first run.
+- **No intermediate planning file.** Writes directly to Beads. The conversation is the working surface; Beads is the durable record.
+- **Render created issues inline in `bd show` shape.** After creation, print a compact summary (`id  priority  title  blocks/depends`) so the user sees exactly what was written without leaving chat. If they want full detail on a specific issue, they ask and Claude runs `bd show <id>` inline.
 - **React to free-text edits.** *"Drop bug-25, bump bug-26 to P1"* → Claude executes `bd close bug-25 --reason "..."` and `bd update bug-26 --priority 1` in the same turn. No second confirmation loop.
-- **Human-keystroke gate between `/create-tasks` and `/build-tasks`.** Enforced architecturally — they're separate slash commands, each requires explicit user invocation. The "review pause" is the gap between commands; no status flag or approval marker needed.
-- **`/create-tasks` must never auto-invoke `/build-tasks`.** Resist the temptation to chain them ("you've created tasks, want me to start building?"). That collapses one keystroke into the gate for both.
+
+### `/build-tasks` — keystroke gate enforced architecturally
+
+- **Human-keystroke gate** between `/create-tasks` and `/build-tasks` is enforced architecturally — they're separate slash commands, each requires explicit user invocation. The "review pause" is the gap between commands; no status flag or approval marker needed.
+- **`/create-tasks` must never auto-invoke `/build-tasks`.** Resist the temptation to chain them ("you've created tasks, want me to start building?"). That collapses one keystroke into the gate for both, which is the failure mode.
 - **`--auto` mode bypasses the gate by design.** Document in README that `/build-tasks --auto` skips the review pause — that's the trade the user opts into when they pass `--auto`.
 
-### `/adr` — no changes
+### `/adr` — namespace prefix only
 
-Reads project state and writes ADR files. Doesn't touch the structured user files this evaluation has been concerned with. Just needs the namespace prefix in docs (`/claude-workflow:adr`).
+Reads project state and writes ADR files. Unchanged behavior; just gets the namespace prefix in docs (`/<plugin-name>:adr`).
 
 ### `implementer` and `code-reviewer` agents — small
 
-Both reference CLAUDE.md for "test command, lint command, project conventions." Test/lint commands stay in user CLAUDE.md (project facts). The "project conventions" reference needs to split: project conventions stay, workflow conventions (commit format especially) come from the plugin's own conventions doc. Update both prompts to reflect that split.
+Both reference CLAUDE.md for "test command, lint command, project conventions." Test/lint commands stay in user CLAUDE.md (project facts, written by built-in `/init`). The "project conventions" reference splits: project conventions stay in CLAUDE.md, workflow conventions come from the plugin's injected context (no agent change needed — context is just *there*). Worth a prompt edit to remove explicit "see CLAUDE.md for commit format" references.
 
 ### Language skills — no functional changes
 
-`typescript-developer`, `python-developer`, `ios-developer` are pure prose conventions. They move into `skills/` under the plugin layout and get auto-loaded by the agents based on file types touched (current behaviour, just under the new file layout). The `ios-developer` skill is notably more verbose than the other two and is mostly "I know iOS" rather than "here are catches" — worth a separate pruning pass but not blocking.
+`typescript-developer`, `python-developer`, `ios-developer` are pure prose conventions, auto-loaded by the agents based on file types touched. Move into `skills/` under the plugin layout. The `ios-developer` skill is notably more verbose than the other two and is mostly "I know iOS" rather than "here are catches" — worth a separate pruning pass but not blocking.
 
 ---
 
 ## Risks
 
-Severity ordered. Risks are real but largely mitigable; the first is the one that warrants real engineering before v0.1 ships.
+Severity ordered. The previous draft's risk #1 (per-project state coupling) collapses entirely under this design, because there are no plugin-managed files in user repos to drift. Other risks are mostly unchanged.
 
-### 1. Per-project state coupling — solvable, but needs a migration runner *and* a conventions split
+### 1. Stale global copies will shadow the plugin
 
-`/init-project` doesn't just register commands. It *forks state* into the consumer's repo: `CLAUDE.md`, `plan.MD`, `.beads/` all get materialised from plugin templates and then live there forever, owned by the user. Without intervention, the plugin and the consumer's files diverge from minute one.
+The current README explicitly tells users to `cp -r .claude/skills/* ~/.claude/skills/` for global access. Anyone who followed that has copies of every command and agent at `~/.claude/skills/start-session/`, `~/.claude/agents/code-reviewer.MD`, etc.
 
-The failure mode is concrete, not hypothetical. Today's `CLAUDE.example.md` ships these as user-file content:
+After plugin migration, the plugin installs to its own cache directory under `~/.claude/`. Both will load. Plugin commands are namespaced (`/<plugin-name>:start-session`) so they technically don't collide — but the user's stale `/start-session` from `~/.claude/skills/` still works, and points at the old code. Same for agents. The user will think they're on the new version and silently be running the old one.
 
-- "Beads CLI: All bd commands use --json"
-- "Commit format: `<message> (<task-id>)`"
-- "Hook commands: Both SessionStart and PreCompact must use `bd prime --stealth`"
-- "plan.MD Current Status: Only one entry ever exists"
-- "CLAUDE.md target length: Under 80 lines"
+First step in the migration README has to be: *"If you previously copied this repo's contents into `~/.claude/`, delete those copies before installing the plugin."* With a one-line script that lists what to remove.
 
-If v0.2 changes the commit format to "(refs <task-id>)", every project that ran `/init-project` against v0.1 keeps the old rule embedded in their CLAUDE.md. Agents in those projects keep emitting v0.1-style commits while the plugin's skills now expect v0.2-style. Nothing crashes — it just rots silently.
+### 2. Hook trust model
 
-**The fix has two parts:**
+`SessionStart` runs the conventions-injection script automatically, unsandboxed, with the user's privileges. The script reads from `${CLAUDE_PLUGIN_ROOT}/docs/conventions.md` — content the plugin author controls. A future malicious release (or a hijacked GitHub account) could swap the script for anything.
 
-**Part A: split user-owned from plugin-owned content** (see "CLAUDE.example.md — needs splitting" above). Workflow conventions move out of user files entirely, into plugin-internal docs that skills read directly. After the split, the user's CLAUDE.md only contains project facts (Stack, Commands, Tests, Key Conventions). Plugin convention changes don't require a migration because they don't touch user files.
+Hook scripts have no signing, no verification, no sandbox. Plugins are cached locally and don't auto-fetch on session start, so a user has to explicitly run `/plugin update` to pull a new version — that's the soft mitigation. But once they do, the new hook command runs unsandboxed on the next session.
 
-**Part B: schema-migration-on-startup for what's left.** Even after the split, *some* shape lives in user files: `plan.MD`'s section structure, `.beads/`'s field names, the version-stamp header itself. For these, the SessionStart hook runs a fast check (read version stamp, compare to plugin version, exit if matched). On mismatch, it runs ordered, idempotent migrations to bring the user's files up to current. Same pattern as Rails migrations or framework upgrade scripts.
-
-Three things to get right on Part B:
-
-- **Managed regions, not whole-file ownership.** Don't let the plugin own all of `plan.MD` — users add their own notes and the migration will fight them. Mark plugin-owned slots with `<!-- claude-workflow:begin … -->` / `<!-- claude-workflow:end -->` markers. Migration only touches content between markers. Everything outside is the user's. Collapses surprise factor and conflict surface in one move.
-
-- **Version-stamp + ordered migrations.** Each managed file gets a header `<!-- claude-workflow v0.2.0 -->`. Plugin keeps a numbered migration list (`001-rename-conventions.ts`, `002-add-beads-priority-field.ts`) and runs only the ones the user hasn't applied. Difference between "works for v0.1 → v0.2" and "works for any old version → current" — matters the moment there's more than one user.
-
-- **Dirty-tree guard + visible commits.** Two non-negotiables:
-  - If user has uncommitted changes in a file you'd touch, refuse and print: "Plugin v0.2 wants to update plan.MD. You have uncommitted changes there — stash or commit first."
-  - Migrations land as a separate, well-named git commit (`chore: migrate workflow files from v0.1 → v0.2`). Never silent. The user can `git show` it, revert it, review what moved.
-
-Costs to budget for:
-
-- **Migration code is forever.** Once v0.2 ships a migration, you maintain it. Removing old migrations means users on truly ancient versions can't upgrade. Standard schema-migration discipline.
-- **Hook latency.** SessionStart runs every session. The "no migration needed" path needs to be sub-100ms (read header, compare versions, exit). The "actually migrating" path can be slower because it's rare.
-- **Test burden.** Every release: "given a v(N-1) repo, does migration produce valid v(N) state?" CI needs fixtures of old repo shapes. Skipping this once = breaking everyone simultaneously.
-- **plan.md "always exists" assumption.** Some users will delete it intentionally. Need an opt-out — a `.claude-workflow/disabled` marker or a frontmatter flag — or the migration will keep re-creating files they killed on purpose.
-- **`bd init` auto-commits.** Beads creates its own commit during init. Migration runner can't assume "one commit per migration" — needs to handle the two-commit case the existing `/migrate-project` skill already documents.
-
-Roughly a week of work for the migration runner, plus a few days for the conventions split (Part A) and updating the skills that reference CLAUDE.md for workflow rules. Both before v0.1. With both in place, the "bootstrapper" framing largely goes away — you're not seeding state and walking away, you're actively maintaining it across versions, and most of what would have drifted no longer lives in user files in the first place.
-
-### 2. Stale global copies will shadow the plugin
-
-The current README explicitly tells users to `cp -r .claude/skills/* ~/.claude/skills/` for global access. Anyone who followed that advice has copies of every command and agent at `~/.claude/skills/start-session/`, `~/.claude/agents/code-reviewer.MD`, etc. After plugin migration, the plugin installs to its own cache directory under `~/.claude/` (exact path is an implementation detail — not publicly documented, don't rely on it).
-
-Both will load. Plugin skills are namespaced (`/claude-workflow:start-session`) so they technically don't collide — but the user's stale `/start-session` from `~/.claude/skills/` still works, and points at the old code. Same for agents. The user will think they're on the new version and silently be running the old one.
-
-First step in the migration README has to be: "If you previously copied this repo's contents into `~/.claude/`, delete those copies before installing the plugin." With a one-line script that lists what to remove.
-
-### 3. Hook trust model
-
-`SessionStart` runs `bd prime --stealth` automatically, unsandboxed, with the user's privileges. That's fine for a known maintainer, known command. Two failure modes worth knowing about:
-
-- **Compromised maintainer / bad release.** A future malicious release (or a hijacked GitHub account) could swap the hook command for anything. Hook scripts have no signing, no verification, no sandbox. Plugins are cached locally and don't auto-fetch from remote on session start, so a user has to explicitly run `/plugin update` to pull a new version — that's the soft mitigation. But once they do, the new hook command runs unsandboxed on the next session.
-- **The autonomous-walk-away mode (`/build-tasks --auto`) makes blast radius worse.** Whatever a hook runs in that mode happens unobserved.
+The autonomous-walk-away mode (`/build-tasks --auto`) makes blast radius worse. Whatever a hook runs in that mode happens unobserved.
 
 Mitigations: tell users to pin to a tag (`/plugin install …@v0.1.0`), document "review the hook diff on every plugin update," eventually code-sign. None of these are migration blockers, but the threat model is qualitatively new vs. the current "you cloned a git repo, you can read the files" model.
 
-### 4. `/plugin update` may not actually update
+### 3. `/plugin update` may not actually update
 
 There are open Claude Code issues (anthropics/claude-code#15642 and #29071) reporting that `/plugin update` runs `git fetch` against the remote but does not fast-forward the local clone — so the cache stays on the old commit even after the user explicitly tries to update. `CLAUDE_PLUGIN_ROOT` then points at a stale version with no obvious signal that the update silently no-op'd.
 
-Practical consequences for this workflow:
+Practical consequences:
 
 - A user who runs `/plugin update` after a bug fix may keep hitting the bug.
-- Security fixes (especially to hook commands, see risk #3) won't reach users who think they updated.
+- Security fixes (especially to hook scripts, see risk #2) won't reach users who think they updated.
 - Debugging "did the update apply?" becomes part of every support conversation.
 
-Workaround until the upstream issues are fixed: tell users in the README to `/plugin uninstall claude-workflow && /plugin install …@<tag>` for upgrades rather than `/plugin update`. Ugly but reliable. Re-evaluate when the issues close.
+Workaround until the upstream issues are fixed: tell users in the README to `/plugin uninstall <plugin-name> && /plugin install …@<tag>` for upgrades rather than `/plugin update`. Ugly but reliable. Re-evaluate when the issues close.
 
-### 5. Uninstall semantics
+### 4. Uninstall semantics — cleaner under this design
 
-Good news / bad news:
+Now that the plugin doesn't write files into the user's repo:
 
-- Good: `/plugin uninstall` removes the plugin's cache directory and its plugin-data directory (use `--keep-data` to preserve), but does *not* touch files inside the user's project repo. So `CLAUDE.md`, `plan.MD`, `.beads/` survive uninstall — that's correct, those are the user's data.
-- Bad: the commands that read those files disappear. The user's repo is left holding files no agent knows what to do with. `bd ready` still works (Beads is a separate CLI), but `/build-tasks` is gone.
+- `/plugin uninstall` removes the plugin's cache directory and plugin-data directory.
+- The user's project files (CLAUDE.md, PRD.md, .beads/) are entirely user-owned and survive uninstall correctly.
+- The only orphaned thing is `.beads/` — which is Beads's domain, not the plugin's. The user can `rm -rf .beads` and uninstall `bd` if they're done with the workflow entirely.
 
-Document it in the README: "Uninstalling removes the workflow commands but leaves your project state in place. Delete `CLAUDE.md`, `plan.MD`, and `.beads/` manually if you're done with the workflow."
+Document in the README: *"Uninstalling removes the workflow commands but leaves your project state in place. Your tasks and ADRs survive."*
 
-### 6. Auto-namespacing is a real UX shift
+This is cleaner than the previous proposal, which left `plan.MD` and managed regions in CLAUDE.md as orphans.
 
-Plugin commands and skills get prefixed with the plugin name: `/claude-workflow:start-session` instead of `/start-session`. This prevents collisions across plugins (good) but also means every command in the README, every reference in `CLAUDE.example.md`, every muscle-memory keystroke gets longer.
+### 5. Auto-namespacing is a real UX shift
+
+Plugin commands and skills get prefixed with the plugin name: `/<plugin-name>:start-session` instead of `/start-session`. This prevents collisions across plugins (good) but every command in the README and every muscle-memory keystroke gets longer.
 
 Options:
 - Accept the longer names and update all docs.
-- Ship a `commands/aliases/` set of short-named commands that just delegate to the namespaced ones (if the spec allows; verify).
 - Encourage users to set up their own short aliases in personal settings.
+- Ship `commands/aliases/` short-named delegators (verify spec allows).
 
 Worth deciding before publishing — flip-flopping later breaks every existing reference.
 
-### 7. Beads as a runtime prerequisite
+### 6. Beads as a runtime prerequisite
 
-Plugins can't install external CLIs. If `bd` isn't on PATH, the `SessionStart` hook fails on every session. Specific failure modes to handle:
+Plugins can't install external CLIs. If `bd` isn't on PATH, the SessionStart hook soft-fails (exits 0 with a hint), `/start-session` prompts "install Beads," and `/create-tasks` does the same check before doing anything. Specific failure modes:
 
-- **Missing on first install.** Have the hook script `command -v bd >/dev/null || { echo "Beads not installed: brew install beads"; exit 0; }`. Exit 0, not non-zero — don't block sessions over a missing optional dep at startup.
-- **Cross-machine sync.** A user installs the plugin on their Mac (has `bd`), syncs their Claude config to a Linux box (no `bd`). Same fix above handles it.
+- **Missing on first install.** Hook script does `command -v bd >/dev/null || { echo "Beads not installed: brew install beads"; exit 0; }`. Slash commands print conversational guidance.
+- **Cross-machine sync.** A user installs the plugin on Mac (has `bd`), syncs Claude config to Linux (no `bd`). Same fix above handles it.
 - **Beads itself is alpha.** The `--stealth` flag is a Beads-specific contract. If Beads renames it, every consumer breaks at SessionStart simultaneously. Pin the documented Beads version range in the README's Requirements section.
 
-### 8. Hidden coupling between agents and skill names
+`/start-session`'s trampoline behavior makes this graceful — the user runs `/start-session`, gets a clear install instruction, comes back. No mysterious failures.
 
-Per CLAUDE.example.md: "The `implementer` and `code-reviewer` agents automatically invoke a language skill at the start of each task based on the files being touched." The agents reference language skills *by name* in their prompts. If the plugin renames or removes a skill, the agents silently stop matching — no compile-time error, just degraded behavior on TS/Python/iOS work.
+### 7. Hidden coupling between agents and skill names
+
+The `implementer` and `code-reviewer` agents reference language skills *by name* in their prompts. If the plugin renames or removes a skill, the agents silently stop matching — no compile-time error, just degraded behavior on TS/Python/iOS work.
 
 Worth a smoke-test in CI: boot each agent against representative file types and assert the right skill loads. Cheap insurance.
 
-### 9. Language-skill backlog
+### 8. Language-skill backlog
 
 Once published, every user wants their language. TS/Python/iOS today; tomorrow Rust, Go, Java, Ruby, Kotlin, PHP. You either:
 
 - Become a meta-language repo (maintenance balloon, you don't write Ruby).
-- Define a skill contract and let third parties ship companion plugins (`claude-workflow-rust`, etc.) that depend on the core. More upfront design, scales better.
+- Define a skill contract and let third parties ship companion plugins (`<plugin-name>-rust`, etc.) that depend on the core. More upfront design, scales better.
 - Stay opinionated, reject PRs, watch a fork ecosystem emerge.
 
 No urgency for v0.1 but worth a stance in the README so PR authors aren't surprised.
 
-### 10. Cosmetic / mechanical
+### 9. Cosmetic / mechanical
 
 - **`.MD` vs `.md` casing.** Current repo is inconsistent. Fix during the move; Linux is case-sensitive and discovery may be picky.
+- **Plugin name is kebab-case only.** No spaces, no dots — `fork.pizza` won't pass validation as a manifest name. The dotted form lives in `homepage` and branding; the manifest name needs to be like `loop-fork-pizza`.
 - **Marketplace vs. direct git install.** Direct install (`/plugin install <git-url>@<tag>`) is fine for v0.1. Marketplace is the eventual right answer for discoverability and version listings — defer until there's actual demand.
-- **`/clear` is a built-in.** Drop it from the workflow's command list; it's a Claude Code primitive, not yours to ship.
+- **`/clear` is a built-in.** Drop it from the workflow's command list — it's a Claude Code primitive, not yours to ship.
 
 ### Softening factors worth knowing
 
 - **7-day cache grace period on updates.** When a plugin updates mid-session, the old version stays cached for 7 days. Existing sessions keep running against the old version; new sessions get the new one. Mid-flight breaking-change risk is much smaller than I initially worried.
-- **Plugin skills are namespaced.** Collisions with other plugins' commands/skills are essentially eliminated by construction (the trade-off being risk #5 above).
+- **Plugin commands are namespaced.** Collisions with other plugins' commands/skills are essentially eliminated by construction (the trade-off being risk #5).
 - **No auto-fetch on session start.** Plugins load from a local cache; updates require an explicit `/plugin update`. So mid-flight breaking changes can't ambush an active user.
 
 ---
 
 ## Suggested sequencing
 
-1. Verify plugin manifest spec against current Claude Code docs (resolve the open questions above).
-2. Branch, restructure files, add `plugin.json` + `hooks/hooks.json`, normalise casing.
-3. **Conventions split** (risk #1, Part A): trim `CLAUDE.example.md` to project-only content; move workflow conventions into a plugin-internal `docs/conventions.md`; update `start-session`, `build-tasks`, `implementer`, `code-reviewer` to read workflow conventions from the plugin doc instead of CLAUDE.md.
-4. **Decide command shape:** merge `/init-project` and `/migrate-project` into one `/setup-project`, or rename `/migrate-project` → `/adopt-project`. Update both to emit version-stamp headers and managed-region markers. Drop the now-obsolete "URL contains claude-workflow" check.
-5. **Build the migration runner** (risk #1, Part B): migration script invoked by SessionStart hook, dirty-tree guard, ordered migration list (empty for v0.1, but the harness exists). CI fixtures for "v(N-1) repo → migrate → v(N) repo."
-6. Rewrite README install/setup sections; leave conceptual sections alone.
-7. Smoke test: install into a fresh project, run `/setup-project` on greenfield and on an existing repo, run `/start-session`, confirm hooks fire, `bd prime --stealth` runs, and migration check exits clean on a current-version repo.
-8. Tag `v0.1.0`, publish.
+1. Verify plugin manifest spec against current Claude Code docs.
+2. Branch, restructure files: add `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/inject-conventions.sh`, `docs/conventions.md`. Delete `init-project/`, `migrate-project/`, the templates concept entirely. Normalize casing.
+3. Move workflow conventions out of `CLAUDE.example.md` into `docs/conventions.md`. Delete `CLAUDE.example.md` from the plugin — built-in `/init` produces CLAUDE.md before the plugin is installed, so the template has no role.
+4. Update `/create-tasks`: accept a source path (`/create-tasks PRD.md`), auto-run `bd init` if needed, render created issues inline in `bd show` shape, react to free-text edits, never auto-invoke `/build-tasks`.
+5. Update `/start-session` to trampoline: `bd` check → empty-tasks check → ready-work summary.
+6. Update `/end-session` to write a current-status summary to a designated Beads issue (replaces `plan.MD`).
+7. Update `implementer` and `code-reviewer` agent prompts to drop "see CLAUDE.md for workflow conventions" references — those are now in injected context.
+8. Rewrite README install/setup sections; leave conceptual sections alone.
+9. Smoke test: install into a fresh project; run `/start-session` (expect "install bd"); install bd; run `/start-session` (expect "no tasks"); write a PRD; run `/create-tasks PRD.md`; run `/start-session` (expect ready-work summary); run `/build-tasks`; run `/end-session`.
+10. Tag `v0.1.0`, publish.
