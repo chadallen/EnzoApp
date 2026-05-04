@@ -4,8 +4,8 @@ This is the living status document. `PRD.md` is the product spec and is not modi
 
 Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 
-**Active epic:** EnzoApp-2ml — Starred Segments UX Overhaul (6 tasks)
-**Also open:** EnzoApp-55p.6 — Enzo voice/prompt tuning (P2)
+**Active epic:** none (EnzoApp-2ml complete)
+**Also open:** EnzoApp-55p.6 — Enzo voice/prompt tuning (P4), EnzoApp-g84 — UI verification for implementer/build-tasks (assigned to Chad)
 
 ---
 
@@ -38,6 +38,7 @@ Architecture decisions: `docs/adr/`. Feature design docs: `docs/plans/YYYY-MM-DD
 | — | Fitness Algorithm v2 — CTL/TSB + OLS regression (EnzoApp-y69) | ✅ Done |
 | — | Refocus UI on starred segments (EnzoApp-iue) | ✅ Done |
 | — | SwiftData UAT — simulator + device smoke test (EnzoApp-55p.2) | ✅ Done |
+| — | Starred Segments UX Overhaul — star/unstar, Add Segments page, remove goal (EnzoApp-2ml) | ✅ Done |
 | 12 | Strava webhooks | ⬜ Deferred (not needed for beta) |
 
 ---
@@ -61,13 +62,13 @@ Major architectural pivot — 7 commits on `main`:
 
 ---
 
-## Current Status — 2026-05-01 (Session 9)
+## Current Status — 2026-05-03 (Session 10)
 
-**Build state:** All commits on `main`, pushed. Working tree clean.
+**Build state:** All commits on `main`, pushed. Working tree clean. 143 tests passing.
 
-**This session:** Planning and requirements only — no code written. Designed the Starred Segments UX Overhaul (EnzoApp-2ml): main list shows starred segments only, new Add Segments page for discovering/starring unstarred recency segments, star/unstar syncs to Strava API, goal segment concept removed entirely. Created epic EnzoApp-2ml with 6 tasks (2ml.1–6). Also set `EDITOR=code --wait` in `~/.claude/settings.json` for VS Code prompt editing. Updated CLAUDE.md skills table to remove deleted skills (swift-design, swift-patterns, testing) and point to ios-developer + ios-ux-design.
+**This session:** Completed EnzoApp-2ml (Starred Segments UX Overhaul) in full — all 6 tasks closed. Wrote ADR-0011 (Replace Goal Segment with Starred Segments as Curation Model). Key work: deleted GoalModel/HeroSegmentCard/FindSegmentsSheet and all goal state (2ml.1); added Strava star/unstar API to SyncService + AppState with 12 tests (2ml.2); filtered main list to starred-only with updated empty state and 9 tests (2ml.3); added Add Segments toolbar entry point (2ml.4); built full AddSegmentsView with search, sort, and star flow with 18 tests (2ml.5); added unstar button with confirmation alert to SegmentDetailView (2ml.6). Also: first run of parallel agent execution (waves of 2-3 siblings); updated build-tasks skill, implementer agent, and auto-agent.MD proposal to document frontier/siblings/3-agent-cap pattern; synced to claude-workflow public repo. Created EnzoApp-g84 (UI verification step for implementer, assigned to Chad, P3).
 
-**Next session:** `EnzoApp-2ml.1` (Remove goal segment concept — first task in the new epic, unblocks everything else). Run `/build-tasks EnzoApp-2ml --auto` to execute all 6 tasks autonomously.
+**Next session:** EnzoApp-55p.6 (Enzo voice/prompt tuning — playground first via `scripts/enzo_playground.py`). EnzoApp-g84 (UI verification for build-tasks) is assigned to Chad whenever ready.
 
 ## Current Status — 2026-04-21 (Session 5)
 
