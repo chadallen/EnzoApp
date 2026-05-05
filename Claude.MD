@@ -80,6 +80,8 @@ Identity is `strava_athlete_id` in Keychain only — no remote user table.
 
 **Spec conflicts with what's built** — Flag it. Don't silently pick one.
 
+**Bug reports or new work mid-session** — Create a beads task first (`bd create`), then use `/build-tasks <id>` for implementation. Don't write code just because the diagnosis is clear.
+
 **End of session** — Use `/end-session` to update `plan.MD`, commit, and push.
 
 **GitHub** — https://github.com/chadallen/EnzoApp (private)
