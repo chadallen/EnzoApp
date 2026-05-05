@@ -101,34 +101,16 @@ actor SyncService {
         }
     }
 
-    // MARK: - v2 Static helpers (pure — testable without network)
+    /// Activity detail returned by GET /activities/{id}. Used only to extract segment_efforts —
+    /// the list endpoint (/athlete/activities) does not include segment_efforts in summaries.
+    struct StravaActivityDetailV2: Decodable {
+        let id: Int
+        let segmentEfforts: [StravaSegmentEffortSummary]
 
-    /// Extracts unique segment IDs from activities whose start_date is within the last `days` days.
-    ///
-    /// Used to build the 90-day recency segment set. Pure function — no network, no SwiftData.
-    /// The caller unions this result with the starred segment IDs and fetches details for any
-    /// segment not already known.
-    ///
-    /// - Parameters:
-    ///   - activities: The full list of fetched StravaActivityV2 objects (all sport types).
-    ///   - cutoff: Activities at or after this date are included. Typically now - 90 days.
-    /// - Returns: Unique segment IDs from qualifying activities, ordered arbitrarily.
-    static func recentSegmentIds(from activities: [StravaActivityV2], cutoff: Date) -> Set<Int> {
-        let isoFull = ISO8601DateFormatter()
-        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-
-        var ids = Set<Int>()
-        for activity in activities {
-            let activityDate = isoFull.date(from: activity.startDate)
-                ?? isoBasic.date(from: activity.startDate)
-                ?? Date.distantPast
-            guard activityDate >= cutoff else { continue }
-            for effort in activity.segmentEfforts ?? [] {
-                ids.insert(effort.segment.id)
-            }
+        enum CodingKeys: String, CodingKey {
+            case id
+            case segmentEfforts = "segment_efforts"
         }
-        return ids
     }
 
     /// One starred segment returned by GET /segments/starred. Never stored; converted to StarredSegmentModel.
@@ -242,6 +224,26 @@ actor SyncService {
         }
 
         return results
+    }
+
+    /// Fetches the detail for a single activity. Used to extract segment_efforts, which are not
+    /// included in the activity list (/athlete/activities) summary responses.
+    func fetchActivityDetailV2(activityId: Int, accessToken: String) async throws -> StravaActivityDetailV2 {
+        let urlString = "https://www.strava.com/api/v3/activities/\(activityId)"
+        guard let url = URL(string: urlString) else {
+            throw SyncError.fetchFailed("Invalid activity detail URL")
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SyncError.fetchFailed("No response") }
+        if http.statusCode == 429 { throw SyncError.rateLimited }
+        guard (200..<300).contains(http.statusCode) else {
+            throw SyncError.fetchFailed("HTTP \(http.statusCode)")
+        }
+
+        return try JSONDecoder().decode(StravaActivityDetailV2.self, from: data)
     }
 
     /// Fetches all efforts by the athlete on a specific segment over the past 3 years.

@@ -327,22 +327,47 @@ class AppState {
                 upsertStarredSegment(seg)
             }
 
-            // Step 3b — Collect segment IDs from recent (90-day) activity efforts.
-            // These come from the activity summary responses already fetched in Step 1a.
-            // No extra activity API calls — segment efforts are included in the summary.
+            // Step 3b — Collect segment IDs from recent (90-day) cycling activity efforts.
+            // Fetches individual activity details because the list endpoint does not include
+            // segment_efforts in summary responses.
             let ninetyDaysAgo = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
-            let recentSegmentIds = SyncService.recentSegmentIds(
-                from: fetchedActivities,
-                cutoff: ninetyDaysAgo
-            )
+            let isoFull = ISO8601DateFormatter()
+            isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let isoBasic = ISO8601DateFormatter()
+
+            let recentActivities = fetchedActivities.filter { activity in
+                let date = isoFull.date(from: activity.startDate)
+                    ?? isoBasic.date(from: activity.startDate)
+                    ?? Date.distantPast
+                return date >= ninetyDaysAgo
+            }
+
+            var recentSegmentIds = Set<Int>()
+            setSyncProgress("Fetching recent ride details...")
+            for activity in recentActivities {
+                do {
+                    let detail = try await syncService.fetchActivityDetailV2(
+                        activityId: activity.id,
+                        accessToken: accessToken
+                    )
+                    for effort in detail.segmentEfforts {
+                        recentSegmentIds.insert(effort.segment.id)
+                    }
+                } catch SyncError.rateLimited {
+                    NSLog("[SyncV2] Rate limited fetching activity detail \(activity.id) — stopping early")
+                    break
+                } catch {
+                    NSLog("[SyncV2] Skipping activity detail \(activity.id): \(error)")
+                }
+            }
+            NSLog("[SyncV2] \(recentSegmentIds.count) unique segment IDs from \(recentActivities.count) recent rides")
+
             // De-duplicate: only fetch details for recency segments not already starred.
             let newRecencyIds = recentSegmentIds.subtracting(starredIds)
-            NSLog("[SyncV2] \(recentSegmentIds.count) unique segment IDs from 90-day activities, \(newRecencyIds.count) not already starred")
+            NSLog("[SyncV2] \(newRecencyIds.count) unstarred recency segments to fetch details for")
 
             setSyncProgress("Fetching recent segment details...")
-            // Cap at 50 recency segments per sync: each fetches ~1 detail + ~N effort pages.
-            // Budget: 50 detail calls + effort calls in Step 4 must stay within 200 req/15 min.
-            for segId in newRecencyIds.prefix(50) {
+            for segId in newRecencyIds {
                 do {
                     let detail = try await syncService.fetchSegmentDetailV2(
                         segmentId: segId,
