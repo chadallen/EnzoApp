@@ -43,3 +43,17 @@ scripts/data/
 .dolt/
 *.db
 .beads-credential-key
+.beads/
+
+# Claude Code — project instructions, rules, settings
+CLAUDE.md
+Claude.MD
+.claude/
+
+# Workflow docs — plans, ADRs, skills, PRD
+plan.MD
+PRD.MD
+PRD.md
+docs/adr/
+docs/plans/
+skills/
