@@ -2,17 +2,6 @@
 EnzoApp/Config/Debug.xcconfig
 EnzoApp/Config/Release.xcconfig
 
-# Working notes — committed once, local edits not tracked
-chat_log.md
-
-# Local scratch files
-scratch.txt
-scratch.md
-UI-punch-list.md
-
-# Workflow notes — local only for now
-WORKFLOW.md
-
 # Xcode
 *.xcuserstate
 xcuserdata/
@@ -22,38 +11,8 @@ xcuserdata/
 scripts/.venv/
 __pycache__/
 
-# Claude Code local settings
-.claude/settings.json
-
-# Screen recordings
-*.MP4
-
-# Simulator screenshots
-scripts/screenshots/
-
-# VS Code settings
-.vscode/
-
 # Real athlete data — never commit
 scripts/data/
 
-
-
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-.beads/
-
-# Claude Code — project instructions, rules, settings
-CLAUDE.md
-Claude.MD
-.claude/
-
-# Workflow docs — plans, ADRs, skills, PRD
-plan.MD
-PRD.MD
-PRD.md
-docs/adr/
-docs/plans/
-skills/
+# Simulator screenshots
+scripts/screenshots/
